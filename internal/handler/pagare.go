@@ -194,11 +194,34 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 		bcfQuery["from"] = map[string]string{"pub": req.From.Pub, "pvt": req.From.Pvt}
 	}
 
-	h.client.UpdateAsset(map[string]interface{}{
-		"id":       req.ID,
-		"metadata": map[string]interface{}{"action": req.Metadata.Action, "fecha_pago": time.Now().Format(time.RFC3339), "referencia": req.Metadata.Referencia, "motivo": req.Metadata.Motivo},
-		"from":     bcfQuery["from"],
-	})
+	estadoMap := map[string]string{
+		"PAGO": "PAGADO", "ANULACION": "ANULADO", "PRESCRIPCION": "PRESCRITO",
+	}
+	estado := estadoMap[req.Metadata.Action]
+
+	updateBody := map[string]interface{}{
+		"id":   req.ID,
+		"data": map[string]interface{}{"estado": estado},
+		"metadata": map[string]interface{}{
+			"action":     req.Metadata.Action,
+			"fecha_pago": time.Now().Format(time.RFC3339),
+			"referencia": req.Metadata.Referencia,
+			"motivo":     req.Metadata.Motivo,
+		},
+	}
+	if req.From != nil {
+		updateBody["from"] = map[string]string{"pub": req.From.Pub, "pvt": req.From.Pvt}
+	}
+
+	updateBody_b, updateStatus, err := h.client.UpdateAsset(updateBody)
+	if err != nil {
+		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": "Error actualizando asset: " + err.Error()})
+		return
+	}
+	if updateStatus != 200 {
+		WriteJSON(w, updateStatus, map[string]interface{}{"ok": false, "msg": "Error actualizando asset antes de quemar", "detail": string(updateBody_b)})
+		return
+	}
 
 	body, status, err := h.client.BurnAsset(bcfQuery)
 	if err != nil {

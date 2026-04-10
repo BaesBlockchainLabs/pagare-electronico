@@ -45,10 +45,27 @@ templ Dashboard() {
 					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha || '');
 					var fechaStr = d.created_at ? new Date(d.created_at).toLocaleDateString() : '';
 					var idShort = a.id ? a.id.substring(0, 12) + '...' : '';
-					var isVencido = ven.tipo !== 'a_la_vista' && ven.fecha && new Date(ven.fecha) < new Date();
-					var estadoHtml = isVencido
-						? '<span class="tag" style="background:#FF4D4D;color:white">Vencido</span>'
-						: '<span class="tag">Activo</span>';
+					var estado = d.estado || '';
+					var estadoHtml;
+					if (estado === 'PAGADO') {
+						estadoHtml = '<span class="tag" style="background:var(--c-success);color:white">Pagado</span>';
+					} else if (estado === 'ANULADO') {
+						estadoHtml = '<span class="tag" style="background:var(--c-danger);color:white">Anulado</span>';
+					} else if (estado === 'PRESCRITO') {
+						estadoHtml = '<span class="tag" style="background:var(--c-text-light);color:white">Prescrito</span>';
+					} else if (ven.tipo !== 'a_la_vista' && ven.fecha && new Date(ven.fecha) < new Date()) {
+						estadoHtml = '<span class="tag" style="background:#FF4D4D;color:white">Vencido</span>';
+					} else {
+						estadoHtml = '<span class="tag">Activo</span>';
+					}
+					var esFinalizado = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO';
+					var acciones = '';
+					if (!esFinalizado) {
+						acciones += '<a href="/pagares/endosar?id=' + a.id + '" class="btn btn-outline btn-sm">Endosar</a> ' +
+							'<a href="/pagares/pagar?id=' + a.id + '" class="btn btn-danger btn-sm">Pagar</a> ';
+					}
+					acciones += '<a href="/pagares/historico?id=' + a.id + '" class="btn btn-outline btn-sm">Histórico</a> ' +
+						'<a href="/pagares/verificar?network=test&id=' + a.id + '" class="btn btn-primary btn-sm">Verificar</a>';
 					html += '<tr>' +
 						'<td><code title="' + a.id + '">' + idShort + '</code></td>' +
 						'<td>' + benStr.trim() + '</td>' +
@@ -56,12 +73,7 @@ templ Dashboard() {
 						'<td>' + venStr + '</td>' +
 						'<td>' + estadoHtml + '</td>' +
 						'<td class="text-muted">' + fechaStr + '</td>' +
-						'<td style="white-space:nowrap">' +
-						'<a href="/pagares/endosar?id=' + a.id + '" class="btn btn-outline btn-sm">Endosar</a> ' +
-						'<a href="/pagares/pagar?id=' + a.id + '" class="btn btn-danger btn-sm">Pagar</a> ' +
-						'<a href="/pagares/historico?id=' + a.id + '" class="btn btn-outline btn-sm">Histórico</a> ' +
-						'<a href="/pagares/verificar?network=test&id=' + a.id + '" class="btn btn-primary btn-sm">Verificar</a>' +
-						'</td></tr>';
+						'<td style="white-space:nowrap">' + acciones + '</td></tr>';
 				});
 				html += '</tbody></table></div>';
 				if (data.count && data.count.pages && data.count.pages.total > 1) {
