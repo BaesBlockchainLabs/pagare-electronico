@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "pagare",
+  "project_id": "c99839e7-50a4-4fec-b7e6-026e8c1295c7"
+}
