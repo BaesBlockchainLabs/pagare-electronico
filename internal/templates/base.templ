@@ -1,0 +1,317 @@
+package templates
+
+templ Base(title string) {
+	<!DOCTYPE html>
+	<html lang="es">
+	<head>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<title>{ title } | Pagaré Electrónico</title>
+		<style>
+		@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+		:root {
+			--c-mint: #00FFAA;
+			--c-dark: #004737;
+			--c-bg: #F7FAF9;
+			--c-white: #FFFFFF;
+			--c-card: #FFFFFF;
+			--c-border: #D4E8E0;
+			--c-text: #004737;
+			--c-text-light: #5A7A6E;
+			--c-danger: #FF4D4D;
+			--c-danger-bg: #FFF0F0;
+			--c-success: #00CC88;
+			--c-success-bg: #F0FFF8;
+			--c-muted-bg: #29493B;
+		}
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: 'Space Grotesk', sans-serif;
+			background: var(--c-bg);
+			color: var(--c-text);
+			line-height: 1.5;
+		}
+		.nav {
+			background: var(--c-white);
+			border-bottom: 1px solid var(--c-border);
+			position: sticky;
+			top: 0;
+			z-index: 99;
+		}
+		.nav-inner {
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: 12px 24px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+		}
+		.nav-brand {
+			font-size: 1.3rem;
+			font-weight: 700;
+			color: var(--c-dark);
+			text-decoration: none;
+			letter-spacing: -0.5px;
+		}
+		.nav-brand span { color: var(--c-mint); }
+		.nav-links { display: flex; gap: 8px; align-items: center; }
+		.nav-link {
+			color: var(--c-text-light);
+			text-decoration: none;
+			font-size: 0.85rem;
+			font-weight: 500;
+			padding: 8px 14px;
+			transition: all 0.2s;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+		.nav-link:hover { color: var(--c-dark); }
+		.nav-link.active {
+			color: var(--c-dark);
+			border-bottom: 2px solid var(--c-mint);
+		}
+		.nav-cta {
+			background: var(--c-mint);
+			color: var(--c-dark);
+			font-weight: 700;
+			font-size: 0.85rem;
+			padding: 10px 20px;
+			text-decoration: none;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			transition: all 0.2s;
+		}
+		.nav-cta:hover { background: #00E699; }
+		.main {
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: 40px 24px;
+		}
+		.page-title {
+			font-size: 2.2rem;
+			font-weight: 700;
+			color: var(--c-dark);
+			margin-bottom: 8px;
+			letter-spacing: -1px;
+		}
+		.page-subtitle {
+			color: var(--c-text-light);
+			font-size: 1rem;
+			margin-bottom: 32px;
+		}
+		.card {
+			background: var(--c-card);
+			border: 1px solid var(--c-border);
+			padding: 28px;
+			margin-bottom: 24px;
+		}
+		.card-title {
+			font-size: 1.1rem;
+			font-weight: 700;
+			color: var(--c-dark);
+			margin-bottom: 16px;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+		.card p.desc {
+			color: var(--c-text-light);
+			font-size: 0.9rem;
+			margin-bottom: 20px;
+		}
+		.footer {
+			text-align: center;
+			padding: 40px 24px;
+			background: var(--c-muted-bg);
+			color: var(--c-mint);
+			font-size: 0.85rem;
+			margin-top: 60px;
+		}
+		.footer a { color: var(--c-mint); text-decoration: underline; }
+		.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+		label.form-label {
+			display: block;
+			font-size: 0.8rem;
+			font-weight: 600;
+			color: var(--c-text-light);
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			margin-bottom: 6px;
+		}
+		input[type="text"],
+		input[type="number"],
+		input[type="date"],
+		select,
+		textarea {
+			width: 100%;
+			padding: 10px 14px;
+			border: 1px solid var(--c-border);
+			font-family: 'Space Grotesk', sans-serif;
+			font-size: 0.95rem;
+			color: var(--c-dark);
+			background: var(--c-white);
+			outline: none;
+			transition: border 0.2s;
+		}
+		input:focus, select:focus { border-color: var(--c-mint); }
+		input[readonly] { background: var(--c-bg); color: var(--c-text-light); }
+		.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+		.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+		.btn {
+			display: inline-block;
+			font-family: 'Space Grotesk', sans-serif;
+			font-weight: 700;
+			font-size: 0.9rem;
+			padding: 12px 28px;
+			border: none;
+			cursor: pointer;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			text-decoration: none;
+			transition: all 0.2s;
+		}
+		.btn-primary { background: var(--c-mint); color: var(--c-dark); }
+		.btn-primary:hover { background: #00E699; }
+		.btn-outline {
+			background: transparent;
+			color: var(--c-dark);
+			border: 1px solid var(--c-dark);
+		}
+		.btn-outline:hover { background: var(--c-dark); color: var(--c-white); }
+		.btn-danger { background: var(--c-danger); color: white; }
+		.btn-danger:hover { background: #E64444; }
+		.btn-sm { padding: 8px 16px; font-size: 0.8rem; }
+		.alert {
+			padding: 14px 18px;
+			margin: 16px 0;
+			font-size: 0.9rem;
+		}
+		.alert-error { background: var(--c-danger-bg); color: var(--c-danger); border-left: 3px solid var(--c-danger); }
+		.alert-success { background: var(--c-success-bg); color: var(--c-success); border-left: 3px solid var(--c-success); }
+		.mt-4 { margin-top: 16px; }
+		.mt-6 { margin-top: 24px; }
+		.mb-4 { margin-bottom: 16px; }
+		.mb-6 { margin-bottom: 24px; }
+		.hidden { display: none; }
+		table {
+			width: 100%;
+			border-collapse: collapse;
+		}
+		table th {
+			text-align: left;
+			font-size: 0.75rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			color: var(--c-text-light);
+			padding: 12px 16px;
+			border-bottom: 2px solid var(--c-border);
+		}
+		table td {
+			padding: 14px 16px;
+			border-bottom: 1px solid var(--c-border);
+			font-size: 0.9rem;
+		}
+		table tr:hover td { background: #F0FAF6; }
+		code {
+			background: var(--c-bg);
+			padding: 2px 8px;
+			font-size: 0.8rem;
+			font-family: 'Space Grotesk', monospace;
+			border: 1px solid var(--c-border);
+		}
+		.tag {
+			display: inline-block;
+			background: var(--c-mint);
+			color: var(--c-dark);
+			padding: 3px 8px;
+			font-size: 0.75rem;
+			font-weight: 700;
+			text-transform: uppercase;
+		}
+		.flex-between { display: flex; justify-content: space-between; align-items: center; }
+		.text-center { text-align: center; }
+		.text-muted { color: var(--c-text-light); }
+		fieldset {
+			border: 1px solid var(--c-border);
+			padding: 20px;
+			margin-bottom: 16px;
+		}
+		fieldset legend {
+			font-size: 0.85rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			color: var(--c-text-light);
+			padding: 0 8px;
+		}
+		.timeline { padding-left: 0; }
+		.timeline-item {
+			display: flex;
+			gap: 16px;
+			padding-bottom: 24px;
+			position: relative;
+		}
+		.timeline-item:not(:last-child)::after {
+			content: '';
+			position: absolute;
+			left: 15px;
+			top: 36px;
+			bottom: 0;
+			width: 2px;
+			background: var(--c-border);
+		}
+		.timeline-dot {
+			width: 32px;
+			height: 32px;
+			min-width: 32px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 0.75rem;
+			font-weight: 700;
+			color: white;
+		}
+		.timeline-dot.create { background: var(--c-dark); }
+		.timeline-dot.endoso { background: #D4A017; }
+		.timeline-dot.pago { background: var(--c-success); }
+		.timeline-dot.default { background: var(--c-text-light); }
+		.key-display {
+			background: var(--c-bg);
+			border: 1px solid var(--c-border);
+			padding: 10px 14px;
+			font-size: 0.78rem;
+			word-break: break-all;
+			margin-top: 4px;
+		}
+		@media (max-width: 768px) {
+			.grid-2 { grid-template-columns: 1fr; }
+			.form-grid { grid-template-columns: 1fr; }
+			.form-grid-3 { grid-template-columns: 1fr; }
+			.nav-inner { flex-wrap: wrap; gap: 8px; }
+			.nav-links { flex-wrap: wrap; }
+		}
+		</style>
+	</head>
+	<body>
+		<nav class="nav">
+			<div class="nav-inner">
+				<a href="/" class="nav-brand">Pagaré<span>.</span>Electrónico</a>
+				<div class="nav-links">
+					<a href="/" class="nav-link">Pagarés</a>
+					<a href="/pagares/nuevo" class="nav-cta">Nuevo</a>
+					<a href="/pagares/endosar" class="nav-link">Endosar</a>
+					<a href="/pagares/pagar" class="nav-link">Pagar</a>
+					<a href="/identidades" class="nav-link">Identidades</a>
+					<a href="/pagares/verificar" class="nav-link">Verificar</a>
+				</div>
+			</div>
+		</nav>
+		<main class="main">
+			{ children... }
+		</main>
+		<footer class="footer">
+			Pagaré Electrónico con <a href="https://api.blockchainfue.com/doc/api">BlockchainFUE</a> &mdash; Registro fehaciente e inalterable &mdash; <a href="https://www.baeslegalcripto.eu/legalcripto/">LegalCripto by BAES</a>
+		</footer>
+	</body>
+	</html>
+}

@@ -1,0 +1,112 @@
+package templates
+
+templ Endosar() {
+	@Base("Endosar Pagaré") {
+		<h1 class="page-title">Endosar Pagaré</h1>
+		<p class="page-subtitle">Transfiere un pagaré a un nuevo beneficiario (endoso). Arts. 97-100 LCCH.</p>
+		<div class="card" style="max-width:720px">
+			<form id="endoso-form" onsubmit="return endosarPagare(event)">
+				<div class="mb-4">
+					<label class="form-label">ID del Pagaré *</label>
+					<input type="text" id="end-id" placeholder="ID del asset en blockchain"/>
+				</div>
+				<div class="mb-4">
+					<label class="form-label">Clave pública del endosatario *</label>
+					<input type="text" id="end-to" placeholder="Clave pública del nuevo beneficiario"/>
+				</div>
+				<div class="form-grid mb-4">
+					<div>
+						<label class="form-label">Tipo de endoso *</label>
+						<select id="end-tipo">
+							<option value="en_propiedad">En propiedad (art. 97)</option>
+							<option value="en_procuracion">En procuración (art. 100)</option>
+							<option value="en_blanco">En blanco (art. 99)</option>
+						</select>
+					</div>
+					<div>
+						<label class="form-label">Cláusula</label>
+						<select id="end-clausula">
+							<option value="">Sin cláusula</option>
+							<option value="sin_responsabilidad">Sin mi responsabilidad (art. 100)</option>
+							<option value="no_a_la_orden">No a la orden (no más endosos)</option>
+						</select>
+					</div>
+				</div>
+				<fieldset>
+					<legend>Identidad del endosante (opcional)</legend>
+					<div class="form-grid">
+						<div>
+							<label class="form-label">Clave pública</label>
+							<input type="text" id="end-from-pub" placeholder="Pub key"/>
+						</div>
+						<div>
+							<label class="form-label">Clave privada</label>
+							<input type="text" id="end-from-pvt" placeholder="Pvt key"/>
+						</div>
+					</div>
+				</fieldset>
+				<div id="endoso-error" class="alert alert-error hidden"></div>
+				<div id="endoso-ok" class="alert alert-success hidden"></div>
+				<div class="mt-4">
+					<button type="submit" id="endoso-btn" class="btn btn-primary">Endosar Pagaré</button>
+				</div>
+			</form>
+		</div>
+		<script>
+		var urlId = new URLSearchParams(window.location.search).get('id');
+		if (urlId) document.getElementById('end-id').value = urlId;
+
+		function endosarPagare(e) {
+			e.preventDefault();
+			var errEl = document.getElementById('endoso-error');
+			var okEl = document.getElementById('endoso-ok');
+			var btn = document.getElementById('endoso-btn');
+			errEl.classList.add('hidden');
+			okEl.classList.add('hidden');
+
+			var payload = {
+				id: document.getElementById('end-id').value.trim(),
+				to: document.getElementById('end-to').value.trim(),
+				metadata: {
+					tipo_endoso: document.getElementById('end-tipo').value,
+					clausula: document.getElementById('end-clausula').value || undefined
+				}
+			};
+			var fromPub = document.getElementById('end-from-pub').value.trim();
+			var fromPvt = document.getElementById('end-from-pvt').value.trim();
+			if (fromPub && fromPvt) {
+				payload.from = {pub: fromPub, pvt: fromPvt};
+			}
+
+			btn.disabled = true;
+			btn.textContent = 'Endosando...';
+
+			fetch('/api/pagares/endoso', {
+				method: 'PUT',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify(payload)
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				btn.disabled = false;
+				btn.textContent = 'Endosar Pagaré';
+				if (data.ok) {
+					okEl.textContent = 'Pagaré endosado correctamente.';
+					okEl.classList.remove('hidden');
+				} else {
+					errEl.textContent = data.msg || 'Error';
+					if (data.errors) errEl.textContent += ': ' + data.errors.map(function(e){return e.mensaje}).join('; ');
+					errEl.classList.remove('hidden');
+				}
+			})
+			.catch(function(err) {
+				btn.disabled = false;
+				btn.textContent = 'Endosar Pagaré';
+				errEl.textContent = 'Error: ' + err;
+				errEl.classList.remove('hidden');
+			});
+			return false;
+		}
+		</script>
+	}
+}

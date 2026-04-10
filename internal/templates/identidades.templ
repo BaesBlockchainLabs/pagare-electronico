@@ -1,0 +1,105 @@
+package templates
+
+templ Identidades() {
+	@Base("Identidades") {
+		<h1 class="page-title">Gestión de Identidades</h1>
+		<p class="page-subtitle">Claves criptográficas e identidades digitales para firmar y verificar pagarés.</p>
+		<div class="grid-2">
+			<div class="card">
+				<h2 class="card-title">Clave de la Aplicación</h2>
+				<p class="desc">Clave principal de la aplicación en BlockchainFUE.</p>
+				<button class="btn btn-primary btn-sm" onclick="loadAppKeypair()">Obtener Keypair App</button>
+				<div id="app-keypair" class="mt-4"></div>
+			</div>
+			<div class="card">
+				<h2 class="card-title">Generar Keypair Blockchain</h2>
+				<p class="desc">Genera un par de claves ed25519 a partir de una semilla y PIN.</p>
+				<div class="mb-4">
+					<label class="form-label">Semilla *</label>
+					<input type="text" id="kp-seed" placeholder="Texto semilla (> 16 caracteres)"/>
+				</div>
+				<div class="mb-4">
+					<label class="form-label">PIN *</label>
+					<input type="text" id="kp-pin" placeholder="4-16 caracteres alfanuméricos" maxlength="16"/>
+				</div>
+				<button class="btn btn-primary btn-sm" onclick="generateKeypair()">Generar Keypair</button>
+				<div id="gen-keypair" class="mt-4"></div>
+			</div>
+			<div class="card" style="grid-column:1/-1">
+				<h2 class="card-title">Generar Identidad Digital (DID Sovrin)</h2>
+				<p class="desc">Genera una identidad digital para firmar, verificar, cifrar y descifrar.</p>
+				<div class="flex-between mb-4">
+					<div style="flex:1;margin-right:16px">
+						<label class="form-label">Semilla (hex 64 chars, opcional)</label>
+						<input type="text" id="did-seed" placeholder="Dejar vacío para identidad aleatoria"/>
+					</div>
+					<button class="btn btn-primary btn-sm" onclick="generateDID()">Generar DID</button>
+				</div>
+				<div id="gen-did" class="mt-4"></div>
+			</div>
+		</div>
+		<script>
+		function loadAppKeypair() {
+			document.getElementById('app-keypair').innerHTML = '<p class="text-muted">Cargando...</p>';
+			fetch('/api/identidades/keypair/application')
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					var el = document.getElementById('app-keypair');
+					if (!data.ok) { el.innerHTML = '<div class="alert alert-error">' + data.msg + '</div>'; return; }
+					el.innerHTML = '<div class="mb-4"><label class="form-label">Pub</label><div class="key-display">' + data.pub + '</div></div>' +
+						'<div><label class="form-label">Pvt</label><div class="key-display">' + data.pvt + '</div></div>';
+				})
+				.catch(function(e) { document.getElementById('app-keypair').innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });
+		}
+
+		function generateKeypair() {
+			var seed = document.getElementById('kp-seed').value;
+			var pin = document.getElementById('kp-pin').value;
+			if (!seed || !pin) { alert('Semilla y PIN son obligatorios'); return; }
+			document.getElementById('gen-keypair').innerHTML = '<p class="text-muted">Generando...</p>';
+			fetch('/api/identidades/keypair', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({seed: seed, pin: pin})
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				var el = document.getElementById('gen-keypair');
+				if (!data.ok) { el.innerHTML = '<div class="alert alert-error">' + data.msg + '</div>'; return; }
+				el.innerHTML = '<div class="alert alert-success">Keypair generado</div>' +
+					'<div class="mb-4"><label class="form-label">Pub</label><div class="key-display">' + data.pub + '</div></div>' +
+					'<div class="mb-4"><label class="form-label">Pvt</label><div class="key-display">' + data.pvt + '</div></div>' +
+					'<p style="font-size:0.8rem;color:var(--c-danger)">Guarda estas claves de forma segura. No se almacenan en el servidor.</p>';
+			})
+			.catch(function(e) { document.getElementById('gen-keypair').innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });
+		}
+
+		function generateDID() {
+			var seed = document.getElementById('did-seed').value;
+			document.getElementById('gen-did').innerHTML = '<p class="text-muted">Generando...</p>';
+			fetch('/api/identidades/did', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({seed: seed || undefined})
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				var el = document.getElementById('gen-did');
+				if (!data.ok) { el.innerHTML = '<div class="alert alert-error">' + data.msg + '</div>'; return; }
+				var id = data.identity || {};
+				var sec = id.secret || {};
+				el.innerHTML = '<div class="alert alert-success">Identidad DID generada</div>' +
+					'<div class="form-grid mb-4">' +
+					'<div><label class="form-label">DID</label><div class="key-display">' + (id.did||'') + '</div></div>' +
+					'<div><label class="form-label">Verify Key</label><div class="key-display">' + (id.verify_key||'') + '</div></div>' +
+					'<div><label class="form-label">Encryption Public Key</label><div class="key-display">' + (id.encryption_public_key||'') + '</div></div>' +
+					(sec.seed ? '<div><label class="form-label">Seed</label><div class="key-display">' + sec.seed + '</div></div>' : '<div></div>') +
+					(sec.sign_key ? '<div><label class="form-label">Sign Key</label><div class="key-display">' + sec.sign_key + '</div></div>' : '<div></div>') +
+					'</div>' +
+					'<p style="font-size:0.8rem;color:var(--c-danger)">Guarda la parte secreta de forma segura.</p>';
+			})
+			.catch(function(e) { document.getElementById('gen-did').innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });
+		}
+		</script>
+	}
+}

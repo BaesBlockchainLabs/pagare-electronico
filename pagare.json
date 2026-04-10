@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Esquema JSON para el Pagaré Digital",
+  "description": "Esquema completo para un pagaré digital. Incluye los requisitos legales obligatorios.",
+  "type": "object",
+  "required": ["id_pagare", denominacion", "promesa_pago", "vencimiento", "localidad_pago", "beneficiario", "localidad_emision", "firmante"] ,
+  "properties": {
+    "id_pagare": {
+      "type": "string",
+      "format": "uri",
+      "description": "Identificador único del pagaré en formato URI. También puede ser formato UUID."
+    } ,
+    "denominacion": {
+      "type": "string",
+      "description": "La palabra 'PAGARÉ' debe aparecer inserta en el texto del título."
+    },
+    "promesa_pago": {
+      "type": "boolean",
+      "description": "Promesa pura y simple de pagar una cantidad determinada. Para que tenga validez jurídica debe de ser 'true'."
+    },
+    "vencimiento": {
+      "type": "object",
+      "description": "Indica la fecha de vencimiento del pagaré. En caso de que sea pagadero a la vista aplica el artículo 39 LCCH por el que se determina que el plazo máximo será de 1 año, siempre que el librador no establezca uno mayor o menor."
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "fecha_fija", 
+            "a_la_vista"
+          ]
+        },
+        "fecha": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "localidad_pago": {
+      "type": "string",
+      "description": "Localidad donde debe efectuarse el pago."
+    },
+    "beneficiario": {
+      "type": "object",
+      "description": "Nombre, apellidos y DNI/NIE/NIF de la persona a quien se paga o a cuya orden aplica.",
+      "properties": {
+        "nombre": { 
+            "type": "string",
+            "description": "Nombre del beneficiario."  
+        },
+        "apellido": { 
+            "type": "string",
+            "description": "Primer y segundo apellido, si procede, del beneficiario."
+        },
+        "nif": { 
+            "type": "string",
+            "description": "DNI/NIE/NIF del beneficiario." 
+        }
+      }
+    },
+    "localidad_emision": {
+      "type": "string",
+      "description": "Localidad en que se firma el pagaré."
+    },
+    "firmante": {
+      "type": "object",
+      "description": "....",
+      "properties": {
+        "nombre": { 
+            "type": "string",
+            "description": "Nombre del firmante."   
+        },
+        "apellido": { 
+            "type": "string",
+            "description": "Primer y segundo apellido, si procede, del firmante."  
+        },
+        "nif": { 
+            "type": "string",
+            "description": "DNI/NIE/NIF del firmante." 
+        },
+        "direccion_postal": {
+          "type": "object",
+          "properties": {
+            "localidad": { 
+                "type": "string",
+                "description": "La localidad en la que se encuentra la dirección y que pertenece a la región " 
+            },
+            "direccion": {
+                "type": "string",
+                "description": "Dirección postal completa." 
+            },
+            "codigo_postal": { 
+                "type": "string",
+                "description": "Código postal de la dirección postal." 
+            },
+            "región": {
+                "type": "string",
+                "description": "La región en la que se encuentra la localidad y que pertenece al país. Provincia."
+            },
+            "pais": { 
+                "type": "string",
+                "pattern": "^[A-Z]{2}$",
+                "description": "Código de país según la ISO 3166-1 alpha-2 (p. ej.: 'ES', 'FR', 'DE')." 
+            }
+          }
+        }
+      }
+    }
+  }
+}

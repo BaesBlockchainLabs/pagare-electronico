@@ -1,0 +1,51 @@
+package templates
+
+templ PagaresList(assets []PagareListItem) {
+	if len(assets) == 0 {
+		<div class="text-center py-16">
+			<p class="text-gray-400 text-lg">No hay pagarés emitidos</p>
+			<a href="/pagares/nuevo" class="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">Emitir primer pagaré</a>
+		</div>
+	} else {
+		<div class="overflow-x-auto">
+			<table class="w-full bg-white rounded-lg shadow overflow-hidden">
+				<thead class="bg-gray-100">
+					<tr>
+						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">ID</th>
+						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Beneficiario</th>
+						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Importe</th>
+						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Vencimiento</th>
+						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Fecha</th>
+						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Acciones</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, a := range assets {
+						<tr class="border-t hover:bg-gray-50">
+							<td class="px-4 py-3">
+								<code class="text-xs bg-gray-100 px-2 py-1 rounded" title={ a.ID }>{ a.IDShort }</code>
+							</td>
+							<td class="px-4 py-3 text-sm">{ a.Beneficiario }</td>
+							<td class="px-4 py-3 text-sm font-semibold">{ a.Importe }</td>
+							<td class="px-4 py-3 text-sm">{ a.Vencimiento }</td>
+							<td class="px-4 py-3 text-sm text-gray-500">{ a.Fecha }</td>
+							<td class="px-4 py-3">
+								<a href={ "/pagares/historico?id=" + a.ID } class="text-blue-600 hover:text-blue-800 text-sm mr-2">Histórico</a>
+								<a href={ "/pagares/verificar?network=test&id=" + a.ID } class="text-green-600 hover:text-green-800 text-sm">Verificar</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+type PagareListItem struct {
+	ID           string
+	IDShort      string
+	Beneficiario string
+	Importe      string
+	Vencimiento  string
+	Fecha        string
+}

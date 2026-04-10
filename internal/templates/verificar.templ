@@ -1,0 +1,75 @@
+package templates
+
+templ Verificar(id string, network string) {
+	@Base("Verificar Pagaré") {
+		<h1 class="page-title">Verificación Pública de Pagaré</h1>
+		<p class="page-subtitle">Verifica la existencia y contenido de un pagaré en la blockchain pública.</p>
+		<div class="card">
+			<label class="form-label">ID del Asset</label>
+			<div class="flex-between mb-4">
+				<input type="text" id="verify-id" value={ id } placeholder="ID del asset" style="flex:1;margin-right:12px"/>
+				<select id="verify-network" style="width:auto;margin-right:12px">
+					if network == "main" {
+						<option value="test">Test</option>
+						<option value="main" selected>Main</option>
+					} else {
+						<option value="test" selected>Test</option>
+						<option value="main">Main</option>
+					}
+				</select>
+				<button class="btn btn-primary btn-sm" onclick="verifyPagare()">Verificar</button>
+			</div>
+			<div id="verify-result"></div>
+		</div>
+		<script>
+		var urlId = new URLSearchParams(window.location.search).get('id') || document.getElementById('verify-id').value;
+		if (urlId) {
+			document.getElementById('verify-id').value = urlId;
+			verifyPagare();
+		}
+		function verifyPagare() {
+			var id = document.getElementById('verify-id').value.trim();
+			var network = document.getElementById('verify-network').value;
+			if (!id) return;
+			document.getElementById('verify-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Verificando...</p>';
+			fetch('/api/pagares/public?network=' + network + '&id=' + encodeURIComponent(id))
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					var el = document.getElementById('verify-result');
+					if (!data.ok) { el.innerHTML = '<div class="alert alert-error">' + (data.msg || 'No encontrado') + '</div>'; return; }
+					var a = data.asset || {};
+					var d = a.data || {};
+					var ben = d.beneficiario || {};
+					var ven = d.vencimiento || {};
+					var fir = d.firmante || {};
+					var dp = fir.direccion_postal || {};
+					var h = '<div class="card" style="margin-top:0">';
+					h += '<div class="flex-between mb-4"><span class="tag" style="background:var(--c-success);color:white">Verificado en Blockchain</span></div>';
+					h += '<div class="mb-4"><label class="form-label">ID</label><div class="key-display">' + (a.id||'') + '</div></div>';
+					h += '<div class="form-grid mb-4">';
+					h += '<div><label class="form-label">Denominación</label><div>' + (d.denominacion||'') + '</div></div>';
+					h += '<div><label class="form-label">Importe</label><div style="font-weight:700">' + (d.importe||'') + ' ' + (d.moneda||'EUR') + '</div></div>';
+					h += '<div><label class="form-label">Vencimiento</label><div>' + (ven.tipo==='a_la_vista'?'A la vista':ven.fecha||'') + '</div></div>';
+					h += '<div><label class="form-label">Localidad de Pago</label><div>' + (d.localidad_pago||'') + '</div></div>';
+					h += '</div>';
+					h += '<div class="form-grid mb-4">';
+					h += '<div><label class="form-label">Beneficiario</label><div>' + (ben.nombre||'') + ' ' + (ben.apellido||'') + ' (' + (ben.nif||'') + ')</div></div>';
+					h += '<div><label class="form-label">Localidad Emisión</label><div>' + (d.localidad_emision||'') + '</div></div>';
+					h += '<div><label class="form-label">Fecha Emisión</label><div>' + (d.fecha_emision||'') + '</div></div>';
+					h += '<div><label class="form-label">Firmante</label><div>' + (fir.nombre||'') + ' (' + (fir.nif||'') + ')</div></div>';
+					h += '</div>';
+					if (dp.direccion) {
+						h += '<div class="mb-4"><label class="form-label">Dirección Firmante</label><div>' + dp.direccion + ', ' + dp.localidad + ' ' + dp.codigo_postal + ' (' + dp.pais + ')</div></div>';
+					}
+					h += '<div class="form-grid">';
+					h += '<div><label class="form-label">Fecha Creación Blockchain</label><div>' + (d.created_at ? new Date(d.created_at).toLocaleString() : '') + '</div></div>';
+					h += '<div><label class="form-label">Propietario</label><div class="key-display">' + (d.from||'') + '</div></div>';
+					h += '</div>';
+					h += '</div>';
+					el.innerHTML = h;
+				})
+				.catch(function(e) { document.getElementById('verify-result').innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });
+		}
+		</script>
+	}
+}

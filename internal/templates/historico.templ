@@ -1,0 +1,59 @@
+package templates
+
+templ Historico(id string) {
+	@Base("Histórico") {
+		<h1 class="page-title">Histórico de Pagaré</h1>
+		<p class="page-subtitle">Consulta el historial completo de eventos de un pagaré en blockchain.</p>
+		<div class="card">
+			<label class="form-label">ID del Pagaré (asset)</label>
+			<div class="flex-between">
+				<input type="text" id="pagare-id" value={ id } placeholder="ID del asset en blockchain" style="flex:1;margin-right:12px"/>
+				<button class="btn btn-primary btn-sm" onclick="loadHistorico()">Buscar</button>
+			</div>
+			<div id="historico-result" class="mt-6"></div>
+		</div>
+		<script>
+		var urlId = new URLSearchParams(window.location.search).get('id') || document.getElementById('pagare-id').value;
+		if (urlId) {
+			document.getElementById('pagare-id').value = urlId;
+			loadHistorico();
+		}
+		function loadHistorico() {
+			var id = document.getElementById('pagare-id').value.trim();
+			if (!id) return;
+			document.getElementById('historico-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Cargando...</p>';
+			fetch('/api/pagares/historico?id=' + encodeURIComponent(id))
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					var el = document.getElementById('historico-result');
+					if (!data.ok) { el.innerHTML = '<div class="alert alert-error">' + data.msg + '</div>'; return; }
+					if (!data.history || data.history.length === 0) { el.innerHTML = '<p class="text-muted">Sin historial</p>'; return; }
+					var html = '<div class="timeline">';
+					data.history.forEach(function(h, i) {
+						var meta = h.metadata || {};
+						var action = meta.action || 'UPDATE';
+						var dotClass = action === 'CREATE' ? 'create' : action === 'ENDOSO' ? 'endoso' : action === 'PAGO' ? 'pago' : 'default';
+						html += '<div class="timeline-item">';
+						html += '<div class="timeline-dot ' + dotClass + '">' + (i+1) + '</div>';
+						html += '<div style="flex:1">';
+						html += '<div style="font-weight:700;color:var(--c-dark)">' + action + '</div>';
+						if (meta.updated_at) {
+							var d = new Date(meta.updated_at);
+							html += '<div class="text-muted" style="font-size:0.85rem">' + d.toLocaleString() + '</div>';
+						}
+						if (meta.from || meta.creator) html += '<div style="font-size:0.9rem;margin-top:4px">Identidad: <code>' + (meta.from || meta.creator || '').substring(0,24) + '...</code></div>';
+						if (meta.tipo_endoso) html += '<div style="font-size:0.9rem">Tipo endoso: <span class="tag">' + meta.tipo_endoso + '</span></div>';
+						if (meta.endosante) html += '<div style="font-size:0.9rem">Endosante: <code>' + meta.endosante.substring(0,24) + '...</code></div>';
+						if (meta.endosatario) html += '<div style="font-size:0.9rem">Endosatario: <code>' + meta.endosatario.substring(0,24) + '...</code></div>';
+						if (meta.clausula) html += '<div style="font-size:0.9rem">Cláusula: ' + meta.clausula + '</div>';
+						if (meta.motivo) html += '<div style="font-size:0.9rem">Motivo: ' + meta.motivo + '</div>';
+						html += '</div></div>';
+					});
+					html += '</div>';
+					el.innerHTML = html;
+				})
+				.catch(function(e) { document.getElementById('historico-result').innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });
+		}
+		</script>
+	}
+}

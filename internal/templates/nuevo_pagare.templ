@@ -1,0 +1,185 @@
+package templates
+
+templ NuevoPagare() {
+	@Base("Emitir Pagaré") {
+		<h1 class="page-title">Emitir Nuevo Pagaré</h1>
+		<p class="page-subtitle">Formulario de emisión conforme al art. 94 de la Ley Cambiaria y del Cheque (LCCH). Los datos se grabarán de forma inalterable en blockchain.</p>
+
+		<form id="pagare-form" onsubmit="return emitirPagare(event)">
+			<fieldset>
+				<legend>Datos del Pagaré</legend>
+				<div class="form-grid">
+					<div>
+						<label class="form-label" for="denominacion">Denominación</label>
+						<input type="text" id="denominacion" name="denominacion" value="PAGARÉ" readonly/>
+					</div>
+					<div>
+						<label class="form-label" for="importe">Importe (EUR) *</label>
+						<input type="number" id="importe" name="importe" step="0.01" min="0.01" required/>
+					</div>
+					<div>
+						<label class="form-label" for="vencimiento_tipo">Tipo Vencimiento *</label>
+						<select id="vencimiento_tipo" name="vencimiento_tipo" required>
+							<option value="fecha_fija">Fecha fija</option>
+							<option value="a_la_vista">A la vista (art. 39 LCCH)</option>
+						</select>
+					</div>
+					<div>
+						<label class="form-label" for="vencimiento_fecha">Fecha Vencimiento</label>
+						<input type="date" id="vencimiento_fecha" name="vencimiento_fecha"/>
+					</div>
+					<div>
+						<label class="form-label" for="localidad_pago">Localidad de Pago *</label>
+						<input type="text" id="localidad_pago" name="localidad_pago" required/>
+					</div>
+					<div>
+						<label class="form-label" for="localidad_emision">Localidad de Emisión *</label>
+						<input type="text" id="localidad_emision" name="localidad_emision" required/>
+					</div>
+					<div>
+						<label class="form-label" for="fecha_emision">Fecha de Emisión</label>
+						<input type="date" id="fecha_emision" name="fecha_emision"/>
+					</div>
+				</div>
+			</fieldset>
+
+			<fieldset>
+				<legend>Beneficiario</legend>
+				<div class="form-grid-3">
+					<div>
+						<label class="form-label" for="beneficiario_nombre">Nombre *</label>
+						<input type="text" id="beneficiario_nombre" name="beneficiario_nombre" required/>
+					</div>
+					<div>
+						<label class="form-label" for="beneficiario_apellido">Apellidos</label>
+						<input type="text" id="beneficiario_apellido" name="beneficiario_apellido"/>
+					</div>
+					<div>
+						<label class="form-label" for="beneficiario_nif">NIF/NIE/CIF *</label>
+						<input type="text" id="beneficiario_nif" name="beneficiario_nif" required placeholder="12345678Z"/>
+					</div>
+				</div>
+			</fieldset>
+
+			<fieldset>
+				<legend>Firmante</legend>
+				<div class="form-grid-3">
+					<div>
+						<label class="form-label" for="firmante_nombre">Nombre *</label>
+						<input type="text" id="firmante_nombre" name="firmante_nombre" required/>
+					</div>
+					<div>
+						<label class="form-label" for="firmante_apellido">Apellidos</label>
+						<input type="text" id="firmante_apellido" name="firmante_apellido"/>
+					</div>
+					<div>
+						<label class="form-label" for="firmante_nif">NIF/NIE/CIF *</label>
+						<input type="text" id="firmante_nif" name="firmante_nif" required/>
+					</div>
+				</div>
+				<div class="form-grid mt-4">
+					<div>
+						<label class="form-label" for="firmante_direccion">Dirección *</label>
+						<input type="text" id="firmante_direccion" name="firmante_direccion" required/>
+					</div>
+					<div>
+						<label class="form-label" for="firmante_localidad">Localidad *</label>
+						<input type="text" id="firmante_localidad" name="firmante_localidad" required/>
+					</div>
+					<div>
+						<label class="form-label" for="firmante_cp">Código Postal *</label>
+						<input type="text" id="firmante_cp" name="firmante_cp" required/>
+					</div>
+					<div>
+						<label class="form-label" for="firmante_pais">País (ISO) *</label>
+						<input type="text" id="firmante_pais" name="firmante_pais" required value="ES" maxlength="2"/>
+					</div>
+				</div>
+			</fieldset>
+
+			<div id="form-error" class="alert alert-error hidden"></div>
+			<div id="form-success" class="alert alert-success hidden"></div>
+
+			<div style="text-align: right; margin-top: 24px;">
+				<button type="submit" id="submit-btn" class="btn btn-primary">
+					Emitir y Grabar en Blockchain
+				</button>
+			</div>
+		</form>
+
+		<script>
+		function emitirPagare(e) {
+			e.preventDefault();
+			var f = document.getElementById('pagare-form');
+			var errEl = document.getElementById('form-error');
+			var okEl = document.getElementById('form-success');
+			var btn = document.getElementById('submit-btn');
+			errEl.classList.add('hidden');
+			okEl.classList.add('hidden');
+
+			var payload = {
+				asset: {
+					data: {
+						type: "pagare_electronico",
+						denominacion: f.denominacion.value,
+						promesa_pago: true,
+						importe: parseFloat(f.importe.value),
+						moneda: "EUR",
+						vencimiento: { tipo: f.vencimiento_tipo.value, fecha: f.vencimiento_fecha.value },
+						localidad_pago: f.localidad_pago.value,
+						beneficiario: { nombre: f.beneficiario_nombre.value, apellido: f.beneficiario_apellido.value, nif: f.beneficiario_nif.value },
+						localidad_emision: f.localidad_emision.value,
+						fecha_emision: f.fecha_emision.value,
+						firmante: {
+							nombre: f.firmante_nombre.value,
+							apellido: f.firmante_apellido.value,
+							nif: f.firmante_nif.value,
+							direccion_postal: {
+								direccion: f.firmante_direccion.value,
+								localidad: f.firmante_localidad.value,
+								codigo_postal: f.firmante_cp.value,
+								pais: f.firmante_pais.value
+							}
+						}
+					}
+				}
+			};
+
+			btn.disabled = true;
+			btn.textContent = "Emitiendo...";
+
+			fetch('/api/pagares', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				btn.disabled = false;
+				btn.textContent = "Emitir y Grabar en Blockchain";
+				if (data.ok) {
+					okEl.textContent = "Pagaré emitido correctamente. ID: " + data.id + " (coste: " + data.cost + ")";
+					okEl.classList.remove('hidden');
+					f.reset();
+					f.denominacion.value = "PAGARÉ";
+					f.firmante_pais.value = "ES";
+				} else {
+					errEl.textContent = data.msg || 'Error desconocido';
+					if (data.errors) {
+						errEl.textContent += ': ' + data.errors.map(function(e){ return e.mensaje; }).join('; ');
+					}
+					errEl.classList.remove('hidden');
+				}
+			})
+			.catch(function(err) {
+				btn.disabled = false;
+				btn.textContent = "Emitir y Grabar en Blockchain";
+				errEl.textContent = "Error de conexión: " + err.message;
+				errEl.classList.remove('hidden');
+			});
+
+			return false;
+		}
+		</script>
+	}
+}

@@ -3,3 +3,9 @@
 .dolt/
 *.db
 .beads-credential-key
+
+# Go
+.env
+bin/
+tmp/
+*.exe
