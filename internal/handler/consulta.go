@@ -80,14 +80,21 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 		return ""
 	}
 	history, _ := histRaw["history"].([]interface{})
-	if len(history) == 0 {
-		return ""
-	}
-	last, _ := history[len(history)-1].(map[string]interface{})
-	metadata, _ := last["metadata"].(map[string]interface{})
-	action, _ := metadata["action"].(string)
-	if estado, ok := actionMap[action]; ok {
-		return estado
+	for i := len(history) - 1; i >= 0; i-- {
+		entry, _ := history[i].(map[string]interface{})
+		metadata, _ := entry["metadata"].(map[string]interface{})
+		if metadata == nil {
+			continue
+		}
+		if tipo, ok := metadata["tipo_cierre"].(string); ok {
+			if estado, found := actionMap[tipo]; found {
+				return estado
+			}
+		}
+		action, _ := metadata["action"].(string)
+		if estado, found := actionMap[action]; found {
+			return estado
+		}
 	}
 	return ""
 }

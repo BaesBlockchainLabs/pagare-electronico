@@ -194,13 +194,21 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 		bcfQuery["from"] = map[string]string{"pub": req.From.Pub, "pvt": req.From.Pvt}
 	}
 
+	motivoCierre := map[string]string{
+		"PAGO":         "Este pagaré ha sido pagado",
+		"ANULACION":    "Este pagaré ha sido anulado",
+		"PRESCRIPCION": "Este pagaré ha prescrito",
+	}
+
 	updateBody := map[string]interface{}{
 		"id": req.ID,
 		"metadata": map[string]interface{}{
-			"action":     req.Metadata.Action,
-			"fecha_pago": time.Now().Format(time.RFC3339),
-			"referencia": req.Metadata.Referencia,
-			"motivo":     req.Metadata.Motivo,
+			"action":        req.Metadata.Action,
+			"tipo_cierre":   req.Metadata.Action,
+			"fecha":         time.Now().Format(time.RFC3339),
+			"motivo_cierre": motivoCierre[req.Metadata.Action],
+			"referencia":    req.Metadata.Referencia,
+			"motivo":        req.Metadata.Motivo,
 		},
 	}
 	if req.From != nil {
