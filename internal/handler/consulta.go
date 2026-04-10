@@ -33,7 +33,63 @@ func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
 		return
 	}
-	WriteRaw(w, status, body)
+	if status != 200 {
+		WriteRaw(w, status, body)
+		return
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		WriteRaw(w, status, body)
+		return
+	}
+
+	assets, _ := raw["assets"].([]interface{})
+	actionToEstado := map[string]string{
+		"PAGO": "PAGADO", "ANULACION": "ANULADO", "PRESCRIPCION": "PRESCRITO",
+	}
+
+	for _, a := range assets {
+		asset, ok := a.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		assetID, _ := asset["id"].(string)
+		estado := h.resolveEstado(assetID, actionToEstado)
+		if estado == "" {
+			continue
+		}
+		data, _ := asset["data"].(map[string]interface{})
+		if data == nil {
+			data = make(map[string]interface{})
+		}
+		data["estado"] = estado
+		asset["data"] = data
+	}
+
+	WriteJSON(w, status, raw)
+}
+
+func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]string) string {
+	histBody, histStatus, err := h.client.GetAssetHistory(assetID)
+	if err != nil || histStatus != 200 {
+		return ""
+	}
+	var histRaw map[string]interface{}
+	if err := json.Unmarshal(histBody, &histRaw); err != nil {
+		return ""
+	}
+	history, _ := histRaw["history"].([]interface{})
+	if len(history) == 0 {
+		return ""
+	}
+	last, _ := history[len(history)-1].(map[string]interface{})
+	metadata, _ := last["metadata"].(map[string]interface{})
+	action, _ := metadata["action"].(string)
+	if estado, ok := actionMap[action]; ok {
+		return estado
+	}
+	return ""
 }
 
 func (h *ConsultaHandler) GetPagare(w http.ResponseWriter, r *http.Request) {
