@@ -32,6 +32,7 @@ templ Dashboard() {
 					'<th>Beneficiario</th>' +
 					'<th>Importe</th>' +
 					'<th>Vencimiento</th>' +
+					'<th>Estado</th>' +
 					'<th>Fecha</th>' +
 					'<th>Acciones</th>' +
 					'</tr></thead><tbody>';
@@ -44,13 +45,20 @@ templ Dashboard() {
 					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha || '');
 					var fechaStr = d.created_at ? new Date(d.created_at).toLocaleDateString() : '';
 					var idShort = a.id ? a.id.substring(0, 12) + '...' : '';
+					var isVencido = ven.tipo !== 'a_la_vista' && ven.fecha && new Date(ven.fecha) < new Date();
+					var estadoHtml = isVencido
+						? '<span class="tag" style="background:#FF4D4D;color:white">Vencido</span>'
+						: '<span class="tag">Activo</span>';
 					html += '<tr>' +
 						'<td><code title="' + a.id + '">' + idShort + '</code></td>' +
 						'<td>' + benStr.trim() + '</td>' +
 						'<td><strong>' + impStr + '</strong></td>' +
 						'<td>' + venStr + '</td>' +
+						'<td>' + estadoHtml + '</td>' +
 						'<td class="text-muted">' + fechaStr + '</td>' +
-						'<td>' +
+						'<td style="white-space:nowrap">' +
+						'<a href="/pagares/endosar?id=' + a.id + '" class="btn btn-outline btn-sm">Endosar</a> ' +
+						'<a href="/pagares/pagar?id=' + a.id + '" class="btn btn-danger btn-sm">Pagar</a> ' +
 						'<a href="/pagares/historico?id=' + a.id + '" class="btn btn-outline btn-sm">Histórico</a> ' +
 						'<a href="/pagares/verificar?network=test&id=' + a.id + '" class="btn btn-primary btn-sm">Verificar</a>' +
 						'</td></tr>';
