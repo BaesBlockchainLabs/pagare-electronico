@@ -161,7 +161,8 @@ func (lv *LCCHValidator) validateVencimiento(p *models.PagareElectronico, fechaE
 }
 
 func (lv *LCCHValidator) validateEndosoLCCH(e *models.Endoso, result *ValidationResult) {
-	if e.Tipo == "en_propiedad" && e.Endosatario == nil {
+	hasEndosatario := e.Endosatario != nil || e.IdentidadEndosatario != ""
+	if e.Tipo == "en_propiedad" && !hasEndosatario {
 		result.Valid = false
 		result.Errors = append(result.Errors, ValidationError{
 			Campo: "Endosatario", Mensaje: "El endoso en propiedad requiere un endosatario", ArticuloLCCH: "art. 97 LCCH",

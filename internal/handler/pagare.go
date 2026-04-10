@@ -126,10 +126,14 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	endoso := models.Endoso{
-		Tipo:        req.Metadata.TipoEndoso,
-		Fecha:       time.Now().Format(time.RFC3339),
-		Endosatario: req.Metadata.Endosatario,
-		Clausula:    req.Metadata.Clausula,
+		Tipo:                 req.Metadata.TipoEndoso,
+		Fecha:                time.Now().Format(time.RFC3339),
+		Endosatario:          req.Metadata.Endosatario,
+		IdentidadEndosatario: req.To,
+		Clausula:             req.Metadata.Clausula,
+	}
+	if endoso.Endosatario == nil && req.To != "" {
+		endoso.Endosatario = &models.Persona{Nombre: req.To}
 	}
 	endosoResult := h.validator.ValidateEndoso(&endoso)
 	if !endosoResult.Valid {
