@@ -78,7 +78,7 @@ templ Verificar(id string, network string) {
 					}
 					h += '<div class="form-grid">';
 					h += '<div><label class="form-label">Fecha Creación Blockchain</label><div>' + (d.created_at ? new Date(d.created_at).toLocaleString() : '') + '</div></div>';
-					h += '<div><label class="form-label">Propietario</label><div class="key-display">' + (d.from||'') + '</div></div>';
+					h += '<div><label class="form-label">Propietario Actual</label><div class="key-display">' + (d.propietario_actual || d.from || '') + '</div></div>';
 					h += '</div>';
 					h += '</div>';
 					el.innerHTML = h;

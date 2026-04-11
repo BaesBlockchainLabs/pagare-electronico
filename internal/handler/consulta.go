@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"pagare/internal/bcfclient"
 )
@@ -152,7 +153,68 @@ func (h *ConsultaHandler) GetHistorico(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
 		return
 	}
-	WriteRaw(w, status, body)
+	if status != 200 {
+		WriteRaw(w, status, body)
+		return
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		WriteRaw(w, status, body)
+		return
+	}
+
+	actionLabels := map[string]string{
+		"CREATE": "Emisión", "UPDATE": "Actualización", "TRANSFER": "Endoso (transferencia)",
+		"BURN": "Quema", "ENDOSO": "Endoso",
+		"PAGO": "Pago", "ANULACION": "Anulación", "PRESCRIPCION": "Prescripción",
+	}
+
+	history, _ := raw["history"].([]interface{})
+	for _, entry := range history {
+		e, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		metadata, _ := e["metadata"].(map[string]interface{})
+		if metadata == nil {
+			continue
+		}
+		action, _ := metadata["action"].(string)
+		if label, found := actionLabels[action]; found {
+			metadata["action_label"] = label
+		} else {
+			metadata["action_label"] = action
+		}
+		if tipo, ok := metadata["tipo_cierre"].(string); ok {
+			if label, found := actionLabels[tipo]; found {
+				metadata["tipo_cierre_label"] = label
+			}
+		}
+		if tipo, ok := metadata["tipo_endoso"].(string); ok {
+			endosoLabels := map[string]string{
+				"en_propiedad":   "En propiedad (art. 97)",
+				"en_procuracion": "En procuración (art. 100)",
+				"en_blanco":      "En blanco (art. 99)",
+			}
+			if label, found := endosoLabels[tipo]; found {
+				metadata["tipo_endoso_label"] = label
+			}
+		}
+		if ts, ok := metadata["updated_at"].(float64); ok {
+			metadata["fecha"] = time.UnixMilli(int64(ts)).Format("2006-01-02 15:04:05")
+		}
+		if ts, ok := metadata["fecha_pago"].(string); ok {
+			metadata["fecha"] = ts
+		}
+		if _, ok := metadata["fecha"]; !ok {
+			if ts, ok := metadata["updated_at"].(float64); ok {
+				metadata["fecha"] = time.UnixMilli(int64(ts)).Format("2006-01-02 15:04:05")
+			}
+		}
+	}
+
+	WriteJSON(w, status, raw)
 }
 
 func (h *ConsultaHandler) GetPropietario(w http.ResponseWriter, r *http.Request) {
@@ -204,14 +266,29 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 		"PAGO": "PAGADO", "ANULACION": "ANULADO", "PRESCRIPCION": "PRESCRITO",
 		"ENDOSO": "ENDOSADO",
 	})
-	if estado != "" {
-		data, _ := asset["data"].(map[string]interface{})
-		if data == nil {
-			data = make(map[string]interface{})
-		}
-		data["estado"] = estado
-		asset["data"] = data
+	data, _ := asset["data"].(map[string]interface{})
+	if data == nil {
+		data = make(map[string]interface{})
 	}
+	if estado != "" {
+		data["estado"] = estado
+	}
+
+	ownerBody, ownerStatus, _ := h.client.GetAssetOwners(id)
+	if ownerStatus == 200 {
+		var ownerRaw map[string]interface{}
+		if json.Unmarshal(ownerBody, &ownerRaw) == nil {
+			if owners, ok := ownerRaw["owners"].([]interface{}); ok && len(owners) > 0 {
+				if first, ok := owners[0].(map[string]interface{}); ok {
+					if pub, ok := first["pub"].(string); ok {
+						data["propietario_actual"] = pub
+					}
+				}
+			}
+		}
+	}
+
+	asset["data"] = data
 
 	WriteJSON(w, status, raw)
 }

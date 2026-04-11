@@ -31,22 +31,27 @@ templ Historico(id string) {
 					var html = '<div class="timeline">';
 					data.history.forEach(function(h, i) {
 						var meta = h.metadata || {};
-						var action = meta.action || 'UPDATE';
-						var dotClass = action === 'CREATE' ? 'create' : action === 'ENDOSO' ? 'endoso' : action === 'PAGO' ? 'pago' : 'default';
+						var action = meta.action || '';
+						var label = meta.action_label || action;
+						var dotClass = 'default';
+						if (action === 'CREATE') dotClass = 'create';
+						else if (action === 'TRANSFER' || action === 'ENDOSO') dotClass = 'endoso';
+						else if (action === 'BURN' || action === 'PAGO') dotClass = 'pago';
 						html += '<div class="timeline-item">';
 						html += '<div class="timeline-dot ' + dotClass + '">' + (i+1) + '</div>';
 						html += '<div style="flex:1">';
-						html += '<div style="font-weight:700;color:var(--c-dark)">' + action + '</div>';
-						if (meta.updated_at) {
-							var d = new Date(meta.updated_at);
-							html += '<div class="text-muted" style="font-size:0.85rem">' + d.toLocaleString() + '</div>';
-						}
-						if (meta.from || meta.creator) html += '<div style="font-size:0.9rem;margin-top:4px">Identidad: <code>' + (meta.from || meta.creator || '').substring(0,24) + '...</code></div>';
-						if (meta.tipo_endoso) html += '<div style="font-size:0.9rem">Tipo endoso: <span class="tag">' + meta.tipo_endoso + '</span></div>';
-						if (meta.endosante) html += '<div style="font-size:0.9rem">Endosante: <code>' + meta.endosante.substring(0,24) + '...</code></div>';
-						if (meta.endosatario) html += '<div style="font-size:0.9rem">Endosatario: <code>' + meta.endosatario.substring(0,24) + '...</code></div>';
-						if (meta.clausula) html += '<div style="font-size:0.9rem">Cláusula: ' + meta.clausula + '</div>';
-						if (meta.motivo) html += '<div style="font-size:0.9rem">Motivo: ' + meta.motivo + '</div>';
+						html += '<div style="font-weight:700;color:var(--c-dark)">' + label + '</div>';
+						if (meta.fecha) html += '<div class="text-muted" style="font-size:0.85rem">' + meta.fecha + '</div>';
+						if (meta.from) html += '<div style="font-size:0.9rem;margin-top:4px"><strong>Origen:</strong> <code>' + meta.from + '</code></div>';
+						if (meta.to) html += '<div style="font-size:0.9rem"><strong>Destino:</strong> <code>' + meta.to + '</code></div>';
+						if (meta.tipo_cierre_label) html += '<div style="font-size:0.9rem;margin-top:4px"><strong>Tipo:</strong> <span class="tag">' + meta.tipo_cierre_label + '</span></div>';
+						if (meta.tipo_endoso_label) html += '<div style="font-size:0.9rem"><strong>Tipo endoso:</strong> <span class="tag">' + meta.tipo_endoso_label + '</span></div>';
+						if (meta.clausula) html += '<div style="font-size:0.9rem"><strong>Cláusula:</strong> ' + meta.clausula + '</div>';
+						if (meta.motivo) html += '<div style="font-size:0.9rem"><strong>Motivo:</strong> ' + meta.motivo + '</div>';
+						if (meta.motivo_cierre) html += '<div style="font-size:0.9rem"><strong>Motivo cierre:</strong> ' + meta.motivo_cierre + '</div>';
+						if (meta.referencia) html += '<div style="font-size:0.9rem"><strong>Referencia:</strong> ' + meta.referencia + '</div>';
+						if (meta.endosante) html += '<div style="font-size:0.9rem"><strong>Endosante:</strong> <code>' + meta.endosante + '</code></div>';
+						if (meta.endosatario) html += '<div style="font-size:0.9rem"><strong>Endosatario:</strong> <code>' + meta.endosatario + '</code></div>';
 						html += '</div></div>';
 					});
 					html += '</div>';

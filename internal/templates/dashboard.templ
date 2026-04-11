@@ -60,7 +60,7 @@ templ Dashboard() {
 					} else {
 						estadoHtml = '<span class="tag">Activo</span>';
 					}
-					var esFinalizado = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO';
+					var esFinalizado = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO' || estado === 'ENDOSADO';
 					var acciones = '';
 					if (!esFinalizado) {
 						acciones += '<a href="/pagares/endosar?id=' + a.id + '" class="btn btn-outline btn-sm">Endosar</a> ' +
