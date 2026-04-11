@@ -58,15 +58,26 @@ func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
 		}
 		assetID, _ := asset["id"].(string)
 		estado := h.resolveEstado(assetID, actionToEstado)
-		if estado == "" {
-			continue
-		}
 		data, _ := asset["data"].(map[string]interface{})
 		if data == nil {
 			data = make(map[string]interface{})
 		}
-		data["estado"] = estado
-		asset["data"] = data
+		if estado == "" {
+			ven, _ := data["vencimiento"].(map[string]interface{})
+			if ven != nil {
+				tipo, _ := ven["tipo"].(string)
+				fechaStr, _ := ven["fecha"].(string)
+				if tipo != "a_la_vista" && fechaStr != "" {
+					if t, err := time.Parse("2006-01-02", fechaStr); err == nil && t.Before(time.Now()) {
+						estado = "VENCIDO"
+					}
+				}
+			}
+		}
+		if estado != "" {
+			data["estado"] = estado
+			asset["data"] = data
+		}
 	}
 
 	WriteJSON(w, status, raw)
@@ -269,6 +280,18 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 	data, _ := asset["data"].(map[string]interface{})
 	if data == nil {
 		data = make(map[string]interface{})
+	}
+	if estado == "" {
+		ven, _ := data["vencimiento"].(map[string]interface{})
+		if ven != nil {
+			tipo, _ := ven["tipo"].(string)
+			fechaStr, _ := ven["fecha"].(string)
+			if tipo != "a_la_vista" && fechaStr != "" {
+				if t, err := time.Parse("2006-01-02", fechaStr); err == nil && t.Before(time.Now()) {
+					estado = "VENCIDO"
+				}
+			}
+		}
 	}
 	if estado != "" {
 		data["estado"] = estado

@@ -55,16 +55,18 @@ templ Dashboard() {
 						estadoHtml = '<span class="tag" style="background:var(--c-text-light);color:white">Prescrito</span>';
 					} else if (estado === 'ENDOSADO') {
 						estadoHtml = '<span class="tag" style="background:#D4A017;color:white">Endosado</span>';
-					} else if (ven.tipo !== 'a_la_vista' && ven.fecha && new Date(ven.fecha) < new Date()) {
+					} else if (estado === 'VENCIDO') {
 						estadoHtml = '<span class="tag" style="background:#FF4D4D;color:white">Vencido</span>';
 					} else {
 						estadoHtml = '<span class="tag">Activo</span>';
 					}
-					var esFinalizado = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO' || estado === 'ENDOSADO';
+					var sinAcciones = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO' || estado === 'ENDOSADO';
 					var acciones = '';
-					if (!esFinalizado) {
-						acciones += '<a href="/pagares/endosar?id=' + a.id + '" class="btn btn-outline btn-sm">Endosar</a> ' +
-							'<a href="/pagares/pagar?id=' + a.id + '" class="btn btn-danger btn-sm">Pagar</a> ';
+					if (!sinAcciones) {
+						if (estado !== 'VENCIDO') {
+							acciones += '<a href="/pagares/endosar?id=' + a.id + '" class="btn btn-outline btn-sm">Endosar</a> ';
+						}
+						acciones += '<a href="/pagares/pagar?id=' + a.id + '" class="btn btn-danger btn-sm">Pagar</a> ';
 					}
 					acciones += '<a href="/pagares/historico?id=' + a.id + '" class="btn btn-outline btn-sm">Histórico</a> ' +
 						'<a href="/pagares/verificar?network=test&id=' + a.id + '" class="btn btn-primary btn-sm">Verificar</a>';
