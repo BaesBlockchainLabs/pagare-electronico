@@ -81,6 +81,7 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 		return ""
 	}
 	history, _ := histRaw["history"].([]interface{})
+	var cierre, transfer, update string
 	for i := len(history) - 1; i >= 0; i-- {
 		entry, _ := history[i].(map[string]interface{})
 		metadata, _ := entry["metadata"].(map[string]interface{})
@@ -88,14 +89,29 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 			continue
 		}
 		if tipo, ok := metadata["tipo_cierre"].(string); ok {
-			if estado, found := actionMap[tipo]; found {
-				return estado
+			if _, found := actionMap[tipo]; found && cierre == "" {
+				cierre = actionMap[tipo]
 			}
 		}
 		action, _ := metadata["action"].(string)
-		if estado, found := actionMap[action]; found {
-			return estado
+		if action == "TRANSFER" && transfer == "" {
+			transfer = "ENDOSADO"
 		}
+		if action == "ENDOSO" && update == "" {
+			update = "ENDOSADO"
+		}
+		if action == "BURN" && cierre == "" {
+			cierre = "PAGADO"
+		}
+	}
+	if cierre != "" {
+		return cierre
+	}
+	if transfer != "" {
+		return transfer
+	}
+	if update != "" {
+		return update
 	}
 	return ""
 }
