@@ -6,10 +6,12 @@ import (
 	"pagare/internal/templates"
 )
 
-type PageHandler struct{}
+type PageHandler struct {
+	isDev bool
+}
 
-func NewPageHandler() *PageHandler {
-	return &PageHandler{}
+func NewPageHandler(isDev bool) *PageHandler {
+	return &PageHandler{isDev: isDev}
 }
 
 func (p *PageHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
@@ -19,7 +21,7 @@ func (p *PageHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 func (p *PageHandler) NuevoPagare(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
-	templates.NuevoPagare().Render(r.Context(), w)
+	templates.NuevoPagare(p.isDev).Render(r.Context(), w)
 }
 
 func (p *PageHandler) Historico(w http.ResponseWriter, r *http.Request) {

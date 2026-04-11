@@ -53,6 +53,8 @@ templ Dashboard() {
 						estadoHtml = '<span class="tag" style="background:var(--c-danger);color:white">Anulado</span>';
 					} else if (estado === 'PRESCRITO') {
 						estadoHtml = '<span class="tag" style="background:var(--c-text-light);color:white">Prescrito</span>';
+					} else if (estado === 'ENDOSADO') {
+						estadoHtml = '<span class="tag" style="background:#D4A017;color:white">Endosado</span>';
 					} else if (ven.tipo !== 'a_la_vista' && ven.fecha && new Date(ven.fecha) < new Date()) {
 						estadoHtml = '<span class="tag" style="background:#FF4D4D;color:white">Vencido</span>';
 					} else {

@@ -4,6 +4,7 @@ BINARY=bin/server
 TEMPL=$(HOME)/go/bin/templ
 
 generate:
+	find internal/templates -name '*.templ' -exec touch {} +
 	$(TEMPL) generate
 
 build: generate

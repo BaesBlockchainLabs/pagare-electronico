@@ -23,7 +23,7 @@ func main() {
 	bcfClient := bcfclient.New(cfg.Blockchain)
 	cryptoSvc := crypto.NewService(bcfClient)
 
-	pageHandler := handler.NewPageHandler()
+	pageHandler := handler.NewPageHandler(cfg.IsDevelopment())
 	identidadHandler := handler.NewIdentidadHandler(bcfClient)
 	consultaHandler := handler.NewConsultaHandler(bcfClient)
 	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc)

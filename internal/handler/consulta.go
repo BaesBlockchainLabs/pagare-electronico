@@ -47,6 +47,7 @@ func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
 	assets, _ := raw["assets"].([]interface{})
 	actionToEstado := map[string]string{
 		"PAGO": "PAGADO", "ANULACION": "ANULADO", "PRESCRIPCION": "PRESCRITO",
+		"ENDOSO": "ENDOSADO",
 	}
 
 	for _, a := range assets {
