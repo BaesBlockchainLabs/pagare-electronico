@@ -82,6 +82,7 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 	}
 	history, _ := histRaw["history"].([]interface{})
 	var cierre, transfer, update string
+	var hasBurn bool
 	for i := len(history) - 1; i >= 0; i-- {
 		entry, _ := history[i].(map[string]interface{})
 		metadata, _ := entry["metadata"].(map[string]interface{})
@@ -89,8 +90,8 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 			continue
 		}
 		if tipo, ok := metadata["tipo_cierre"].(string); ok {
-			if _, found := actionMap[tipo]; found && cierre == "" {
-				cierre = actionMap[tipo]
+			if estado, found := actionMap[tipo]; found && cierre == "" {
+				cierre = estado
 			}
 		}
 		action, _ := metadata["action"].(string)
@@ -100,12 +101,20 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 		if action == "ENDOSO" && update == "" {
 			update = "ENDOSADO"
 		}
-		if action == "BURN" && cierre == "" {
-			cierre = "PAGADO"
+		if action == "BURN" {
+			hasBurn = true
+		}
+		if hasBurn && cierre == "" {
+			if estado, found := actionMap[action]; found {
+				cierre = estado
+			}
 		}
 	}
 	if cierre != "" {
 		return cierre
+	}
+	if hasBurn {
+		return "PAGADO"
 	}
 	if transfer != "" {
 		return transfer
@@ -174,5 +183,35 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
 		return
 	}
-	WriteRaw(w, status, body)
+	if status != 200 {
+		WriteRaw(w, status, body)
+		return
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		WriteRaw(w, status, body)
+		return
+	}
+
+	asset, _ := raw["asset"].(map[string]interface{})
+	if asset == nil {
+		WriteRaw(w, status, body)
+		return
+	}
+
+	estado := h.resolveEstado(id, map[string]string{
+		"PAGO": "PAGADO", "ANULACION": "ANULADO", "PRESCRIPCION": "PRESCRITO",
+		"ENDOSO": "ENDOSADO",
+	})
+	if estado != "" {
+		data, _ := asset["data"].(map[string]interface{})
+		if data == nil {
+			data = make(map[string]interface{})
+		}
+		data["estado"] = estado
+		asset["data"] = data
+	}
+
+	WriteJSON(w, status, raw)
 }
