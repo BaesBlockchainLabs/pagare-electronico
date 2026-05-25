@@ -4,8 +4,9 @@ info:
   description: >
     API para la gestión de pagarés electrónicos con registro en BlockchainFUE.
     
-    Incluye validaciones según la Ley Cambiaria y del Cheque (LCCH) arts. 94-104,
-    flujo de endoso múltiple, firma digital y cifrado.
+    Incluye validaciones según la Ley Cambiaria y del Cheque (LCCH) arts. 94-97
+    (y normas de la letra aplicables al pagaré por el art. 96), flujo de endoso
+    múltiple, firma digital y cifrado.
   version: 1.0.0
   contact:
     name: Soporte
@@ -259,7 +260,7 @@ paths:
           Metadata: `{ action: "PAGO", fecha_pago, referencia }`
         - **Anulado**: El pagaré se anula por acuerdo de las partes.
           Metadata: `{ action: "ANULACION", motivo }`
-        - **Prescrito**: Ha pasado el plazo de prescripción (3 años, art. 48 LCCH).
+        - **Prescrito**: Ha pasado el plazo de prescripción (3 años, art. 88 LCCH).
         
         Una vez quemado, el pagaré es inalterable e intransferible permanentemente,
         pero su histórico se conserva para consulta.
@@ -374,6 +375,26 @@ paths:
                 $ref: "#/components/schemas/PublicAssetResponse"
         "404":
           description: No encontrado
+
+  /pagares/alertas:
+    get:
+      tags: [Pagarés - Consulta]
+      summary: Alertas de vencimiento y prescripción
+      description: >
+        Endpoint del servicio (servido bajo `/api/pagares/alertas`, no en BlockchainFUE).
+        Devuelve el índice de pagarés que han sobrepasado un plazo legal, calculado por
+        el chequeo periódico interno (solo lectura, no muta la blockchain):
+        - VENCIDO: superada la fecha fija de vencimiento.
+        - CADUCADO_VISTA: pagaré a la vista no presentado en 1 año desde la emisión (art. 39).
+        - PRESCRITO: 3 años desde la emisión (art. 88).
+      operationId: alertasPagares
+      responses:
+        "200":
+          description: Índice de alertas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertasResponse"
 
   /did/sign:
     post:
@@ -536,6 +557,12 @@ components:
           items:
             type: string
           description: "Cláusulas adicionales del pagaré."
+        no_a_la_orden:
+          type: boolean
+          description: >
+            Cláusula "no a la orden" puesta por el librador en la emisión (art. 14 LCCH).
+            Priva al pagaré de su condición de título endosable: solo podrá transmitirse
+            por cesión ordinaria, no por endoso.
 
     Vencimiento:
       type: object
@@ -606,7 +633,8 @@ components:
 
     Aval:
       type: object
-      description: "Aval del pagaré. Arts. 101-102 LCCH."
+      description: "Aval del pagaré. Arts. 35-37 LCCH (aplicables por el art. 96)."
+      required: [avalista, alcance]
       properties:
         avalista:
           $ref: "#/components/schemas/Persona"
@@ -617,7 +645,51 @@ components:
           description: "Alcance del aval."
         importe_parcial:
           type: number
-          description: "Importe del aval si es parcial."
+          description: "Importe del aval si es parcial. No puede superar el importe del pagaré."
+        avalado:
+          type: string
+          description: >
+            Persona a quien se avala (art. 36 LCCH). A falta de indicación se
+            entiende avalado el firmante del pagaré.
+
+    Alerta:
+      type: object
+      description: "Pagaré que ha sobrepasado un plazo legal de validez."
+      properties:
+        id:
+          type: string
+          description: "ID del asset del pagaré en blockchain."
+        categoria:
+          type: string
+          enum: [VENCIDO, CADUCADO_VISTA, PRESCRITO]
+        mensaje:
+          type: string
+        articulo_lcch:
+          type: string
+        beneficiario:
+          type: string
+        importe:
+          type: string
+        fecha:
+          type: string
+          description: "Fecha relevante (vencimiento o emisión según la categoría)."
+
+    AlertasResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        count:
+          type: integer
+        last_run:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Hora del último chequeo; null si aún no se ha ejecutado."
+        alertas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alerta"
 
     # ============================================================
     # MODELO DE ENDOSO (flujo múltiple)
@@ -626,16 +698,17 @@ components:
       type: object
       description: >
         Registro de un endoso en la cadena de endosos.
-        Arts. 97-100 LCCH.
+        Arts. 14-24 LCCH (aplicables al pagaré por el art. 96).
       required: [tipo, endosante, fecha]
       properties:
         tipo:
           type: string
-          enum: [en_propiedad, en_procuracion, en_blanco]
+          enum: [en_propiedad, en_procuracion, en_blanco, en_garantia]
           description: >
-            - en_propiedad: transfiere titularidad completa (art. 97)
-            - en_procuracion: solo autoriza cobro (art. 100)
-            - en_blanco: sin indicar beneficiario (art. 99)
+            - en_propiedad: transmite todos los derechos del pagaré (art. 17)
+            - en_procuracion: comisión de cobranza, solo autoriza el cobro (art. 21)
+            - en_blanco: sin designar endosatario; al portador equivale (arts. 15-17)
+            - en_garantia: en prenda, "valor en garantía/prenda", no transmite la propiedad (art. 22)
         endosante:
           $ref: "#/components/schemas/Persona"
         endosatario:
@@ -654,11 +727,12 @@ components:
           description: "Firma DID del endosante sobre el endoso."
         clausula:
           type: string
-          enum: [sin_clausula, sin_responsabilidad, no_a_la_orden]
+          enum: [sin_clausula, sin_responsabilidad, no_a_la_orden, sin_gastos]
           description: >
             - sin_clausula: endoso normal
-            - sin_responsabilidad: "sin mi responsabilidad" (art. 100)
-            - no_a_la_orden: "no a la orden" - no permite más endosos
+            - sin_responsabilidad: "sin mi responsabilidad" / "sin garantía", el endosante se exonera de garantizar el pago (art. 18)
+            - no_a_la_orden: prohibición de nuevo endoso por el endosante (art. 18)
+            - sin_gastos: dispensa de protesto, "sin gastos" / "sin protesto" (art. 56)
 
     CadenaEndosos:
       type: object
@@ -811,7 +885,8 @@ components:
           default: "ENDOSO"
         tipo_endoso:
           type: string
-          enum: [en_propiedad, en_procuracion, en_blanco]
+          enum: [en_propiedad, en_procuracion, en_blanco, en_garantia]
+          description: "art. 17 / 21 / 15 / 22 LCCH respectivamente."
         endosatario:
           $ref: "#/components/schemas/Persona"
         firma_digital_endoso:
@@ -819,7 +894,8 @@ components:
           description: "Firma DID del endosante sobre el endoso."
         clausula:
           type: string
-          enum: [sin_clausula, sin_responsabilidad, no_a_la_orden]
+          enum: [sin_clausula, sin_responsabilidad, no_a_la_orden, sin_gastos]
+          description: "sin_responsabilidad/no_a_la_orden = art. 18; sin_gastos = art. 56."
         motivo:
           type: string
 
