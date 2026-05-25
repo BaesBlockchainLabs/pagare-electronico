@@ -220,7 +220,7 @@ paths:
       description: >
         Transfiere el pagaré a un nuevo beneficiario (endoso) o actualiza sus metadatos.
         
-        **Endoso múltiple (LCCH arts. 97-100):**
+        **Endoso múltiple (LCCH arts. 14-24, aplicables por el art. 96):**
         - Cada endoso se registra en metadata como una operación tipo `ENDOSO`
         - Se mantiene la cadena completa de endosantes en el histórico
         - Tipos de endoso:
@@ -500,10 +500,10 @@ components:
       type: object
       title: Pagaré Electrónico
       description: >
-        Esquema completo de pagaré electrónico conforme a la LCCH (arts. 94-104).
+        Esquema completo de pagaré electrónico conforme a la LCCH (arts. 94-97,
+        y normas de la letra aplicables por el art. 96).
         Los campos marcados como required son obligatorios por ley.
       required:
-        - id_pagare
         - denominacion
         - promesa_pago
         - vencimiento
@@ -517,7 +517,7 @@ components:
         id_pagare:
           type: string
           format: uri
-          description: "Identificador único del pagaré (URI o UUID). Art. 94 LCCH."
+          description: "Identificador único del pagaré (URI o UUID). Lo asigna el servidor si se omite en la emisión."
         denominacion:
           type: string
           enum: ["PAGARÉ"]
@@ -692,64 +692,6 @@ components:
             $ref: "#/components/schemas/Alerta"
 
     # ============================================================
-    # MODELO DE ENDOSO (flujo múltiple)
-    # ============================================================
-    Endoso:
-      type: object
-      description: >
-        Registro de un endoso en la cadena de endosos.
-        Arts. 14-24 LCCH (aplicables al pagaré por el art. 96).
-      required: [tipo, endosante, fecha]
-      properties:
-        tipo:
-          type: string
-          enum: [en_propiedad, en_procuracion, en_blanco, en_garantia]
-          description: >
-            - en_propiedad: transmite todos los derechos del pagaré (art. 17)
-            - en_procuracion: comisión de cobranza, solo autoriza el cobro (art. 21)
-            - en_blanco: sin designar endosatario; al portador equivale (arts. 15-17)
-            - en_garantia: en prenda, "valor en garantía/prenda", no transmite la propiedad (art. 22)
-        endosante:
-          $ref: "#/components/schemas/Persona"
-        endosatario:
-          $ref: "#/components/schemas/Persona"
-        fecha:
-          type: string
-          format: date-time
-        identidad_endosante:
-          type: string
-          description: "Clave pública blockchain del endosante."
-        identidad_endosatario:
-          type: string
-          description: "Clave pública blockchain del endosatario."
-        firma_digital:
-          type: string
-          description: "Firma DID del endosante sobre el endoso."
-        clausula:
-          type: string
-          enum: [sin_clausula, sin_responsabilidad, no_a_la_orden, sin_gastos]
-          description: >
-            - sin_clausula: endoso normal
-            - sin_responsabilidad: "sin mi responsabilidad" / "sin garantía", el endosante se exonera de garantizar el pago (art. 18)
-            - no_a_la_orden: prohibición de nuevo endoso por el endosante (art. 18)
-            - sin_gastos: dispensa de protesto, "sin gastos" / "sin protesto" (art. 56)
-
-    CadenaEndosos:
-      type: object
-      description: "Cadena completa de endosos de un pagaré."
-      properties:
-        pagare_id:
-          type: string
-        endosos:
-          type: array
-          items:
-            $ref: "#/components/schemas/Endoso"
-        total_endosos:
-          type: integer
-        titular_actual:
-          $ref: "#/components/schemas/Persona"
-
-    # ============================================================
     # IDENTIDADES BLOCKCHAIN
     # ============================================================
     IdentidadBlockchain:
@@ -796,52 +738,15 @@ components:
           required: [data]
           properties:
             data:
-              type: object
-              required:
-                - type
-                - denominacion
-                - promesa_pago
-                - importe
-                - moneda
-                - vencimiento
-                - localidad_pago
-                - beneficiario
-                - localidad_emision
-                - firmante
-              properties:
-                type:
-                  type: string
-                  default: "pagare_electronico"
-                denominacion:
-                  type: string
-                  enum: ["PAGARÉ"]
-                promesa_pago:
-                  type: boolean
-                importe:
-                  type: number
-                  minimum: 0.01
-                moneda:
-                  type: string
-                  default: "EUR"
-                vencimiento:
-                  $ref: "#/components/schemas/Vencimiento"
-                localidad_pago:
-                  type: string
-                beneficiario:
-                  $ref: "#/components/schemas/Persona"
-                localidad_emision:
-                  type: string
-                fecha_emision:
-                  type: string
-                  format: date
-                firmante:
-                  $ref: "#/components/schemas/Firmante"
-                aval:
-                  $ref: "#/components/schemas/Aval"
-                clausulas:
-                  type: array
-                  items:
-                    type: string
+              allOf:
+                - $ref: "#/components/schemas/PagareElectronico"
+                - type: object
+                  required: [type]
+                  properties:
+                    type:
+                      type: string
+                      default: "pagare_electronico"
+                      description: "Tipo de asset en BlockchainFUE."
             metadata:
               $ref: "#/components/schemas/MetadataEmision"
         from:
@@ -886,7 +791,11 @@ components:
         tipo_endoso:
           type: string
           enum: [en_propiedad, en_procuracion, en_blanco, en_garantia]
-          description: "art. 17 / 21 / 15 / 22 LCCH respectivamente."
+          description: >
+            - en_propiedad: transmite todos los derechos del pagaré (art. 17)
+            - en_procuracion: comisión de cobranza, solo autoriza el cobro (art. 21)
+            - en_blanco: sin designar endosatario; al portador equivale (arts. 15-17)
+            - en_garantia: en prenda, "valor en garantía/prenda", no transmite la propiedad (art. 22)
         endosatario:
           $ref: "#/components/schemas/Persona"
         firma_digital_endoso:
@@ -895,7 +804,11 @@ components:
         clausula:
           type: string
           enum: [sin_clausula, sin_responsabilidad, no_a_la_orden, sin_gastos]
-          description: "sin_responsabilidad/no_a_la_orden = art. 18; sin_gastos = art. 56."
+          description: >
+            - sin_clausula: endoso normal
+            - sin_responsabilidad: "sin mi responsabilidad" / "sin garantía" (art. 18)
+            - no_a_la_orden: prohibición de nuevo endoso por el endosante (art. 18)
+            - sin_gastos: dispensa de protesto, "sin gastos" / "sin protesto" (art. 56)
         motivo:
           type: string
 
