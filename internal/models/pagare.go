@@ -14,6 +14,10 @@ type PagareElectronico struct {
 	Firmante         Firmante    `json:"firmante" validate:"required"`
 	Aval             *Aval       `json:"aval,omitempty"`
 	Clausulas        []string    `json:"clausulas,omitempty"`
+	// NoALaOrden: cláusula "no a la orden" puesta por el librador en la emisión
+	// (art. 14 LCCH). Priva al pagaré de su condición de título endosable; solo
+	// podrá transmitirse por cesión ordinaria, no por endoso.
+	NoALaOrden bool `json:"no_a_la_orden,omitempty"`
 }
 
 type Vencimiento struct {

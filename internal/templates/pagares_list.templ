@@ -1,42 +1,42 @@
 package templates
 
+// PagaresList renders a server-rendered grid of pagaré document cards.
+// Currently unused (the dashboard fetches client-side) but kept in sync with
+// the design system so it can be wired to SSR without rework.
 templ PagaresList(assets []PagareListItem) {
 	if len(assets) == 0 {
-		<div class="text-center py-16">
-			<p class="text-gray-400 text-lg">No hay pagarés emitidos</p>
-			<a href="/pagares/nuevo" class="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">Emitir primer pagaré</a>
+		<div class="card empty">
+			<div class="icon">
+				@Icon("file-plus")
+			</div>
+			<p>Todavía no has emitido ningún pagaré.</p>
+			<a href="/pagares/nuevo" class="btn btn-primary">Emitir el primero</a>
 		</div>
 	} else {
-		<div class="overflow-x-auto">
-			<table class="w-full bg-white rounded-lg shadow overflow-hidden">
-				<thead class="bg-gray-100">
-					<tr>
-						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">ID</th>
-						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Beneficiario</th>
-						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Importe</th>
-						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Vencimiento</th>
-						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Fecha</th>
-						<th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">Acciones</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, a := range assets {
-						<tr class="border-t hover:bg-gray-50">
-							<td class="px-4 py-3">
-								<code class="text-xs bg-gray-100 px-2 py-1 rounded" title={ a.ID }>{ a.IDShort }</code>
-							</td>
-							<td class="px-4 py-3 text-sm">{ a.Beneficiario }</td>
-							<td class="px-4 py-3 text-sm font-semibold">{ a.Importe }</td>
-							<td class="px-4 py-3 text-sm">{ a.Vencimiento }</td>
-							<td class="px-4 py-3 text-sm text-gray-500">{ a.Fecha }</td>
-							<td class="px-4 py-3">
-								<a href={ "/pagares/historico?id=" + a.ID } class="text-blue-600 hover:text-blue-800 text-sm mr-2">Histórico</a>
-								<a href={ "/pagares/verificar?network=test&id=" + a.ID } class="text-green-600 hover:text-green-800 text-sm">Verificar</a>
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
+		<div class="pagares-grid">
+			for _, a := range assets {
+				<article class="pagare-card">
+					@SealIcon("pc-watermark")
+					<div class="pc-head">
+						<div>
+							<div class="pc-label">Pagaré</div>
+							<div class="pc-id" title={ a.ID }>{ a.IDShort }</div>
+						</div>
+						@StatusBadge(a.Estado)
+					</div>
+					<div class="pc-amount">{ a.Importe }</div>
+					<div class="pc-rule"></div>
+					<div class="pc-meta">
+						<div class="row"><span>Beneficiario</span><span>{ a.Beneficiario }</span></div>
+						<div class="row"><span>Vencimiento</span><span>{ a.Vencimiento }</span></div>
+						<div class="row"><span>Emitido</span><span>{ a.Fecha }</span></div>
+					</div>
+					<div class="pc-actions">
+						<a href={ templ.SafeURL("/pagares/historico?id=" + a.ID) } class="btn btn-ghost btn-sm">Histórico</a>
+						<a href={ templ.SafeURL("/pagares/verificar?network=test&id=" + a.ID) } class="btn btn-gold btn-sm">Verificar</a>
+					</div>
+				</article>
+			}
 		</div>
 	}
 }
@@ -48,4 +48,5 @@ type PagareListItem struct {
 	Importe      string
 	Vencimiento  string
 	Fecha        string
+	Estado       string
 }

@@ -204,12 +204,23 @@ func (h *ConsultaHandler) GetHistorico(w http.ResponseWriter, r *http.Request) {
 		}
 		if tipo, ok := metadata["tipo_endoso"].(string); ok {
 			endosoLabels := map[string]string{
-				"en_propiedad":   "En propiedad (art. 97)",
-				"en_procuracion": "En procuración (art. 100)",
-				"en_blanco":      "En blanco (art. 99)",
+				"en_propiedad":   "En propiedad (art. 17)",
+				"en_procuracion": "En procuración (art. 21)",
+				"en_blanco":      "En blanco (art. 15)",
+				"en_garantia":    "En garantía / prenda (art. 22)",
 			}
 			if label, found := endosoLabels[tipo]; found {
 				metadata["tipo_endoso_label"] = label
+			}
+		}
+		if clausula, ok := metadata["clausula"].(string); ok {
+			clausulaLabels := map[string]string{
+				"sin_responsabilidad": "Sin mi responsabilidad (art. 18)",
+				"no_a_la_orden":       "Prohibición de nuevo endoso (art. 18)",
+				"sin_gastos":          "Sin gastos / sin protesto (art. 56)",
+			}
+			if label, found := clausulaLabels[clausula]; found {
+				metadata["clausula_label"] = label
 			}
 		}
 		if ts, ok := metadata["updated_at"].(float64); ok {

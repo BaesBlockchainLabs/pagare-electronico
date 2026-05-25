@@ -2,17 +2,26 @@ package templates
 
 templ Historico(id string) {
 	@Base("Histórico") {
-		<h1 class="page-title">Histórico de Pagaré</h1>
-		<p class="page-subtitle">Consulta el historial completo de eventos de un pagaré en blockchain.</p>
+		@PageHead("Cadena de custodia", "Histórico del pagaré", "Consulta el historial completo de eventos de un pagaré registrado en blockchain.")
 		<div class="card">
-			<label class="form-label">ID del Pagaré (asset)</label>
+			<label class="form-label">ID del pagaré (asset)</label>
 			<div class="flex-between">
-				<input type="text" id="pagare-id" value={ id } placeholder="ID del asset en blockchain" style="flex:1;margin-right:12px"/>
-				<button class="btn btn-primary btn-sm" onclick="loadHistorico()">Buscar</button>
+				<input type="text" id="pagare-id" value={ id } placeholder="ID del asset en blockchain" style="flex:1"/>
+				<button class="btn btn-primary btn-sm" onclick="loadHistorico()">
+					@Icon("search")
+					Buscar
+				</button>
 			</div>
 			<div id="historico-result" class="mt-6"></div>
 		</div>
 		<script>
+		var DOT_ICONS = {
+			create: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M9 15h6"></path><path d="M12 18v-6"></path></svg>',
+			endoso: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>',
+			pago: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>',
+			default: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>'
+		};
+
 		var urlId = new URLSearchParams(window.location.search).get('id') || document.getElementById('pagare-id').value;
 		if (urlId) {
 			document.getElementById('pagare-id').value = urlId;
@@ -21,7 +30,7 @@ templ Historico(id string) {
 		function loadHistorico() {
 			var id = document.getElementById('pagare-id').value.trim();
 			if (!id) return;
-			document.getElementById('historico-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Cargando...</p>';
+			document.getElementById('historico-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Cargando…</p>';
 			fetch('/api/pagares/historico?id=' + encodeURIComponent(id))
 				.then(function(r) { return r.json(); })
 				.then(function(data) {
@@ -38,20 +47,21 @@ templ Historico(id string) {
 						else if (action === 'TRANSFER' || action === 'ENDOSO') dotClass = 'endoso';
 						else if (action === 'BURN' || action === 'PAGO') dotClass = 'pago';
 						html += '<div class="timeline-item">';
-						html += '<div class="timeline-dot ' + dotClass + '">' + (i+1) + '</div>';
-						html += '<div style="flex:1">';
-						html += '<div style="font-weight:700;color:var(--c-dark)">' + label + '</div>';
-						if (meta.fecha) html += '<div class="text-muted" style="font-size:0.85rem">' + meta.fecha + '</div>';
-						if (meta.from) html += '<div style="font-size:0.9rem;margin-top:4px"><strong>Origen:</strong> <code>' + meta.from + '</code></div>';
-						if (meta.to) html += '<div style="font-size:0.9rem"><strong>Destino:</strong> <code>' + meta.to + '</code></div>';
-						if (meta.tipo_cierre_label) html += '<div style="font-size:0.9rem;margin-top:4px"><strong>Tipo:</strong> <span class="tag">' + meta.tipo_cierre_label + '</span></div>';
-						if (meta.tipo_endoso_label) html += '<div style="font-size:0.9rem"><strong>Tipo endoso:</strong> <span class="tag">' + meta.tipo_endoso_label + '</span></div>';
-						if (meta.clausula) html += '<div style="font-size:0.9rem"><strong>Cláusula:</strong> ' + meta.clausula + '</div>';
-						if (meta.motivo) html += '<div style="font-size:0.9rem"><strong>Motivo:</strong> ' + meta.motivo + '</div>';
-						if (meta.motivo_cierre) html += '<div style="font-size:0.9rem"><strong>Motivo cierre:</strong> ' + meta.motivo_cierre + '</div>';
-						if (meta.referencia) html += '<div style="font-size:0.9rem"><strong>Referencia:</strong> ' + meta.referencia + '</div>';
-						if (meta.endosante) html += '<div style="font-size:0.9rem"><strong>Endosante:</strong> <code>' + meta.endosante + '</code></div>';
-						if (meta.endosatario) html += '<div style="font-size:0.9rem"><strong>Endosatario:</strong> <code>' + meta.endosatario + '</code></div>';
+						html += '<div class="timeline-dot ' + dotClass + '">' + (DOT_ICONS[dotClass] || DOT_ICONS.default) + '</div>';
+						html += '<div class="timeline-body">';
+						html += '<div class="t-title">' + label + '</div>';
+						if (meta.fecha) html += '<div class="t-date">' + meta.fecha + '</div>';
+						if (meta.from) html += '<div class="t-row"><strong>Origen:</strong> <code>' + meta.from + '</code></div>';
+						if (meta.to) html += '<div class="t-row"><strong>Destino:</strong> <code>' + meta.to + '</code></div>';
+						if (meta.tipo_cierre_label) html += '<div class="t-row"><strong>Tipo:</strong> <span class="tag">' + meta.tipo_cierre_label + '</span></div>';
+						if (meta.tipo_endoso_label) html += '<div class="t-row"><strong>Tipo endoso:</strong> <span class="tag">' + meta.tipo_endoso_label + '</span></div>';
+						if (meta.clausula_label) html += '<div class="t-row"><strong>Cláusula:</strong> <span class="tag">' + meta.clausula_label + '</span></div>';
+						else if (meta.clausula) html += '<div class="t-row"><strong>Cláusula:</strong> ' + meta.clausula + '</div>';
+						if (meta.motivo) html += '<div class="t-row"><strong>Motivo:</strong> ' + meta.motivo + '</div>';
+						if (meta.motivo_cierre) html += '<div class="t-row"><strong>Motivo cierre:</strong> ' + meta.motivo_cierre + '</div>';
+						if (meta.referencia) html += '<div class="t-row"><strong>Referencia:</strong> ' + meta.referencia + '</div>';
+						if (meta.endosante) html += '<div class="t-row"><strong>Endosante:</strong> <code>' + meta.endosante + '</code></div>';
+						if (meta.endosatario) html += '<div class="t-row"><strong>Endosatario:</strong> <code>' + meta.endosatario + '</code></div>';
 						html += '</div></div>';
 					});
 					html += '</div>';

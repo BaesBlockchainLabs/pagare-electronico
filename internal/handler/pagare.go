@@ -253,6 +253,9 @@ func buildAssetData(p *models.PagareElectronico) map[string]interface{} {
 	if len(p.Clausulas) > 0 {
 		data["clausulas"] = p.Clausulas
 	}
+	if p.NoALaOrden {
+		data["no_a_la_orden"] = true
+	}
 	return data
 }
 

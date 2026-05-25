@@ -2,13 +2,12 @@ package templates
 
 templ Verificar(id string, network string) {
 	@Base("Verificar Pagaré") {
-		<h1 class="page-title">Verificación Pública de Pagaré</h1>
-		<p class="page-subtitle">Verifica la existencia y contenido de un pagaré en la blockchain pública.</p>
+		@PageHead("Verificación pública", "Verificar un pagaré", "Comprueba la existencia y el contenido de un pagaré directamente en la blockchain pública.")
 		<div class="card">
-			<label class="form-label">ID del Asset</label>
-			<div class="flex-between mb-4">
-				<input type="text" id="verify-id" value={ id } placeholder="ID del asset" style="flex:1;margin-right:12px"/>
-				<select id="verify-network" style="width:auto;margin-right:12px">
+			<label class="form-label">ID del asset</label>
+			<div class="flex-between">
+				<input type="text" id="verify-id" value={ id } placeholder="ID del asset" style="flex:1"/>
+				<select id="verify-network" style="width:auto">
 					if network == "main" {
 						<option value="test">Test</option>
 						<option value="main" selected>Main</option>
@@ -17,11 +16,26 @@ templ Verificar(id string, network string) {
 						<option value="main">Main</option>
 					}
 				</select>
-				<button class="btn btn-primary btn-sm" onclick="verifyPagare()">Verificar</button>
+				<button class="btn btn-gold btn-sm" onclick="verifyPagare()">
+					@Icon("shield-check")
+					Verificar
+				</button>
 			</div>
-			<div id="verify-result"></div>
+			<div id="verify-result" class="mt-6"></div>
 		</div>
 		<script>
+		function badgeHTML(estado) {
+			var map = {
+				PAGADO:    ['badge-pagado','Pagado'],
+				ANULADO:   ['badge-anulado','Anulado'],
+				PRESCRITO: ['badge-prescrito','Prescrito'],
+				ENDOSADO:  ['badge-endosado','Endosado'],
+				VENCIDO:   ['badge-vencido','Vencido']
+			};
+			var m = map[estado] || ['badge-activo','Activo'];
+			return '<span class="badge ' + m[0] + '"><span class="dot"></span>' + m[1] + '</span>';
+		}
+
 		var urlId = new URLSearchParams(window.location.search).get('id') || document.getElementById('verify-id').value;
 		if (urlId) {
 			document.getElementById('verify-id').value = urlId;
@@ -31,7 +45,7 @@ templ Verificar(id string, network string) {
 			var id = document.getElementById('verify-id').value.trim();
 			var network = document.getElementById('verify-network').value;
 			if (!id) return;
-			document.getElementById('verify-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Verificando...</p>';
+			document.getElementById('verify-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Verificando…</p>';
 			fetch('/api/pagares/public?network=' + network + '&id=' + encodeURIComponent(id))
 				.then(function(r) { return r.json(); })
 				.then(function(data) {
@@ -44,41 +58,40 @@ templ Verificar(id string, network string) {
 					var fir = d.firmante || {};
 					var dp = fir.direccion_postal || {};
 					var estado = d.estado || '';
-					var estadoHtml = '';
-					if (estado === 'PAGADO') {
-						estadoHtml = '<span class="tag" style="background:var(--c-success);color:white">Pagado</span>';
-					} else if (estado === 'ANULADO') {
-						estadoHtml = '<span class="tag" style="background:var(--c-danger);color:white">Anulado</span>';
-					} else if (estado === 'PRESCRITO') {
-						estadoHtml = '<span class="tag" style="background:var(--c-text-light);color:white">Prescrito</span>';
-					} else if (estado === 'ENDOSADO') {
-						estadoHtml = '<span class="tag" style="background:#D4A017;color:white">Endosado</span>';
-					} else if (ven.tipo !== 'a_la_vista' && ven.fecha && new Date(ven.fecha) < new Date()) {
-						estadoHtml = '<span class="tag" style="background:#FF4D4D;color:white">Vencido</span>';
-					} else {
-						estadoHtml = '<span class="tag">Activo</span>';
+					if (!estado && ven.tipo !== 'a_la_vista' && ven.fecha && new Date(ven.fecha) < new Date()) {
+						estado = 'VENCIDO';
 					}
-					var h = '<div class="card" style="margin-top:0">';
-					h += '<div class="flex-between mb-4"><span class="tag" style="background:var(--c-success);color:white">Verificado en Blockchain</span>' + estadoHtml + '</div>';
-					h += '<div class="mb-4"><label class="form-label">ID</label><div class="key-display">' + (a.id||'') + '</div></div>';
-					h += '<div class="form-grid mb-4">';
-					h += '<div><label class="form-label">Denominación</label><div>' + (d.denominacion||'') + '</div></div>';
-					h += '<div><label class="form-label">Importe</label><div style="font-weight:700">' + (d.importe||'') + ' ' + (d.moneda||'EUR') + '</div></div>';
-					h += '<div><label class="form-label">Vencimiento</label><div>' + (ven.tipo==='a_la_vista'?'A la vista':ven.fecha||'') + '</div></div>';
-					h += '<div><label class="form-label">Localidad de Pago</label><div>' + (d.localidad_pago||'') + '</div></div>';
-					h += '</div>';
-					h += '<div class="form-grid mb-4">';
-					h += '<div><label class="form-label">Beneficiario</label><div>' + (ben.nombre||'') + ' ' + (ben.apellido||'') + ' (' + (ben.nif||'') + ')</div></div>';
-					h += '<div><label class="form-label">Localidad Emisión</label><div>' + (d.localidad_emision||'') + '</div></div>';
-					h += '<div><label class="form-label">Fecha Emisión</label><div>' + (d.fecha_emision||'') + '</div></div>';
-					h += '<div><label class="form-label">Firmante</label><div>' + (fir.nombre||'') + ' (' + (fir.nif||'') + ')</div></div>';
+					var impStr = (d.importe != null ? Number(d.importe).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '') + ' ' + (d.moneda || 'EUR');
+					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha || '');
+
+					var h = '<div class="verify-banner">' +
+						'<svg class="seal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"></circle><path d="M9.2 9.3 11.1 11.2 14.8 7.3"></path><path d="M8.4 14.1 7 21 l5-2.6 5 2.6 -1.4-6.9"></path></svg>' +
+						'<div style="flex:1"><div class="vb-title">Verificado en blockchain</div><div class="vb-sub">Registro fehaciente e inalterable · red ' + network + '</div></div>' +
+						badgeHTML(estado) +
+					'</div>';
+
+					h += '<div class="card" style="margin-bottom:0">';
+					if (d.no_a_la_orden) {
+						h += '<div class="alert alert-info" style="margin-top:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>Pagaré <strong>"no a la orden"</strong> (art. 14 LCCH): no endosable, solo cesión ordinaria.</div>';
+					}
+					h += '<div class="field"><label class="form-label">ID del asset</label><div class="key-display">' + (a.id||'') + '</div></div>';
+					h += '<div class="detail-grid">';
+					h += '<div class="detail-item"><div class="dl">Importe</div><div class="dv big">' + impStr + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Vencimiento</div><div class="dv">' + venStr + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Denominación</div><div class="dv">' + (d.denominacion||'') + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Localidad de pago</div><div class="dv">' + (d.localidad_pago||'') + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Beneficiario</div><div class="dv">' + (ben.nombre||'') + ' ' + (ben.apellido||'') + ' (' + (ben.nif||'') + ')</div></div>';
+					h += '<div class="detail-item"><div class="dl">Firmante</div><div class="dv">' + (fir.nombre||'') + ' (' + (fir.nif||'') + ')</div></div>';
+					h += '<div class="detail-item"><div class="dl">Localidad de emisión</div><div class="dv">' + (d.localidad_emision||'') + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Fecha de emisión</div><div class="dv">' + (d.fecha_emision||'') + '</div></div>';
 					h += '</div>';
 					if (dp.direccion) {
-						h += '<div class="mb-4"><label class="form-label">Dirección Firmante</label><div>' + dp.direccion + ', ' + dp.localidad + ' ' + dp.codigo_postal + ' (' + dp.pais + ')</div></div>';
+						h += '<div class="field mt-6"><label class="form-label">Dirección del firmante</label><div class="dv">' + dp.direccion + ', ' + dp.localidad + ' ' + dp.codigo_postal + ' (' + dp.pais + ')</div></div>';
 					}
-					h += '<div class="form-grid">';
-					h += '<div><label class="form-label">Fecha Creación Blockchain</label><div>' + (d.created_at ? new Date(d.created_at).toLocaleString() : '') + '</div></div>';
-					h += '<div><label class="form-label">Propietario Actual</label><div class="key-display">' + (d.propietario_actual || d.from || '') + '</div></div>';
+					h += '<div class="pc-rule"></div>';
+					h += '<div class="detail-grid">';
+					h += '<div class="detail-item"><div class="dl">Creación en blockchain</div><div class="dv">' + (d.created_at ? new Date(d.created_at).toLocaleString('es-ES') : '') + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Propietario actual</div><div class="key-display">' + (d.propietario_actual || d.from || '') + '</div></div>';
 					h += '</div>';
 					h += '</div>';
 					el.innerHTML = h;

@@ -2,67 +2,74 @@ package templates
 
 templ NuevoPagare(isDev bool) {
 	@Base("Emitir Pagaré") {
-		<div class="flex-between mb-4">
-			<div>
-				<h1 class="page-title">Emitir Nuevo Pagaré</h1>
-				<p class="page-subtitle">Formulario de emisión conforme al art. 94 de la LCCH. Los datos se grabarán de forma inalterable en blockchain.</p>
-			</div>
+		<div class="flex-between mb-6">
+			@PageHead("Emisión", "Emitir un nuevo pagaré", "Formulario conforme al art. 94 de la LCCH. Los datos se graban de forma inalterable en blockchain.")
 			if isDev {
-				<button type="button" class="btn btn-outline btn-sm" onclick="rellenarAleatorio()">Rellenar datos aleatorios (DEV)</button>
+				<button type="button" class="btn btn-outline btn-sm" onclick="rellenarAleatorio()">
+					@Icon("sparkles")
+					Datos de prueba
+				</button>
 			}
 		</div>
 
 		<form id="pagare-form" onsubmit="return emitirPagare(event)">
 			<fieldset>
-				<legend>Datos del Pagaré</legend>
+				<legend>Datos del pagaré</legend>
 				<div class="form-grid">
-					<div>
+					<div class="field">
 						<label class="form-label" for="denominacion">Denominación</label>
 						<input type="text" id="denominacion" name="denominacion" value="PAGARÉ" readonly/>
 					</div>
-					<div>
+					<div class="field">
 						<label class="form-label" for="importe">Importe (EUR) *</label>
 						<input type="number" id="importe" name="importe" step="0.01" min="0.01" required/>
 					</div>
-					<div>
-						<label class="form-label" for="vencimiento_tipo">Tipo Vencimiento *</label>
+					<div class="field">
+						<label class="form-label" for="vencimiento_tipo">Tipo de vencimiento *</label>
 						<select id="vencimiento_tipo" name="vencimiento_tipo" required>
 							<option value="fecha_fija">Fecha fija</option>
 							<option value="a_la_vista">A la vista (art. 39 LCCH)</option>
 						</select>
 					</div>
-					<div>
-						<label class="form-label" for="vencimiento_fecha">Fecha Vencimiento</label>
+					<div class="field">
+						<label class="form-label" for="vencimiento_fecha">Fecha de vencimiento</label>
 						<input type="date" id="vencimiento_fecha" name="vencimiento_fecha"/>
 					</div>
-					<div>
-						<label class="form-label" for="localidad_pago">Localidad de Pago *</label>
+					<div class="field">
+						<label class="form-label" for="localidad_pago">Localidad de pago *</label>
 						<input type="text" id="localidad_pago" name="localidad_pago" required/>
 					</div>
-					<div>
-						<label class="form-label" for="localidad_emision">Localidad de Emisión *</label>
+					<div class="field">
+						<label class="form-label" for="localidad_emision">Localidad de emisión *</label>
 						<input type="text" id="localidad_emision" name="localidad_emision" required/>
 					</div>
-					<div>
-						<label class="form-label" for="fecha_emision">Fecha de Emisión</label>
+					<div class="field">
+						<label class="form-label" for="fecha_emision">Fecha de emisión</label>
 						<input type="date" id="fecha_emision" name="fecha_emision"/>
 					</div>
 				</div>
+				<label class="check-row" for="no_a_la_orden">
+					<input type="checkbox" id="no_a_la_orden" name="no_a_la_orden"/>
+					<span>
+						<b>"No a la orden"</b> (art. 14 LCCH)
+						<small>El pagaré no podrá endosarse, solo transmitirse por cesión ordinaria.</small>
+					</span>
+				</label>
 			</fieldset>
 
 			<fieldset>
 				<legend>Beneficiario</legend>
 				<div class="form-grid-3">
-					<div>
+					<div class="field">
 						<label class="form-label" for="beneficiario_nombre">Nombre *</label>
 						<input type="text" id="beneficiario_nombre" name="beneficiario_nombre" required/>
 					</div>
-					<div>
+					<div class="field">
 						<label class="form-label" for="beneficiario_apellido">Apellidos</label>
 						<input type="text" id="beneficiario_apellido" name="beneficiario_apellido"/>
 					</div>
-					<div>
-						<label class="form-label" for="beneficiario_nif">NIF/NIE/CIF *</label>
+					<div class="field">
+						<label class="form-label" for="beneficiario_nif">NIF / NIE / CIF *</label>
 						<input type="text" id="beneficiario_nif" name="beneficiario_nif" required placeholder="12345678Z"/>
 					</div>
 				</div>
@@ -71,33 +78,33 @@ templ NuevoPagare(isDev bool) {
 			<fieldset>
 				<legend>Firmante</legend>
 				<div class="form-grid-3">
-					<div>
+					<div class="field">
 						<label class="form-label" for="firmante_nombre">Nombre *</label>
 						<input type="text" id="firmante_nombre" name="firmante_nombre" required/>
 					</div>
-					<div>
+					<div class="field">
 						<label class="form-label" for="firmante_apellido">Apellidos</label>
 						<input type="text" id="firmante_apellido" name="firmante_apellido"/>
 					</div>
-					<div>
-						<label class="form-label" for="firmante_nif">NIF/NIE/CIF *</label>
+					<div class="field">
+						<label class="form-label" for="firmante_nif">NIF / NIE / CIF *</label>
 						<input type="text" id="firmante_nif" name="firmante_nif" required/>
 					</div>
 				</div>
-				<div class="form-grid mt-4">
-					<div>
+				<div class="form-grid">
+					<div class="field">
 						<label class="form-label" for="firmante_direccion">Dirección *</label>
 						<input type="text" id="firmante_direccion" name="firmante_direccion" required/>
 					</div>
-					<div>
+					<div class="field">
 						<label class="form-label" for="firmante_localidad">Localidad *</label>
 						<input type="text" id="firmante_localidad" name="firmante_localidad" required/>
 					</div>
-					<div>
-						<label class="form-label" for="firmante_cp">Código Postal *</label>
+					<div class="field">
+						<label class="form-label" for="firmante_cp">Código postal *</label>
 						<input type="text" id="firmante_cp" name="firmante_cp" required/>
 					</div>
-					<div>
+					<div class="field">
 						<label class="form-label" for="firmante_pais">País (ISO) *</label>
 						<input type="text" id="firmante_pais" name="firmante_pais" required value="ES" maxlength="2"/>
 					</div>
@@ -107,9 +114,10 @@ templ NuevoPagare(isDev bool) {
 			<div id="form-error" class="alert alert-error hidden"></div>
 			<div id="form-success" class="alert alert-success hidden"></div>
 
-			<div style="text-align: right; margin-top: 24px;">
+			<div style="text-align: right; margin-top: 8px;">
 				<button type="submit" id="submit-btn" class="btn btn-primary">
-					Emitir y Grabar en Blockchain
+					@SealIcon("")
+					Emitir y grabar en blockchain
 				</button>
 			</div>
 		</form>
@@ -176,6 +184,7 @@ templ NuevoPagare(isDev bool) {
 						beneficiario: { nombre: f.beneficiario_nombre.value, apellido: f.beneficiario_apellido.value, nif: f.beneficiario_nif.value },
 						localidad_emision: f.localidad_emision.value,
 						fecha_emision: f.fecha_emision.value,
+						no_a_la_orden: f.no_a_la_orden.checked,
 						firmante: {
 							nombre: f.firmante_nombre.value,
 							apellido: f.firmante_apellido.value,
@@ -192,7 +201,7 @@ templ NuevoPagare(isDev bool) {
 			};
 
 			btn.disabled = true;
-			btn.textContent = "Emitiendo...";
+			btn.textContent = "Emitiendo…";
 
 			fetch('/api/pagares', {
 				method: 'POST',
@@ -202,13 +211,14 @@ templ NuevoPagare(isDev bool) {
 			.then(function(r) { return r.json(); })
 			.then(function(data) {
 				btn.disabled = false;
-				btn.textContent = "Emitir y Grabar en Blockchain";
+				btn.textContent = "Emitir y grabar en blockchain";
 				if (data.ok) {
 					okEl.textContent = "Pagaré emitido correctamente. ID: " + data.id + " (coste: " + data.cost + ")";
 					okEl.classList.remove('hidden');
 					f.reset();
 					f.denominacion.value = "PAGARÉ";
 					f.firmante_pais.value = "ES";
+					window.scrollTo({top: 0, behavior: 'smooth'});
 				} else {
 					errEl.textContent = data.msg || 'Error desconocido';
 					if (data.errors) {
@@ -219,7 +229,7 @@ templ NuevoPagare(isDev bool) {
 			})
 			.catch(function(err) {
 				btn.disabled = false;
-				btn.textContent = "Emitir y Grabar en Blockchain";
+				btn.textContent = "Emitir y grabar en blockchain";
 				errEl.textContent = "Error de conexión: " + err.message;
 				errEl.classList.remove('hidden');
 			});

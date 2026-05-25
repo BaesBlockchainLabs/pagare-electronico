@@ -2,15 +2,18 @@ package templates
 
 templ PagarAnular() {
 	@Base("Pagar / Anular Pagaré") {
-		<h1 class="page-title">Pagar o Anular Pagaré</h1>
-		<p class="page-subtitle">Quema el pagaré en blockchain. El pagaré quedará inalterable pero su histórico se conserva.</p>
-		<div class="card" style="max-width:720px">
+		@PageHead("Cierre", "Pagar o anular un pagaré", "Quema el pagaré en blockchain. Quedará inalterable, pero su histórico se conserva íntegro.")
+		<div class="card" style="max-width:760px">
+			<div class="alert alert-info">
+				@Icon("info")
+				Esta acción es irreversible: cierra el ciclo de vida del pagaré en blockchain.
+			</div>
 			<form id="pago-form" onsubmit="return pagarAnular(event)">
-				<div class="mb-4">
-					<label class="form-label">ID del Pagaré *</label>
+				<div class="field">
+					<label class="form-label">ID del pagaré *</label>
 					<input type="text" id="pag-id" placeholder="ID del asset en blockchain"/>
 				</div>
-				<div class="mb-4">
+				<div class="field">
 					<label class="form-label">Acción *</label>
 					<select id="pag-action">
 						<option value="PAGO">Pago (pagaré liquidado)</option>
@@ -18,12 +21,12 @@ templ PagarAnular() {
 						<option value="PRESCRIPCION">Prescripción (3 años, art. 48 LCCH)</option>
 					</select>
 				</div>
-				<div class="form-grid mb-4">
-					<div>
+				<div class="form-grid">
+					<div class="field">
 						<label class="form-label">Referencia (opcional)</label>
-						<input type="text" id="pag-ref" placeholder="Nº transferencia, recibo, etc."/>
+						<input type="text" id="pag-ref" placeholder="Nº transferencia, recibo…"/>
 					</div>
-					<div>
+					<div class="field">
 						<label class="form-label">Motivo (opcional)</label>
 						<input type="text" id="pag-motivo" placeholder="Motivo de la anulación si aplica"/>
 					</div>
@@ -31,11 +34,11 @@ templ PagarAnular() {
 				<fieldset>
 					<legend>Identidad del propietario (opcional)</legend>
 					<div class="form-grid">
-						<div>
+						<div class="field">
 							<label class="form-label">Clave pública</label>
 							<input type="text" id="pag-from-pub" placeholder="Pub key"/>
 						</div>
-						<div>
+						<div class="field">
 							<label class="form-label">Clave privada</label>
 							<input type="text" id="pag-from-pvt" placeholder="Pvt key"/>
 						</div>
@@ -44,7 +47,10 @@ templ PagarAnular() {
 				<div id="pago-error" class="alert alert-error hidden"></div>
 				<div id="pago-ok" class="alert alert-success hidden"></div>
 				<div class="mt-4">
-					<button type="submit" id="pago-btn" class="btn btn-danger">Ejecutar Acción</button>
+					<button type="submit" id="pago-btn" class="btn btn-danger">
+						@Icon("flame")
+						Ejecutar acción
+					</button>
 				</div>
 			</form>
 		</div>
@@ -75,7 +81,7 @@ templ PagarAnular() {
 			}
 
 			btn.disabled = true;
-			btn.textContent = 'Procesando...';
+			btn.textContent = 'Procesando…';
 
 			fetch('/api/pagares', {
 				method: 'DELETE',
@@ -85,7 +91,7 @@ templ PagarAnular() {
 			.then(function(r) { return r.json(); })
 			.then(function(data) {
 				btn.disabled = false;
-				btn.textContent = 'Ejecutar Acción';
+				btn.textContent = 'Ejecutar acción';
 				if (data.ok) {
 					var action = document.getElementById('pag-action').value;
 					okEl.textContent = 'Acción "' + action + '" completada. El pagaré ha sido quemado en blockchain y su histórico se conserva.';
@@ -97,7 +103,7 @@ templ PagarAnular() {
 			})
 			.catch(function(err) {
 				btn.disabled = false;
-				btn.textContent = 'Ejecutar Acción';
+				btn.textContent = 'Ejecutar acción';
 				errEl.textContent = 'Error: ' + err;
 				errEl.classList.remove('hidden');
 			});

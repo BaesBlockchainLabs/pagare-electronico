@@ -53,10 +53,11 @@ func (lv *LCCHValidator) ValidatePagare(p *models.PagareElectronico) *Validation
 func (lv *LCCHValidator) ValidateEndoso(e *models.Endoso) *ValidationResult {
 	result := &ValidationResult{Valid: true}
 
-	if e.Tipo != "en_propiedad" && e.Tipo != "en_procuracion" && e.Tipo != "en_blanco" {
+	tiposValidos := map[string]bool{"en_propiedad": true, "en_procuracion": true, "en_blanco": true, "en_garantia": true}
+	if !tiposValidos[e.Tipo] {
 		result.Valid = false
 		result.Errors = append(result.Errors, ValidationError{
-			Campo: "Tipo", Mensaje: "Tipo de endoso no válido (en_propiedad, en_procuracion, en_blanco)", ArticuloLCCH: "art. 97-100 LCCH",
+			Campo: "Tipo", Mensaje: "Tipo de endoso no válido (en_propiedad, en_procuracion, en_blanco, en_garantia)", ArticuloLCCH: "arts. 14-24 LCCH",
 		})
 	}
 
@@ -165,13 +166,20 @@ func (lv *LCCHValidator) validateEndosoLCCH(e *models.Endoso, result *Validation
 	if e.Tipo == "en_propiedad" && !hasEndosatario {
 		result.Valid = false
 		result.Errors = append(result.Errors, ValidationError{
-			Campo: "Endosatario", Mensaje: "El endoso en propiedad requiere un endosatario", ArticuloLCCH: "art. 97 LCCH",
+			Campo: "Endosatario", Mensaje: "El endoso en propiedad requiere un endosatario", ArticuloLCCH: "art. 17 LCCH",
 		})
 	}
 
-	if e.Clausula == "no_a_la_orden" && e.Endosatario != nil {
+	if e.Tipo == "en_garantia" && !hasEndosatario {
+		result.Valid = false
 		result.Errors = append(result.Errors, ValidationError{
-			Campo: "Clausula", Mensaje: "Endoso 'no a la orden': no se permiten más endosos a partir de este punto", ArticuloLCCH: "art. 99 LCCH",
+			Campo: "Endosatario", Mensaje: "El endoso en garantía/prenda requiere un endosatario (acreedor pignoraticio)", ArticuloLCCH: "art. 22 LCCH",
+		})
+	}
+
+	if e.Clausula == "no_a_la_orden" {
+		result.Errors = append(result.Errors, ValidationError{
+			Campo: "Clausula", Mensaje: "Prohibición de nuevo endoso: el endosante no responde frente a los endosatarios posteriores", ArticuloLCCH: "art. 18 LCCH",
 		})
 	}
 }
@@ -180,13 +188,13 @@ func (lv *LCCHValidator) validateAval(a *models.Aval, result *ValidationResult) 
 	if a.Alcance == "parcial" && a.ImporteParcial <= 0 {
 		result.Valid = false
 		result.Errors = append(result.Errors, ValidationError{
-			Campo: "ImporteParcial", Mensaje: "El aval parcial requiere un importe positivo", ArticuloLCCH: "art. 101-102 LCCH",
+			Campo: "ImporteParcial", Mensaje: "El aval parcial requiere un importe positivo", ArticuloLCCH: "arts. 35-37 LCCH",
 		})
 	}
 	if a.Avalista.Nombre == "" || a.Avalista.NIF == "" {
 		result.Valid = false
 		result.Errors = append(result.Errors, ValidationError{
-			Campo: "Avalista", Mensaje: "El nombre y NIF del avalista son obligatorios", ArticuloLCCH: "art. 101-102 LCCH",
+			Campo: "Avalista", Mensaje: "El nombre y NIF del avalista son obligatorios", ArticuloLCCH: "arts. 35-37 LCCH",
 		})
 	}
 }
@@ -226,9 +234,9 @@ func (lv *LCCHValidator) mapToArticle(field string) string {
 		"LocalidadEmision": "art. 94 LCCH",
 		"Firmante":         "art. 94 LCCH",
 		"FechaEmision":     "art. 94 LCCH",
-		"Endosatario":      "art. 97 LCCH",
-		"Avalista":         "art. 101-102 LCCH",
-		"Tipo":             "art. 97-100 LCCH",
+		"Endosatario":      "art. 17 LCCH",
+		"Avalista":         "arts. 35-37 LCCH",
+		"Tipo":             "arts. 14-24 LCCH",
 	}
 	if art, ok := articles[field]; ok {
 		return art

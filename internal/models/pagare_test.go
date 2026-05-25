@@ -121,7 +121,7 @@ func TestEndoso_Valid(t *testing.T) {
 
 func TestEndoso_Tipos(t *testing.T) {
 	v := setupValidator(t)
-	tipos := []string{"en_propiedad", "en_procuracion", "en_blanco"}
+	tipos := []string{"en_propiedad", "en_procuracion", "en_blanco", "en_garantia"}
 	for _, tipo := range tipos {
 		e := Endoso{Tipo: tipo, Endosante: Persona{Nombre: "T", NIF: "12345678Z"}, Fecha: "2026-01-01"}
 		err := v.Struct(e)

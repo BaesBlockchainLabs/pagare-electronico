@@ -3,90 +3,94 @@ package templates
 templ Dashboard() {
 	@Base("Pagarés") {
 		<div class="flex-between mb-6">
-			<div>
-				<h1 class="page-title">Pagarés Electrónicos</h1>
-				<p class="page-subtitle">Pagarés registrados en blockchain con validez fehaciente</p>
-			</div>
-			<a href="/pagares/nuevo" class="btn btn-primary">Emitir Pagaré</a>
+			@PageHead("Cartera", "Tus pagarés", "Pagarés electrónicos registrados en blockchain con validez fehaciente.")
+			<a href="/pagares/nuevo" class="btn btn-primary">
+				@Icon("plus")
+				Emitir pagaré
+			</a>
 		</div>
 		<div id="pagares-list">
-			<div class="card text-center">
-				<p class="text-muted">Cargando pagarés...</p>
+			<div class="pagares-grid">
+				<div class="skeleton"></div>
+				<div class="skeleton"></div>
+				<div class="skeleton"></div>
 			</div>
 		</div>
 		<script>
+		function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+		function badgeHTML(estado) {
+			var map = {
+				PAGADO:    ['badge-pagado','Pagado'],
+				ANULADO:   ['badge-anulado','Anulado'],
+				PRESCRITO: ['badge-prescrito','Prescrito'],
+				ENDOSADO:  ['badge-endosado','Endosado'],
+				VENCIDO:   ['badge-vencido','Vencido']
+			};
+			var m = map[estado] || ['badge-activo','Activo'];
+			return '<span class="badge ' + m[0] + '"><span class="dot"></span>' + m[1] + '</span>';
+		}
+
+		var SEAL = '<svg class="pc-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"></circle><path d="M9.2 9.3 11.1 11.2 14.8 7.3"></path><path d="M8.4 14.1 7 21 l5-2.6 5 2.6 -1.4-6.9"></path></svg>';
+
 		fetch('/api/pagares')
 			.then(function(r) { return r.json(); })
 			.then(function(data) {
 				var el = document.getElementById('pagares-list');
 				if (!data.ok || !data.assets || data.assets.length === 0) {
-					el.innerHTML = '<div class="card text-center">' +
-						'<p class="text-muted" style="font-size:1.1rem;margin-bottom:16px">No hay pagarés emitidos</p>' +
-						'<a href="/pagares/nuevo" class="btn btn-primary">Emitir primer pagaré</a>' +
+					el.innerHTML = '<div class="card empty">' +
+						'<div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M9 15h6"></path><path d="M12 18v-6"></path></svg></div>' +
+						'<p>Todavía no has emitido ningún pagaré.</p>' +
+						'<a href="/pagares/nuevo" class="btn btn-primary">Emitir el primero</a>' +
 						'</div>';
 					return;
 				}
-				var html = '<div class="card"><table>' +
-					'<thead><tr>' +
-					'<th>ID</th>' +
-					'<th>Beneficiario</th>' +
-					'<th>Importe</th>' +
-					'<th>Vencimiento</th>' +
-					'<th>Estado</th>' +
-					'<th>Fecha</th>' +
-					'<th>Acciones</th>' +
-					'</tr></thead><tbody>';
+				var cards = '<div class="pagares-grid">';
 				data.assets.forEach(function(a) {
 					var d = a.data || {};
 					var ben = d.beneficiario || {};
 					var ven = d.vencimiento || {};
-					var benStr = (ben.nombre || '') + ' ' + (ben.apellido || '');
-					var impStr = (d.importe || '') + ' ' + (d.moneda || 'EUR');
-					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha || '');
-					var fechaStr = d.created_at ? new Date(d.created_at).toLocaleDateString() : '';
-					var idShort = a.id ? a.id.substring(0, 12) + '...' : '';
+					var benStr = ((ben.nombre || '') + ' ' + (ben.apellido || '')).trim() || '—';
+					var impStr = (d.importe != null ? Number(d.importe).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '') + ' ' + (d.moneda || 'EUR');
+					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha || '—');
+					var fechaStr = d.created_at ? new Date(d.created_at).toLocaleDateString('es-ES') : '—';
+					var idShort = a.id ? a.id.substring(0, 10) + '…' : '';
 					var estado = d.estado || '';
-					var estadoHtml;
-					if (estado === 'PAGADO') {
-						estadoHtml = '<span class="tag" style="background:var(--c-success);color:white">Pagado</span>';
-					} else if (estado === 'ANULADO') {
-						estadoHtml = '<span class="tag" style="background:var(--c-danger);color:white">Anulado</span>';
-					} else if (estado === 'PRESCRITO') {
-						estadoHtml = '<span class="tag" style="background:var(--c-text-light);color:white">Prescrito</span>';
-					} else if (estado === 'ENDOSADO') {
-						estadoHtml = '<span class="tag" style="background:#D4A017;color:white">Endosado</span>';
-					} else if (estado === 'VENCIDO') {
-						estadoHtml = '<span class="tag" style="background:#FF4D4D;color:white">Vencido</span>';
-					} else {
-						estadoHtml = '<span class="tag">Activo</span>';
-					}
 					var sinAcciones = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO' || estado === 'ENDOSADO';
-					var acciones = '';
+
+					var acc = '';
 					if (!sinAcciones) {
 						if (estado !== 'VENCIDO') {
-							acciones += '<a href="/pagares/endosar?id=' + a.id + '" class="btn btn-outline btn-sm">Endosar</a> ';
+							acc += '<a href="/pagares/endosar?id=' + encodeURIComponent(a.id) + '" class="btn btn-outline btn-sm">Endosar</a>';
 						}
-						acciones += '<a href="/pagares/pagar?id=' + a.id + '" class="btn btn-danger btn-sm">Pagar</a> ';
+						acc += '<a href="/pagares/pagar?id=' + encodeURIComponent(a.id) + '" class="btn btn-danger btn-sm">Pagar</a>';
 					}
-					acciones += '<a href="/pagares/historico?id=' + a.id + '" class="btn btn-outline btn-sm">Histórico</a> ' +
-						'<a href="/pagares/verificar?network=test&id=' + a.id + '" class="btn btn-primary btn-sm">Verificar</a>';
-					html += '<tr>' +
-						'<td><code title="' + a.id + '">' + idShort + '</code></td>' +
-						'<td>' + benStr.trim() + '</td>' +
-						'<td><strong>' + impStr + '</strong></td>' +
-						'<td>' + venStr + '</td>' +
-						'<td>' + estadoHtml + '</td>' +
-						'<td class="text-muted">' + fechaStr + '</td>' +
-						'<td style="white-space:nowrap">' + acciones + '</td></tr>';
+					acc += '<a href="/pagares/historico?id=' + encodeURIComponent(a.id) + '" class="btn btn-ghost btn-sm">Histórico</a>';
+					acc += '<a href="/pagares/verificar?network=test&id=' + encodeURIComponent(a.id) + '" class="btn btn-gold btn-sm">Verificar</a>';
+
+					cards += '<article class="pagare-card">' + SEAL +
+						'<div class="pc-head">' +
+							'<div><div class="pc-label">Pagaré</div><div class="pc-id" title="' + esc(a.id) + '">' + esc(idShort) + '</div></div>' +
+							badgeHTML(estado) +
+						'</div>' +
+						'<div class="pc-amount">' + esc(impStr) + '</div>' +
+						'<div class="pc-rule"></div>' +
+						'<div class="pc-meta">' +
+							'<div class="row"><span>Beneficiario</span><span>' + esc(benStr) + '</span></div>' +
+							'<div class="row"><span>Vencimiento</span><span>' + esc(venStr) + '</span></div>' +
+							'<div class="row"><span>Emitido</span><span>' + esc(fechaStr) + '</span></div>' +
+						'</div>' +
+						'<div class="pc-actions">' + acc + '</div>' +
+					'</article>';
 				});
-				html += '</tbody></table></div>';
+				cards += '</div>';
 				if (data.count && data.count.pages && data.count.pages.total > 1) {
-					html += '<p class="text-center text-muted mt-4">Página ' + data.count.pages.current + ' de ' + data.count.pages.total + ' (' + data.count.total + ' pagarés)</p>';
+					cards += '<p class="text-center text-muted mt-6">Página ' + data.count.pages.current + ' de ' + data.count.pages.total + ' · ' + data.count.total + ' pagarés</p>';
 				}
-				el.innerHTML = html;
+				el.innerHTML = cards;
 			})
 			.catch(function(err) {
-				document.getElementById('pagares-list').innerHTML = '<div class="card"><p class="alert alert-error text-center">Error cargando pagarés: ' + err + '</p></div>';
+				document.getElementById('pagares-list').innerHTML = '<div class="alert alert-error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>Error cargando pagarés: ' + esc(err) + '</div>';
 			});
 		</script>
 	}

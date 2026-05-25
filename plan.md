@@ -63,20 +63,29 @@ Campos obligatorios validados automáticamente:
 - Plazo máximo de 1 año desde la emisión
 - El librador puede establecer un plazo mayor o menor
 
-### Art. 97-100 - Endoso
+### Arts. 14-24 - Endoso (aplicables al pagaré por el art. 96)
+
+El endoso del pagaré se rige por las normas de la letra de cambio (arts. 14-24),
+por remisión expresa del art. 96 LCCH.
 
 Tipos de endoso soportados:
 
-- **En propiedad** (por defecto): transfiere la titularidad completa (art. 97)
-- **En procuración**: solo autoriza cobro, no transfiere titularidad (art. 100)
-- **En blanco**: sin indicar beneficiario, el portador legítimo puede cobrar (art. 99)
+- **En propiedad** (por defecto): transmite todos los derechos del pagaré (art. 17)
+- **En procuración** / comisión de cobranza: solo autoriza el cobro, no transfiere titularidad ("valor al cobro", "por poder") (art. 21)
+- **En blanco**: sin designar endosatario; el endoso al portador equivale al endoso en blanco (arts. 15-17)
+- **En garantía / en prenda**: el pagaré se entrega en prenda como garantía ("valor en garantía", "valor en prenda"); no transmite la propiedad (art. 22)
+
+> Nota: el endoso posterior al vencimiento o tras el protesto produce los efectos de una cesión ordinaria (art. 23); no es un tipo elegible sino una consecuencia temporal.
 
 Cláusulas:
 
-- **Sin responsabilidad**: "sin mi responsabilidad" (art. 100)
-- **No a la orden**: no permite más endosos
+- **Sin responsabilidad** / "sin garantía": "sin mi responsabilidad", el endosante se exonera de garantizar el pago (art. 18)
+- **Prohibición de nuevo endoso** ("no a la orden" del endosante): el endosante no responde ante endosatarios posteriores (art. 18)
+- **Sin gastos / sin protesto**: dispensa al tenedor de levantar protesto para ejercer la acción de regreso (art. 56)
 
-### Art. 101-102 - Aval
+La cláusula **"no a la orden" puesta por el librador** (art. 14) se fija en la **emisión** del pagaré (no en el endoso): priva al título de su condición de endosable, de modo que solo puede transmitirse por cesión ordinaria.
+
+### Arts. 35-37 - Aval (aplicables al pagaré por el art. 96)
 
 - Aval total o parcial
 - Datos del avalista (persona/DID)

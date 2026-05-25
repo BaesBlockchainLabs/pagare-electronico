@@ -156,6 +156,38 @@ func TestValidateEndoso_EnBlanco(t *testing.T) {
 	assert.True(t, result.Valid)
 }
 
+func TestValidateEndoso_EnGarantia(t *testing.T) {
+	lv := NewLCCHValidator()
+	// con endosatario (acreedor pignoraticio) es válido — art. 22
+	e := models.Endoso{
+		Tipo:        "en_garantia",
+		Endosante:   models.Persona{Nombre: "Ana", NIF: "12345678Z"},
+		Endosatario: &models.Persona{Nombre: "Banco", NIF: "B12345678"},
+		Fecha:       "2026-05-01",
+	}
+	assert.True(t, lv.ValidateEndoso(&e).Valid)
+
+	// sin endosatario debe fallar
+	sinEndosatario := models.Endoso{
+		Tipo:      "en_garantia",
+		Endosante: models.Persona{Nombre: "Ana", NIF: "12345678Z"},
+		Fecha:     "2026-05-01",
+	}
+	assert.False(t, lv.ValidateEndoso(&sinEndosatario).Valid)
+}
+
+func TestValidateEndoso_ClausulaSinGastos(t *testing.T) {
+	lv := NewLCCHValidator()
+	e := models.Endoso{
+		Tipo:        "en_propiedad",
+		Endosante:   models.Persona{Nombre: "Ana", NIF: "12345678Z"},
+		Endosatario: &models.Persona{Nombre: "Bea", NIF: "87654321X"},
+		Fecha:       "2026-05-01",
+		Clausula:    "sin_gastos",
+	}
+	assert.True(t, lv.ValidateEndoso(&e).Valid, "la cláusula sin_gastos (art. 56) debe ser válida")
+}
+
 func TestIsPrescrito(t *testing.T) {
 	lv := NewLCCHValidator()
 	assert.False(t, lv.IsPrescrito(mustParseDate("2026-01-01")))
