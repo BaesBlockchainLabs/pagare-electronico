@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -15,6 +16,8 @@ type Config struct {
 type ServerConfig struct {
 	Port string
 	Env  string
+	// CronInterval es la periodicidad del chequeo de pagarés vencidos/prescritos.
+	CronInterval time.Duration
 }
 
 type BlockchainConfig struct {
@@ -30,6 +33,11 @@ func Load() (*Config, error) {
 	port := getEnv("PORT", "8080")
 	env := getEnv("APP_ENV", "development")
 
+	cronInterval, err := time.ParseDuration(getEnv("CRON_INTERVAL", "24h"))
+	if err != nil || cronInterval <= 0 {
+		cronInterval = 24 * time.Hour
+	}
+
 	baseURL := getEnv("BCF_BASE_URL", "https://api.blockchainfue.com/api")
 	appID := os.Getenv("BCF_APP_ID")
 	appKey := os.Getenv("BCF_APP_KEY")
@@ -41,8 +49,9 @@ func Load() (*Config, error) {
 
 	return &Config{
 		Server: ServerConfig{
-			Port: port,
-			Env:  env,
+			Port:         port,
+			Env:          env,
+			CronInterval: cronInterval,
 		},
 		Blockchain: BlockchainConfig{
 			BaseURL: baseURL,

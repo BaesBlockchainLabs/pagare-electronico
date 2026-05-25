@@ -9,6 +9,7 @@ templ Dashboard() {
 				Emitir pagaré
 			</a>
 		</div>
+		<div id="alert-banner"></div>
 		<div id="pagares-list">
 			<div class="pagares-grid">
 				<div class="skeleton"></div>
@@ -16,6 +17,21 @@ templ Dashboard() {
 				<div class="skeleton"></div>
 			</div>
 		</div>
+		<script>
+		fetch('/api/pagares/alertas')
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				if (!data.ok || !data.count) return;
+				var counts = {};
+				data.alertas.forEach(function(a) { counts[a.categoria] = (counts[a.categoria] || 0) + 1; });
+				var labels = { VENCIDO: 'vencidos', CADUCADO_VISTA: 'caducados (a la vista)', PRESCRITO: 'prescritos' };
+				var parts = Object.keys(counts).map(function(k) { return counts[k] + ' ' + (labels[k] || k); });
+				document.getElementById('alert-banner').innerHTML =
+					'<div class="alert alert-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>' +
+					'<span><strong>' + data.count + ' pagaré(s) requieren atención:</strong> ' + parts.join(', ') + '. Revisa sus fechas de validez.</span></div>';
+			})
+			.catch(function() {});
+		</script>
 		<script>
 		function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 

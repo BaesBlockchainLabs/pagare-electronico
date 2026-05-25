@@ -26,7 +26,7 @@
 | **Endoso** | `PUT /api/asset` (transferir a nuevo beneficiario) | `action: ENDOSO`, nuevo beneficiario, tipo de endoso |
 | **Pago** | `DELETE /api/asset` (quemar = pagado/inutilizado) | `action: PAGO`, fecha y referencia |
 | **Anulación** | `DELETE /api/asset` (quemar por acuerdo) | `action: ANULACION`, motivo |
-| **Prescripción** | `DELETE /api/asset` (quemar tras 3 años, art. 48 LCCH) | `action: PRESCRIPCION` |
+| **Prescripción** | `DELETE /api/asset` (quemar tras 3 años, art. 88 LCCH) | `action: PRESCRIPCION` |
 | **Consulta** | `GET /api/asset` + `GET /api/asset/history` | Cadena completa de custodia |
 
 ## Fase 4 - Seguridad
@@ -90,10 +90,30 @@ La cláusula **"no a la orden" puesta por el librador** (art. 14) se fija en la 
 - Aval total o parcial
 - Datos del avalista (persona/DID)
 
-### Art. 48 - Prescripción
+### Arts. 88-89 - Prescripción (aplicables al pagaré por el art. 96)
 
-- Plazo de prescripción: 3 años
+- Plazo de prescripción de la acción contra el firmante: 3 años desde el vencimiento
 - Estado final `PRESCRIPCION`
+
+---
+
+## Chequeo programado de vencimientos (cron)
+
+Un job en proceso (`internal/scheduler`) revisa periódicamente los pagarés y
+genera un índice de alertas **de solo lectura** (no muta la blockchain):
+
+| Categoría | Regla | Artículo |
+|-----------|-------|----------|
+| `VENCIDO` | Superada la fecha fija de vencimiento | — |
+| `CADUCADO_VISTA` | Pagaré a la vista no presentado en 1 año desde la emisión | art. 39 |
+| `PRESCRITO` | 3 años desde la emisión | art. 88 |
+
+- Se lanza desde `cmd/server/main.go` como goroutine con `time.Ticker`, con
+  apagado limpio vía `context` al recibir SIGINT/SIGTERM.
+- Periodicidad configurable con `CRON_INTERVAL` (por defecto `24h`).
+- Las alertas se consultan en `GET /api/pagares/alertas` y se destacan en el
+  dashboard. Las acciones (pago, anulación, prescripción) quedan en manos de
+  una persona (human-in-the-loop), ya que la quema es irreversible.
 
 ---
 
