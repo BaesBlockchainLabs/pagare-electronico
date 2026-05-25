@@ -11,6 +11,9 @@ info:
   contact:
     name: Soporte
     url: https://api.blockchainfue.com/doc/support
+  license:
+    name: Propietario — BAES Blockchain Labs (uso interno)
+    url: https://github.com/BaesBlockchainLabs/pagare-electronico
 
 servers:
   - url: https://api.blockchainfue.com/api
@@ -50,6 +53,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HelloResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /system/time:
     get:
@@ -63,6 +68,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TimeResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /keypair:
     get:
@@ -86,6 +93,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KeypairResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /keypair/application:
     get:
@@ -99,6 +108,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KeypairResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /key/add/pub:
     put:
@@ -123,6 +134,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SimpleOkResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /did:
     post:
@@ -145,6 +158,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DIDIdentityResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /asset:
     post:
@@ -278,6 +293,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SimpleOkResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /asset/history:
     get:
@@ -313,6 +330,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HistoricoResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /asset/owners:
     get:
@@ -343,6 +362,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OwnersResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /public/{network}/{id}:
     get:
@@ -395,6 +416,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AlertasResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /did/sign:
     post:
@@ -417,6 +440,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SignedMessageResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /did/verify:
     post:
@@ -437,6 +462,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VerifiedMessageResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /did/encrypt:
     post:
@@ -459,6 +486,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EncryptedMessageResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
   /did/decrypt:
     post:
@@ -478,6 +507,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DecryptedMessageResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
 
 components:
   securitySchemes:
@@ -491,6 +522,17 @@ components:
         - `X-App-Key`: Clave de la aplicación
         - `Content-Type`: application/json
         - `Accept`: application/json
+
+  responses:
+    Error:
+      description: >
+        Error de la petición. El cuerpo incluye `{ ok: false, msg, errors? }`.
+        Códigos típicos: 400 (validación/parámetros), 404 (no encontrado),
+        502 (error de BlockchainFUE).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
     # ============================================================
