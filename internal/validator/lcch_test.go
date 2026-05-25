@@ -122,6 +122,31 @@ func TestValidatePagare_AvalValido(t *testing.T) {
 	assert.True(t, result.Valid)
 }
 
+func TestValidatePagare_AvalParcialValido(t *testing.T) {
+	lv := NewLCCHValidator()
+	p := validPagare()
+	p.Importe = 1000
+	p.Aval = &models.Aval{
+		Avalista:       models.Persona{Nombre: "Avalista", NIF: "11111111H"},
+		Alcance:        "parcial",
+		ImporteParcial: 400,
+		Avalado:        "El firmante",
+	}
+	assert.True(t, lv.ValidatePagare(&p).Valid)
+}
+
+func TestValidatePagare_AvalParcialExcedeTotal(t *testing.T) {
+	lv := NewLCCHValidator()
+	p := validPagare()
+	p.Importe = 1000
+	p.Aval = &models.Aval{
+		Avalista:       models.Persona{Nombre: "Avalista", NIF: "11111111H"},
+		Alcance:        "parcial",
+		ImporteParcial: 1500, // supera el importe del pagaré
+	}
+	assert.False(t, lv.ValidatePagare(&p).Valid)
+}
+
 func TestValidateEndoso_Valid(t *testing.T) {
 	lv := NewLCCHValidator()
 	e := models.Endoso{

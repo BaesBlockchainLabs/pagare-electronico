@@ -79,6 +79,7 @@ templ Dashboard() {
 							'<div class="row"><span>Beneficiario</span><span>' + esc(benStr) + '</span></div>' +
 							'<div class="row"><span>Vencimiento</span><span>' + esc(venStr) + '</span></div>' +
 							'<div class="row"><span>Emitido</span><span>' + esc(fechaStr) + '</span></div>' +
+							(d.aval ? '<div class="row"><span>Aval</span><span>' + (d.aval.alcance === 'parcial' ? 'Parcial' : 'Total') + '</span></div>' : '') +
 						'</div>' +
 						'<div class="pc-actions">' + acc + '</div>' +
 					'</article>';

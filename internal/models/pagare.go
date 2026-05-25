@@ -48,8 +48,13 @@ type DireccionPostal struct {
 	Pais         string `json:"pais" validate:"required,len=2"`
 }
 
+// Aval del pagaré (arts. 35-37 LCCH, aplicables por el art. 96). Un tercero
+// (avalista) garantiza el pago, total o parcialmente.
 type Aval struct {
 	Avalista       Persona `json:"avalista" validate:"required"`
 	Alcance        string  `json:"alcance" validate:"required,oneof=total parcial"`
 	ImporteParcial float64 `json:"importe_parcial,omitempty"`
+	// Avalado: persona a quien se avala (art. 36). A falta de indicación se
+	// entiende avalado el firmante del pagaré.
+	Avalado string `json:"avalado,omitempty"`
 }

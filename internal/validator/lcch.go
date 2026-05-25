@@ -124,7 +124,7 @@ func (lv *LCCHValidator) validateLCCHRules(p *models.PagareElectronico, result *
 	}
 
 	if p.Aval != nil {
-		lv.validateAval(p.Aval, result)
+		lv.validateAval(p.Aval, p.Importe, result)
 	}
 }
 
@@ -184,12 +184,19 @@ func (lv *LCCHValidator) validateEndosoLCCH(e *models.Endoso, result *Validation
 	}
 }
 
-func (lv *LCCHValidator) validateAval(a *models.Aval, result *ValidationResult) {
-	if a.Alcance == "parcial" && a.ImporteParcial <= 0 {
-		result.Valid = false
-		result.Errors = append(result.Errors, ValidationError{
-			Campo: "ImporteParcial", Mensaje: "El aval parcial requiere un importe positivo", ArticuloLCCH: "arts. 35-37 LCCH",
-		})
+func (lv *LCCHValidator) validateAval(a *models.Aval, importeTotal float64, result *ValidationResult) {
+	if a.Alcance == "parcial" {
+		if a.ImporteParcial <= 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors, ValidationError{
+				Campo: "ImporteParcial", Mensaje: "El aval parcial requiere un importe positivo", ArticuloLCCH: "arts. 35-37 LCCH",
+			})
+		} else if importeTotal > 0 && a.ImporteParcial > importeTotal {
+			result.Valid = false
+			result.Errors = append(result.Errors, ValidationError{
+				Campo: "ImporteParcial", Mensaje: "El importe del aval parcial no puede superar el importe del pagaré", ArticuloLCCH: "arts. 35-37 LCCH",
+			})
+		}
 	}
 	if a.Avalista.Nombre == "" || a.Avalista.NIF == "" {
 		result.Valid = false

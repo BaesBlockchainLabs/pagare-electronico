@@ -111,6 +111,50 @@ templ NuevoPagare(isDev bool) {
 				</div>
 			</fieldset>
 
+			<fieldset>
+				<legend>Aval (opcional)</legend>
+				<label class="check-row" for="aval_enabled">
+					<input type="checkbox" id="aval_enabled" name="aval_enabled" onchange="toggleAval()"/>
+					<span>
+						<b>Añadir un aval a este pagaré</b> (arts. 35-37 LCCH)
+						<small>Un tercero (avalista) garantiza el pago, total o parcialmente.</small>
+					</span>
+				</label>
+				<div id="aval-fields" class="hidden mt-4">
+					<div class="form-grid-3">
+						<div class="field">
+							<label class="form-label" for="avalista_nombre">Nombre del avalista *</label>
+							<input type="text" id="avalista_nombre" name="avalista_nombre"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="avalista_apellido">Apellidos</label>
+							<input type="text" id="avalista_apellido" name="avalista_apellido"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="avalista_nif">NIF / NIE / CIF *</label>
+							<input type="text" id="avalista_nif" name="avalista_nif"/>
+						</div>
+					</div>
+					<div class="form-grid-3">
+						<div class="field">
+							<label class="form-label" for="aval_alcance">Alcance *</label>
+							<select id="aval_alcance" name="aval_alcance" onchange="toggleAvalParcial()">
+								<option value="total">Total</option>
+								<option value="parcial">Parcial</option>
+							</select>
+						</div>
+						<div class="field hidden" id="aval-parcial-field">
+							<label class="form-label" for="aval_importe">Importe avalado (EUR) *</label>
+							<input type="number" id="aval_importe" name="aval_importe" step="0.01" min="0.01"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="aval_avalado">Avalado (a quién se avala)</label>
+							<input type="text" id="aval_avalado" name="aval_avalado" placeholder="Por defecto, el firmante (art. 36)"/>
+						</div>
+					</div>
+				</div>
+			</fieldset>
+
 			<div id="form-error" class="alert alert-error hidden"></div>
 			<div id="form-success" class="alert alert-success hidden"></div>
 
@@ -127,6 +171,15 @@ templ NuevoPagare(isDev bool) {
 		var apellidos = ['García','Fernández','López','Martínez','Sánchez','Pérez','Gómez','Martín','Jiménez','Ruiz'];
 		var ciudades = ['Madrid','Barcelona','Valencia','Sevilla','Bilbao','Zaragoza','Málaga','Murcia','Palma','A Coruña'];
 		var calles = ['Calle Mayor 10','Av. de la Constitución 25','Paseo del Prado 8','Calle Gran Vía 42','Rambla de Cataluña 15','Calle Alcalá 100'];
+
+		function toggleAval() {
+			var on = document.getElementById('aval_enabled').checked;
+			document.getElementById('aval-fields').classList.toggle('hidden', !on);
+		}
+		function toggleAvalParcial() {
+			var parcial = document.getElementById('aval_alcance').value === 'parcial';
+			document.getElementById('aval-parcial-field').classList.toggle('hidden', !parcial);
+		}
 
 		function pick(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
 		function randNIF() {
@@ -200,6 +253,18 @@ templ NuevoPagare(isDev bool) {
 				}
 			};
 
+			if (document.getElementById('aval_enabled').checked) {
+				var alcance = f.aval_alcance.value;
+				payload.asset.data.aval = {
+					avalista: { nombre: f.avalista_nombre.value, apellido: f.avalista_apellido.value, nif: f.avalista_nif.value },
+					alcance: alcance,
+					avalado: f.aval_avalado.value || undefined
+				};
+				if (alcance === 'parcial') {
+					payload.asset.data.aval.importe_parcial = parseFloat(f.aval_importe.value);
+				}
+			}
+
 			btn.disabled = true;
 			btn.textContent = "Emitiendo…";
 
@@ -218,6 +283,8 @@ templ NuevoPagare(isDev bool) {
 					f.reset();
 					f.denominacion.value = "PAGARÉ";
 					f.firmante_pais.value = "ES";
+					toggleAval();
+					toggleAvalParcial();
 					window.scrollTo({top: 0, behavior: 'smooth'});
 				} else {
 					errEl.textContent = data.msg || 'Error desconocido';

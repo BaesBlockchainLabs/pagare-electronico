@@ -88,6 +88,20 @@ templ Verificar(id string, network string) {
 					if (dp.direccion) {
 						h += '<div class="field mt-6"><label class="form-label">Dirección del firmante</label><div class="dv">' + dp.direccion + ', ' + dp.localidad + ' ' + dp.codigo_postal + ' (' + dp.pais + ')</div></div>';
 					}
+					if (d.aval) {
+						var av = d.aval;
+						var avst = av.avalista || {};
+						var alcanceStr = av.alcance === 'parcial'
+							? ('Parcial · ' + (av.importe_parcial != null ? Number(av.importe_parcial).toLocaleString('es-ES', {minimumFractionDigits: 2}) + ' ' + (d.moneda || 'EUR') : ''))
+							: 'Total';
+						h += '<div class="pc-rule"></div>';
+						h += '<div class="field"><label class="form-label">Aval (arts. 35-37 LCCH)</label></div>';
+						h += '<div class="detail-grid">';
+						h += '<div class="detail-item"><div class="dl">Avalista</div><div class="dv">' + (avst.nombre||'') + ' ' + (avst.apellido||'') + ' (' + (avst.nif||'') + ')</div></div>';
+						h += '<div class="detail-item"><div class="dl">Alcance</div><div class="dv">' + alcanceStr + '</div></div>';
+						h += '<div class="detail-item"><div class="dl">Avalado</div><div class="dv">' + (av.avalado || 'El firmante (art. 36)') + '</div></div>';
+						h += '</div>';
+					}
 					h += '<div class="pc-rule"></div>';
 					h += '<div class="detail-grid">';
 					h += '<div class="detail-item"><div class="dl">Creación en blockchain</div><div class="dv">' + (d.created_at ? new Date(d.created_at).toLocaleString('es-ES') : '') + '</div></div>';
