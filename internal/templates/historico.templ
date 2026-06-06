@@ -1,7 +1,7 @@
 package templates
 
-templ Historico(id string) {
-	@Base("Histórico") {
+templ Historico(id string, user *CurrentUser) {
+	@Base("Histórico", user) {
 		@PageHead("Cadena de custodia", "Histórico del pagaré", "Consulta el historial completo de eventos de un pagaré registrado en blockchain.")
 		<div class="card">
 			<label class="form-label">ID del pagaré (asset)</label>

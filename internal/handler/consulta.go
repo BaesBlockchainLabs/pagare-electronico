@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
 )
 
@@ -17,6 +18,12 @@ func NewConsultaHandler(client *bcfclient.Client) *ConsultaHandler {
 }
 
 func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
 	query := map[string]interface{}{
 		"data": map[string]string{"type": "pagare_electronico"},
 	}
@@ -80,6 +87,9 @@ func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Apply ownership scoping for regular users (admins see everything "tal cual")
+	h.filterForPrincipal(raw, principal)
+
 	WriteJSON(w, status, raw)
 }
 
@@ -138,9 +148,21 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 }
 
 func (h *ConsultaHandler) GetPagare(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "id es obligatorio"})
+		return
+	}
+
+	// Regular users can only access assets they own
+	if !principal.IsAdmin() && !h.assetOwnedBy(id, principal) {
+		WriteJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "msg": "no tienes acceso a este pagaré"})
 		return
 	}
 
@@ -153,9 +175,21 @@ func (h *ConsultaHandler) GetPagare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ConsultaHandler) GetHistorico(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "id es obligatorio"})
+		return
+	}
+
+	// Regular users can only see history of assets they own
+	if !principal.IsAdmin() && !h.assetOwnedBy(id, principal) {
+		WriteJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "msg": "no tienes acceso a este pagaré"})
 		return
 	}
 
@@ -240,9 +274,21 @@ func (h *ConsultaHandler) GetHistorico(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ConsultaHandler) GetPropietario(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "id es obligatorio"})
+		return
+	}
+
+	// Only owners (or admins) can query current owners of an asset
+	if !principal.IsAdmin() && !h.assetOwnedBy(id, principal) {
+		WriteJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "msg": "no tienes acceso a este pagaré"})
 		return
 	}
 
@@ -325,4 +371,93 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 	asset["data"] = data
 
 	WriteJSON(w, status, raw)
+}
+
+// filterForPrincipal removes assets from the response that the non-admin principal
+// does not own (based on current pubkey owners from BCF). Admins see the full set.
+func (h *ConsultaHandler) filterForPrincipal(raw map[string]interface{}, principal *auth.Principal) {
+	if principal == nil || principal.IsAdmin() {
+		return
+	}
+
+	assetsIface, _ := raw["assets"].([]interface{})
+	if assetsIface == nil {
+		return
+	}
+
+	filtered := make([]interface{}, 0, len(assetsIface))
+	for _, a := range assetsIface {
+		asset, ok := a.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id, _ := asset["id"].(string)
+		if id == "" {
+			continue
+		}
+		if h.assetOwnedBy(id, principal) {
+			filtered = append(filtered, a)
+		}
+	}
+
+	raw["assets"] = filtered
+	// Regular users should not see system-wide pagination counts
+	delete(raw, "count")
+}
+
+// assetOwnedBy returns true if any of the current owners (by pubkey) matches
+// one of the principal's claimed pubkeys.
+func (h *ConsultaHandler) assetOwnedBy(id string, p *auth.Principal) bool {
+	if p == nil {
+		return false
+	}
+	body, status, err := h.client.GetAssetOwners(id)
+	if err != nil || status != 200 {
+		return false
+	}
+	var o map[string]interface{}
+	if json.Unmarshal(body, &o) != nil {
+		return false
+	}
+	owners, _ := o["owners"].([]interface{})
+	for _, ow := range owners {
+		if m, ok := ow.(map[string]interface{}); ok {
+			if pub, ok := m["pub"].(string); ok && p.HasPubKey(pub) {
+				return true
+			}
+		}
+	}
+
+	// Also consider the asset as "mine" if my pub appears anywhere in its history
+	// (creation from, endoso to/from, etc.) - this makes "cualquiera que tuviera mi identidad" work better.
+	histBody, histStatus, histErr := h.client.GetAssetHistory(id)
+	if histErr == nil && histStatus == 200 {
+		var hist map[string]interface{}
+		if json.Unmarshal(histBody, &hist) == nil {
+			history, _ := hist["history"].([]interface{})
+			for _, entry := range history {
+				e, _ := entry.(map[string]interface{})
+				if e == nil {
+					continue
+				}
+				meta, _ := e["metadata"].(map[string]interface{})
+				if meta == nil {
+					continue
+				}
+				// Check common places where pub may appear
+				for _, key := range []string{"from", "to", "pub", "identidad_blockchain", "firma_digital_pagare", "firma_digital_beneficiario", "firma_digital_endoso"} {
+					if v, ok := meta[key].(string); ok && p.HasPubKey(v) {
+						return true
+					}
+					if m, ok := meta[key].(map[string]interface{}); ok {
+						if pub, ok := m["pub"].(string); ok && p.HasPubKey(pub) {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }

@@ -1,7 +1,7 @@
 package templates
 
-templ PagarAnular() {
-	@Base("Pagar / Anular Pagaré") {
+templ PagarAnular(user *CurrentUser) {
+	@Base("Pagar / Anular Pagaré", user) {
 		@PageHead("Cierre", "Pagar o anular un pagaré", "Quema el pagaré en blockchain. Quedará inalterable, pero su histórico se conserva íntegro.")
 		<div class="card" style="max-width:760px">
 			<div class="alert alert-info">
@@ -33,6 +33,7 @@ templ PagarAnular() {
 				</div>
 				<fieldset>
 					<legend>Identidad del propietario (opcional)</legend>
+					<div id="pag-active-key" class="mb-4"></div>
 					<div class="form-grid">
 						<div class="field">
 							<label class="form-label">Clave pública</label>
@@ -109,6 +110,9 @@ templ PagarAnular() {
 			});
 			return false;
 		}
+
+		// Prefill the signing identity from the active key (if loaded in /identidades).
+		applyActiveKey('pag-from-pub', 'pag-from-pvt', 'pag-active-key');
 		</script>
 	}
 }

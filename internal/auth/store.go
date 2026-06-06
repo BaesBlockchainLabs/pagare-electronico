@@ -286,8 +286,10 @@ func (s *Store) RemovePubKey(userID, pub string) error {
 // List returns all users (password_hash stripped for safety).
 func (s *Store) List() []*User {
 	rows, err := s.db.Query(`
-		SELECT id, username, role, display_name, nif, nombre, apellido, 
-		       direccion, localidad, codigo_postal, pais, COALESCE(pub_keys, '[]'), created_at 
+		SELECT id, username, role, COALESCE(display_name, ''), COALESCE(nif, ''),
+		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
+		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
+		       COALESCE(pub_keys, '[]'), created_at
 		FROM users
 	`)
 	if err != nil {
@@ -317,8 +319,10 @@ func (s *Store) GetByID(id string) (*User, error) {
 	var u User
 	var pubJSON string
 	err := s.db.QueryRow(`
-		SELECT id, username, role, display_name, nif, nombre, apellido, 
-		       direccion, localidad, codigo_postal, pais, COALESCE(pub_keys, '[]'), created_at 
+		SELECT id, username, role, COALESCE(display_name, ''), COALESCE(nif, ''),
+		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
+		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
+		       COALESCE(pub_keys, '[]'), created_at
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.Role, &u.DisplayName, &u.NIF,
 		&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.CodigoPostal,
@@ -396,6 +400,57 @@ func (s *Store) UpdateUser(u *User) error {
 		u.Pais, string(pubJSON), u.CreatedAt, u.ID)
 
 	return err
+}
+
+// SetPassword hashes and stores a new password for the given user.
+func (s *Store) SetPassword(userID, plainPassword string) error {
+	if plainPassword == "" {
+		return errors.New("password is required")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, string(hash), userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// ProfileInput carries the self-editable personal fields of a user's profile.
+// It deliberately excludes username, role and password so a user can never
+// escalate privileges or change their login identity through this path.
+type ProfileInput struct {
+	DisplayName  string
+	Nombre       string
+	Apellido     string
+	NIF          string
+	Direccion    string
+	Localidad    string
+	CodigoPostal string
+	Pais         string
+}
+
+// UpdateProfile updates only the personal fields of the user's own profile.
+// Username, role, password and pub_keys are preserved untouched.
+func (s *Store) UpdateProfile(userID string, p ProfileInput) error {
+	u, err := s.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	u.DisplayName = p.DisplayName
+	u.Nombre = p.Nombre
+	u.Apellido = p.Apellido
+	u.NIF = p.NIF
+	u.Direccion = p.Direccion
+	u.Localidad = p.Localidad
+	u.CodigoPostal = p.CodigoPostal
+	u.Pais = p.Pais
+	return s.UpdateUser(u)
 }
 
 // DeleteUser removes a user completely (admin action).

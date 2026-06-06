@@ -8,7 +8,7 @@ package templates
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-func Dashboard() templ.Component {
+func Dashboard(user *CurrentUser) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -45,9 +45,16 @@ func Dashboard() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = PageHead("Cartera", "Tus pagarés", "Pagarés electrónicos registrados en blockchain con validez fehaciente.").Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
+			if user != nil && !user.IsAdmin {
+				templ_7745c5c3_Err = PageHead("Mis pagarés", "Mis pagarés", "Pagarés electrónicos de los que eres titular o beneficiario.").Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else {
+				templ_7745c5c3_Err = PageHead("Cartera", "Tus pagarés", "Pagarés electrónicos registrados en blockchain con validez fehaciente.").Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<a href=\"/pagares/nuevo\" class=\"btn btn-primary\">")
 			if templ_7745c5c3_Err != nil {
@@ -63,7 +70,7 @@ func Dashboard() templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Base("Pagarés").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Base("Pagarés", user).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

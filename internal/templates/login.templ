@@ -1,0 +1,64 @@
+package templates
+
+templ Login(user *CurrentUser) {
+	@Base("Iniciar sesión", user) {
+		<div class="card" style="max-width:420px;margin:40px auto;">
+			@PageHead("Acceso", "Iniciar sesión", "Identifícate para acceder a tus pagarés y operaciones.")
+
+			<form id="login-form" onsubmit="return doLogin(event)">
+				<div class="field">
+					<label class="form-label">Usuario</label>
+					<input type="text" id="login-user" placeholder="admin" autocomplete="username" />
+				</div>
+				<div class="field">
+					<label class="form-label">Contraseña</label>
+					<input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" />
+				</div>
+
+				<div id="login-error" class="alert alert-error hidden"></div>
+				<div id="login-ok" class="alert alert-success hidden"></div>
+
+				<div class="mt-4">
+					<button type="submit" class="btn btn-primary" style="width:100%;">
+						Entrar
+					</button>
+				</div>
+			</form>
+		</div>
+
+		<script>
+		function doLogin(e) {
+			e.preventDefault();
+			var err = document.getElementById('login-error');
+			var ok = document.getElementById('login-ok');
+			err.classList.add('hidden');
+			ok.classList.add('hidden');
+
+			var user = document.getElementById('login-user').value.trim();
+			var pass = document.getElementById('login-pass').value;
+
+			fetch('/api/auth/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ username: user, password: pass })
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(data){
+				if (data && data.ok) {
+					ok.textContent = 'Sesión iniciada. Redirigiendo…';
+					ok.classList.remove('hidden');
+					// Small delay so the cookie is definitely set
+					setTimeout(function(){ window.location.href = '/'; }, 250);
+				} else {
+					err.textContent = (data && data.msg) || 'Credenciales incorrectas';
+					err.classList.remove('hidden');
+				}
+			})
+			.catch(function(){
+				err.textContent = 'Error de conexión';
+				err.classList.remove('hidden');
+			});
+		}
+		</script>
+	}
+}

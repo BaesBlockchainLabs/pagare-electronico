@@ -1,6 +1,12 @@
 package templates
 
-templ Base(title string) {
+type CurrentUser struct {
+	Username string
+	Role     string
+	IsAdmin  bool
+}
+
+templ Base(title string, user *CurrentUser) {
 	<!DOCTYPE html>
 	<html lang="es">
 	<head>
@@ -239,7 +245,7 @@ templ Base(title string) {
 			letter-spacing: 0.02em;
 			margin-bottom: 7px;
 		}
-		input[type="text"], input[type="number"], input[type="date"], select, textarea {
+		input[type="text"], input[type="password"], input[type="number"], input[type="date"], select, textarea {
 			width: 100%;
 			padding: 11px 14px;
 			border: 1px solid var(--border-2);
@@ -377,7 +383,13 @@ templ Base(title string) {
 			word-break: break-all;
 			color: var(--ink-2);
 			margin-top: 4px;
+			user-select: all;
+			-webkit-user-select: all;
 		}
+		.key-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 4px; }
+		.key-row .key-display { flex: 1; margin-top: 0; }
+		.key-row .copy-btn { flex: 0 0 auto; }
+		.key-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 		/* ===== Pagaré card (dashboard) ===== */
 		.pagares-grid {
@@ -519,8 +531,19 @@ templ Base(title string) {
 					<a href="/" class="nav-link">Pagarés</a>
 					<a href="/pagares/endosar" class="nav-link">Endosar</a>
 					<a href="/pagares/pagar" class="nav-link">Pagar</a>
-					<a href="/identidades" class="nav-link">Identidades</a>
 					<a href="/pagares/verificar" class="nav-link">Verificar</a>
+					if user != nil {
+						<a href="/identidades" class="nav-link">Identidades</a>
+						if user.IsAdmin {
+							<a href="/admin" class="nav-link">Admin</a>
+						}
+						<a href="/perfil" class="nav-link" style="margin:0 4px 0 4px; font-size:0.82rem; white-space:nowrap; align-self:center;">
+							{ user.Username } <small style="opacity:.65">({ user.Role })</small>
+						</a>
+						<a href="#" onclick="doLogout(); return false;" class="nav-link" style="color:#B3402E; font-weight:600">Cerrar sesión</a>
+					} else {
+						<a href="/login" class="nav-link">Iniciar sesión</a>
+					}
 					<a href="/pagares/nuevo" class="nav-cta">
 						@Icon("plus")
 						Nuevo pagaré
@@ -540,6 +563,84 @@ templ Base(title string) {
 				<a href="https://www.baeslegalcripto.eu/legalcripto/">LegalCripto by BAES</a>
 			</div>
 		</footer>
+
+		<script>
+		// The nav is rendered server-side from the authenticated user, so it is
+		// consistent across every page (including the public verification page).
+		function doLogout() {
+			clearActiveKey();
+			fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+				.then(function() { window.location.href = '/login'; })
+				.catch(function() { window.location.href = '/login'; });
+		}
+
+		// ===== Active signing key (kept in sessionStorage until logout / tab close) =====
+		var ACTIVE_KEY_STORE = 'pagare_active_key';
+		window.getActiveKey = function() {
+			try { return JSON.parse(sessionStorage.getItem(ACTIVE_KEY_STORE) || 'null'); } catch (e) { return null; }
+		};
+		window.setActiveKey = function(k) {
+			if (!k || !k.pub || !k.pvt) return false;
+			sessionStorage.setItem(ACTIVE_KEY_STORE, JSON.stringify({ pub: k.pub, pvt: k.pvt }));
+			return true;
+		};
+		window.clearActiveKey = function() { sessionStorage.removeItem(ACTIVE_KEY_STORE); };
+		// applyActiveKey fills a pub/pvt field pair from the active key and renders a
+		// banner (with a "Quitar" link) into bannerId. Used by the signing forms.
+		window.applyActiveKey = function(pubId, pvtId, bannerId) {
+			var k = getActiveKey();
+			var banner = bannerId ? document.getElementById(bannerId) : null;
+			if (!k || !k.pub) { if (banner) banner.innerHTML = ''; return; }
+			var pub = document.getElementById(pubId), pvt = document.getElementById(pvtId);
+			if (pub) pub.value = k.pub;
+			if (pvt) pvt.value = k.pvt;
+			if (banner) {
+				banner.innerHTML = '<div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">' +
+					'<span>Firmando como <strong>' + k.pub.slice(0, 14) + '…</strong></span>' +
+					'<a href="#" style="font-weight:600;" onclick="clearActiveKey();applyActiveKey(\'' + pubId + '\',\'' + pvtId + '\',\'' + bannerId + '\');return false;">Quitar</a>' +
+					'</div>';
+			}
+		};
+
+		// ===== Shared key helpers (copy / download / render) =====
+		function _fallbackCopy(text) {
+			var ta = document.createElement('textarea');
+			ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+			document.body.appendChild(ta); ta.focus(); ta.select();
+			try { document.execCommand('copy'); } catch (e) {}
+			document.body.removeChild(ta);
+		}
+		// copyText reads the .key-display sibling within the button's .key-row and copies it.
+		window.copyText = function(btn) {
+			var row = btn.closest ? btn.closest('.key-row') : btn.parentElement;
+			var disp = row ? row.querySelector('.key-display') : null;
+			var text = disp ? disp.textContent : '';
+			function done() {
+				var prev = btn.textContent; btn.textContent = 'Copiado'; btn.disabled = true;
+				setTimeout(function() { btn.textContent = prev; btn.disabled = false; }, 1200);
+			}
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(text).then(done).catch(function() { _fallbackCopy(text); done(); });
+			} else { _fallbackCopy(text); done(); }
+		};
+		// downloadJSON triggers a client-side download of obj as a pretty JSON file.
+		window.downloadJSON = function(filename, obj) {
+			var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+			var url = URL.createObjectURL(blob);
+			var a = document.createElement('a');
+			a.href = url; a.download = filename;
+			document.body.appendChild(a); a.click(); document.body.removeChild(a);
+			setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+		};
+		// keyField returns HTML for a labelled key value with a Copy button.
+		window.keyField = function(label, value) {
+			var safe = (value == null ? '' : String(value))
+				.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			return '<div class="field"><label class="form-label">' + label + '</label>' +
+				'<div class="key-row"><div class="key-display">' + safe + '</div>' +
+				'<button type="button" class="btn btn-outline btn-sm copy-btn" onclick="copyText(this)">Copiar</button></div></div>';
+		};
+		</script>
 	</body>
 	</html>
 }

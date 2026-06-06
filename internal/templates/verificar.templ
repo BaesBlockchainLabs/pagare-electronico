@@ -1,7 +1,7 @@
 package templates
 
-templ Verificar(id string, network string) {
-	@Base("Verificar Pagaré") {
+templ Verificar(id string, network string, user *CurrentUser) {
+	@Base("Verificar Pagaré", user) {
 		@PageHead("Verificación pública", "Verificar un pagaré", "Comprueba la existencia y el contenido de un pagaré directamente en la blockchain pública.")
 		<div class="card">
 			<label class="form-label">ID del asset</label>

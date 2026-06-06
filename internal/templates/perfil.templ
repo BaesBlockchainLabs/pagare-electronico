@@ -1,0 +1,158 @@
+package templates
+
+templ Perfil(user *CurrentUser) {
+	@Base("Mi perfil", user) {
+		@PageHead("Cuenta", "Mi perfil", "Edita tus datos personales, cambia tu contraseña o cierra la sesión.")
+		<div class="grid-2">
+			<!-- Datos personales -->
+			<div class="card" style="grid-column:1/-1">
+				<h2 class="card-title">Datos personales</h2>
+				<p class="desc">Estos datos se usan para rellenar automáticamente los formularios de pagarés. Tu nombre de usuario y tu rol no se pueden cambiar aquí.</p>
+
+				<div class="form-grid">
+					<div class="field">
+						<label class="form-label">Usuario</label>
+						<input type="text" id="pf-username" disabled/>
+					</div>
+					<div class="field">
+						<label class="form-label">Rol</label>
+						<input type="text" id="pf-role" disabled/>
+					</div>
+					<div class="field">
+						<label class="form-label">Nombre para mostrar</label>
+						<input type="text" id="pf-display_name" placeholder="Opcional"/>
+					</div>
+					<div class="field">
+						<label class="form-label">NIF / NIE / CIF</label>
+						<input type="text" id="pf-nif" placeholder="12345678Z"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Nombre</label>
+						<input type="text" id="pf-nombre" placeholder="Juan"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Apellidos</label>
+						<input type="text" id="pf-apellido" placeholder="Pérez García"/>
+					</div>
+					<div class="field" style="grid-column:1/-1">
+						<label class="form-label">Dirección</label>
+						<input type="text" id="pf-direccion" placeholder="Calle Mayor 10"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Localidad</label>
+						<input type="text" id="pf-localidad" placeholder="Madrid"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Código Postal</label>
+						<input type="text" id="pf-codigo_postal" placeholder="28001"/>
+					</div>
+					<div class="field">
+						<label class="form-label">País (ISO)</label>
+						<input type="text" id="pf-pais" placeholder="ES"/>
+					</div>
+				</div>
+
+				<div id="pf-result" class="mt-2"></div>
+				<button class="btn btn-primary btn-sm" onclick="saveProfile()" style="margin-top:8px;">Guardar datos</button>
+			</div>
+
+			<!-- Cambiar contraseña -->
+			<div class="card">
+				<h2 class="card-title">Cambiar contraseña</h2>
+				<p class="desc">Introduce tu contraseña actual y la nueva (mínimo 6 caracteres).</p>
+				<div class="field">
+					<label class="form-label">Contraseña actual</label>
+					<input type="password" id="pw-current" placeholder="••••••••"/>
+				</div>
+				<div class="field">
+					<label class="form-label">Nueva contraseña</label>
+					<input type="password" id="pw-new" placeholder="••••••••"/>
+				</div>
+				<div class="field">
+					<label class="form-label">Repite la nueva contraseña</label>
+					<input type="password" id="pw-confirm" placeholder="••••••••"/>
+				</div>
+				<div id="pw-result" class="mt-2"></div>
+				<button class="btn btn-primary btn-sm" onclick="changePassword()" style="margin-top:8px;">Actualizar contraseña</button>
+			</div>
+
+			<!-- Sesión -->
+			<div class="card">
+				<h2 class="card-title">Sesión</h2>
+				<p class="desc">Cierra la sesión en este dispositivo.</p>
+				<button class="btn btn-outline btn-sm" onclick="doLogout()" style="color:#B3402E; border-color:#B3402E;">Cerrar sesión</button>
+			</div>
+		</div>
+
+		<script>
+		function loadProfile() {
+			fetch('/api/perfil')
+				.then(function(r) { return r.json(); })
+				.then(function(d) {
+					if (!d.ok) return;
+					var f = ['username','role','display_name','nif','nombre','apellido','direccion','localidad','codigo_postal','pais'];
+					f.forEach(function(k) {
+						var el = document.getElementById('pf-' + k);
+						if (el) el.value = d[k] || '';
+					});
+				});
+		}
+
+		function saveProfile() {
+			var el = document.getElementById('pf-result');
+			el.innerHTML = '';
+			var payload = {
+				display_name: document.getElementById('pf-display_name').value.trim(),
+				nombre: document.getElementById('pf-nombre').value.trim(),
+				apellido: document.getElementById('pf-apellido').value.trim(),
+				nif: document.getElementById('pf-nif').value.trim(),
+				direccion: document.getElementById('pf-direccion').value.trim(),
+				localidad: document.getElementById('pf-localidad').value.trim(),
+				codigo_postal: document.getElementById('pf-codigo_postal').value.trim(),
+				pais: document.getElementById('pf-pais').value.trim()
+			};
+			fetch('/api/perfil', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify(payload)
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(d) {
+				el.innerHTML = d.ok
+					? '<div class="alert alert-success">' + (d.msg || 'Datos actualizados') + '</div>'
+					: '<div class="alert alert-error">' + (d.msg || 'Error al guardar') + '</div>';
+			})
+			.catch(function(e) { el.innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });
+		}
+
+		function changePassword() {
+			var el = document.getElementById('pw-result');
+			el.innerHTML = '';
+			var cur = document.getElementById('pw-current').value;
+			var nw = document.getElementById('pw-new').value;
+			var cf = document.getElementById('pw-confirm').value;
+			if (!cur || !nw) { el.innerHTML = '<div class="alert alert-error">Rellena la contraseña actual y la nueva.</div>'; return; }
+			if (nw !== cf) { el.innerHTML = '<div class="alert alert-error">La nueva contraseña y su repetición no coinciden.</div>'; return; }
+			fetch('/api/perfil/password', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({ current_password: cur, new_password: nw })
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(d) {
+				if (d.ok) {
+					el.innerHTML = '<div class="alert alert-success">' + (d.msg || 'Contraseña actualizada') + '</div>';
+					document.getElementById('pw-current').value = '';
+					document.getElementById('pw-new').value = '';
+					document.getElementById('pw-confirm').value = '';
+				} else {
+					el.innerHTML = '<div class="alert alert-error">' + (d.msg || 'Error al cambiar la contraseña') + '</div>';
+				}
+			})
+			.catch(function(e) { el.innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });
+		}
+
+		loadProfile();
+		</script>
+	}
+}

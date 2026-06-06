@@ -1,7 +1,7 @@
 package templates
 
-templ NuevoPagare(isDev bool) {
-	@Base("Emitir Pagaré") {
+templ NuevoPagare(isDev bool, user *CurrentUser) {
+	@Base("Emitir Pagaré", user) {
 		<div class="flex-between mb-6">
 			@PageHead("Emisión", "Emitir un nuevo pagaré", "Formulario conforme al art. 94 de la LCCH. Los datos se graban de forma inalterable en blockchain.")
 			if isDev {
@@ -59,6 +59,12 @@ templ NuevoPagare(isDev bool) {
 
 			<fieldset>
 				<legend>Beneficiario</legend>
+				<div class="field">
+					<label class="form-label">Seleccionar de usuarios registrados (sale de la base de datos)</label>
+					<select id="beneficiario-select" onchange="fillFromUser(this.value, 'beneficiario')">
+						<option value="">-- teclear a mano o seleccionar --</option>
+					</select>
+				</div>
 				<div class="form-grid-3">
 					<div class="field">
 						<label class="form-label" for="beneficiario_nombre">Nombre *</label>
@@ -77,6 +83,12 @@ templ NuevoPagare(isDev bool) {
 
 			<fieldset>
 				<legend>Firmante</legend>
+				<div class="field">
+					<label class="form-label">Seleccionar de usuarios registrados (sale de la base de datos)</label>
+					<select id="firmante-select" onchange="fillFromUser(this.value, 'firmante')">
+						<option value="">-- teclear a mano o seleccionar --</option>
+					</select>
+				</div>
 				<div class="form-grid-3">
 					<div class="field">
 						<label class="form-label" for="firmante_nombre">Nombre *</label>
@@ -107,6 +119,28 @@ templ NuevoPagare(isDev bool) {
 					<div class="field">
 						<label class="form-label" for="firmante_pais">País (ISO) *</label>
 						<input type="text" id="firmante_pais" name="firmante_pais" required value="ES" maxlength="2"/>
+					</div>
+				</div>
+			</fieldset>
+
+			<fieldset>
+				<legend>Identidad blockchain del firmante (opcional)</legend>
+				<p style="font-size:0.85rem; color:var(--ink-soft); margin-bottom:8px;">Usa una de tus claves vinculadas para firmar. El pub se vinculará automáticamente a tu cuenta tras emitir.</p>
+				<div id="firmante-active-key" class="mb-4"></div>
+				<div class="field">
+					<label class="form-label">Mis claves vinculadas</label>
+					<select id="firmante-from-pub-select" onchange="if (this.value) document.getElementById('firmante-from-pub').value = this.value;">
+						<option value="">-- cargar mis claves --</option>
+					</select>
+				</div>
+				<div class="form-grid">
+					<div class="field">
+						<label class="form-label">Clave pública</label>
+						<input type="text" id="firmante-from-pub" placeholder="pub de tu keypair"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Clave privada (temporal)</label>
+						<input type="text" id="firmante-from-pvt" placeholder="pvt (solo para esta emisión)"/>
 					</div>
 				</div>
 			</fieldset>
@@ -253,6 +287,13 @@ templ NuevoPagare(isDev bool) {
 				}
 			};
 
+			// Collect optional blockchain identity for signing (from pub/pvt)
+			var fromPub = document.getElementById('firmante-from-pub').value.trim();
+			var fromPvt = document.getElementById('firmante-from-pvt').value.trim();
+			if (fromPub && fromPvt) {
+				payload.from = { pub: fromPub, pvt: fromPvt };
+			}
+
 			if (document.getElementById('aval_enabled').checked) {
 				var alcance = f.aval_alcance.value;
 				payload.asset.data.aval = {
@@ -280,6 +321,16 @@ templ NuevoPagare(isDev bool) {
 				if (data.ok) {
 					okEl.textContent = "Pagaré emitido correctamente. ID: " + data.id + " (coste: " + data.cost + ")";
 					okEl.classList.remove('hidden');
+
+					// Auto-link the from pub we just used (so the asset belongs to the regular user)
+					if (fromPub && fromPvt) {
+						fetch('/api/auth/claim', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ pub: fromPub, pvt: fromPvt })
+						}).catch(function(){});
+					}
+
 					f.reset();
 					f.denominacion.value = "PAGARÉ";
 					f.firmante_pais.value = "ES";
@@ -303,6 +354,98 @@ templ NuevoPagare(isDev bool) {
 
 			return false;
 		}
+
+		// Pre-fill the signing pub with one of the user's linked keys (for regular users)
+		// and populate the dropdown
+		fetch('/api/auth/me')
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				if (data && data.ok && data.pub_keys && data.pub_keys.length > 0) {
+					var fp = document.getElementById('firmante-from-pub');
+					var sel = document.getElementById('firmante-from-pub-select');
+					if (sel) {
+						// clear and add options
+						sel.innerHTML = '<option value="">-- seleccionar mi clave --</option>';
+						data.pub_keys.forEach(function(pk) {
+							var opt = document.createElement('option');
+							opt.value = pk;
+							opt.textContent = pk.substring(0, 20) + '...';
+							sel.appendChild(opt);
+						});
+					}
+					if (fp && !fp.value && data.pub_keys.length > 0) {
+						fp.value = data.pub_keys[0];
+					}
+				}
+			})
+			.catch(function(){});
+
+		// Cargar usuarios de la plataforma para los selects (sale de la "BBDD" de usuarios)
+		function loadUsuariosPlataforma() {
+			fetch('/api/usuarios')
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					if (!data.ok || !data.usuarios) return;
+					var bens = document.getElementById('beneficiario-select');
+					var firs = document.getElementById('firmante-select');
+					if (bens) {
+						bens.innerHTML = '<option value="">-- teclear a mano o seleccionar --</option>';
+						data.usuarios.forEach(function(u) {
+							var opt = document.createElement('option');
+							opt.value = JSON.stringify(u);
+							opt.textContent = (u.nombre || '') + ' ' + (u.apellido || '') + ' (' + (u.nif || '') + ')';
+							bens.appendChild(opt);
+						});
+					}
+					if (firs) {
+						firs.innerHTML = '<option value="">-- teclear a mano o seleccionar --</option>';
+						data.usuarios.forEach(function(u) {
+							var opt = document.createElement('option');
+							opt.value = JSON.stringify(u);
+							opt.textContent = (u.nombre || '') + ' ' + (u.apellido || '') + ' (' + (u.nif || '') + ')';
+							firs.appendChild(opt);
+						});
+					}
+				})
+				.catch(function(){});
+		}
+
+		function fillFromUser(jsonStr, tipo) {
+			if (!jsonStr) return;
+			var u;
+			try { u = JSON.parse(jsonStr); } catch(e) { return; }
+			if (tipo === 'beneficiario') {
+				document.getElementById('beneficiario_nombre').value = u.nombre || '';
+				document.getElementById('beneficiario_apellido').value = u.apellido || '';
+				document.getElementById('beneficiario_nif').value = u.nif || '';
+			} else if (tipo === 'firmante') {
+				document.getElementById('firmante_nombre').value = u.nombre || '';
+				document.getElementById('firmante_apellido').value = u.apellido || '';
+				document.getElementById('firmante_nif').value = u.nif || '';
+				document.getElementById('firmante_direccion').value = u.direccion || '';
+				document.getElementById('firmante_localidad').value = u.localidad || '';
+				document.getElementById('firmante_cp').value = u.codigo_postal || '';
+				document.getElementById('firmante_pais').value = u.pais || 'ES';
+				// Repopulate pub dropdown with this user's keys
+				var pubSel = document.getElementById('firmante-from-pub-select');
+				var pubIn = document.getElementById('firmante-from-pub');
+				if (pubSel && u.pub_keys) {
+					pubSel.innerHTML = '<option value="">-- seleccionar clave --</option>';
+					u.pub_keys.forEach(function(pk) {
+						var o = document.createElement('option');
+						o.value = pk;
+						o.textContent = pk.substring(0,18) + '...';
+						pubSel.appendChild(o);
+					});
+					if (u.pub_keys.length > 0 && pubIn) pubIn.value = u.pub_keys[0];
+				}
+			}
+		}
+
+		// Cargar al inicio
+		loadUsuariosPlataforma();
+		// Prefill the signing identity from the active key (if loaded in /identidades).
+		applyActiveKey('firmante-from-pub', 'firmante-from-pvt', 'firmante-active-key');
 		</script>
 	}
 }

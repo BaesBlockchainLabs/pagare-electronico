@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
 	"pagare/internal/crypto"
 	"pagare/internal/models"
@@ -27,6 +28,12 @@ func NewPagareHandler(client *bcfclient.Client, cryptoSvc *crypto.Service) *Paga
 }
 
 func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
 	var req struct {
 		Asset struct {
 			Data     models.PagareElectronico `json:"data"`
@@ -99,6 +106,12 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
 	var req struct {
 		ID       string                `json:"id"`
 		To       string                `json:"to"`
@@ -161,6 +174,12 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
 	var req struct {
 		ID       string              `json:"id"`
 		Metadata models.MetadataPago `json:"metadata"`

@@ -1,7 +1,7 @@
 package templates
 
-templ Endosar() {
-	@Base("Endosar Pagaré") {
+templ Endosar(user *CurrentUser) {
+	@Base("Endosar Pagaré", user) {
 		@PageHead("Transmisión", "Endosar un pagaré", "Transfiere un pagaré a un nuevo beneficiario. Arts. 14-24 de la LCCH (aplicables al pagaré por el art. 96).")
 		<div class="card" style="max-width:760px">
 			<form id="endoso-form" onsubmit="return endosarPagare(event)">
@@ -35,6 +35,7 @@ templ Endosar() {
 				</div>
 				<fieldset>
 					<legend>Identidad del endosante (opcional)</legend>
+					<div id="end-active-key" class="mb-4"></div>
 					<div class="form-grid">
 						<div class="field">
 							<label class="form-label">Clave pública</label>
@@ -111,6 +112,9 @@ templ Endosar() {
 			});
 			return false;
 		}
+
+		// Prefill the signing identity from the active key (if loaded in /identidades).
+		applyActiveKey('end-from-pub', 'end-from-pvt', 'end-active-key');
 		</script>
 	}
 }

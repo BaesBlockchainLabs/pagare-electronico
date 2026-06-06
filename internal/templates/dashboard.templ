@@ -1,9 +1,13 @@
 package templates
 
-templ Dashboard() {
-	@Base("Pagarés") {
+templ Dashboard(user *CurrentUser) {
+	@Base("Pagarés", user) {
 		<div class="flex-between mb-6">
-			@PageHead("Cartera", "Tus pagarés", "Pagarés electrónicos registrados en blockchain con validez fehaciente.")
+			if user != nil && !user.IsAdmin {
+				@PageHead("Mis pagarés", "Mis pagarés", "Pagarés electrónicos de los que eres titular o beneficiario.")
+			} else {
+				@PageHead("Cartera", "Tus pagarés", "Pagarés electrónicos registrados en blockchain con validez fehaciente.")
+			}
 			<a href="/pagares/nuevo" class="btn btn-primary">
 				@Icon("plus")
 				Emitir pagaré

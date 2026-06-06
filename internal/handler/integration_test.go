@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
 
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,14 @@ func newTestBCFClient(handler http.Handler) (*bcfclient.Client, *httptest.Server
 	server := httptest.NewServer(handler)
 	client := bcfclient.NewTestClient(server.URL, "test", "test", server.Client())
 	return client, server
+}
+
+// withPrincipal attaches an authenticated principal to the request context, as
+// the auth middleware would do for a logged-in user.
+func withPrincipal(req *http.Request) *http.Request {
+	// Admin so ownership filtering in consulta handlers doesn't hide test assets.
+	p := &auth.Principal{UserID: "u-test", Username: "tester", Role: auth.RoleAdmin}
+	return req.WithContext(auth.ContextWithPrincipal(req.Context(), p))
 }
 
 func TestIdentidadHandler_GenerateKeypair(t *testing.T) {
@@ -88,7 +97,7 @@ func TestConsultaHandler_GetHistorico(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/historico?id=abc", nil)
 	w := httptest.NewRecorder()
 
-	h.GetHistorico(w, req)
+	h.GetHistorico(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
@@ -100,7 +109,7 @@ func TestConsultaHandler_GetHistorico_MissingID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/historico", nil)
 	w := httptest.NewRecorder()
 
-	h.GetHistorico(w, req)
+	h.GetHistorico(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
@@ -156,7 +165,7 @@ func TestPagareEmitir_WithBCFServer(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph.Emitir(w, req)
+	ph.Emitir(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -192,7 +201,7 @@ func TestPagareEndosar_WithBCFServer(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/pagares/endoso", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph.Endosar(w, req)
+	ph.Endosar(w, withPrincipal(req))
 
 	if !assert.Equal(t, http.StatusOK, w.Code) {
 		t.Logf("Response: %s", w.Body.String())
@@ -226,7 +235,7 @@ func TestPagarePagarAnular_WithBCFServer(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph.PagarAnular(w, req)
+	ph.PagarAnular(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
@@ -256,7 +265,7 @@ func TestPagareEndoso_EnBlanco_WithBCFServer(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/pagares/endoso", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph.Endosar(w, req)
+	ph.Endosar(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }

@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
 	"pagare/internal/config"
 	"pagare/internal/crypto"
@@ -34,29 +37,256 @@ func main() {
 	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc)
 	checker := scheduler.NewChecker(bcfClient)
 
+	// Auth store (file-backed) + bootstrap first admin if requested via env.
+	authStore, err := auth.NewStore("")
+	if err != nil {
+		log.Fatalf("Error inicializando almacén de usuarios: %v", err)
+	}
+	if err := authStore.BootstrapAdmin(); err != nil {
+		log.Printf("Aviso: no se pudo hacer bootstrap del admin: %v", err)
+	}
+
 	r := chi.NewRouter()
 
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.RealIP)
 
+	// Populates principal from session cookie for all subsequent handlers (never blocks).
+	r.Use(auth.AuthMiddleware(authStore))
+
+	// Public routes (no login required)
+	r.Get("/login", pageHandler.Login)
+	r.Get("/pagares/verificar", pageHandler.Verificar)
+	r.Get("/health", handler.New().Health)
+
+	// Protected pages (require authentication; admin sees everything exactly as before)
 	r.Get("/", pageHandler.Dashboard)
 	r.Get("/pagares", pageHandler.Dashboard)
 	r.Get("/pagares/nuevo", pageHandler.NuevoPagare)
 	r.Get("/pagares/historico", pageHandler.Historico)
-	r.Get("/pagares/verificar", pageHandler.Verificar)
 	r.Get("/pagares/endosar", pageHandler.Endosar)
 	r.Get("/pagares/pagar", pageHandler.PagarAnular)
 	r.Get("/identidades", pageHandler.Identidades)
-	r.Get("/health", handler.New().Health)
+	r.Get("/perfil", pageHandler.Perfil)
+
+	// requireAdmin guards admin-only action endpoints (JSON 403 for non-admins).
+	requireAdmin := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pr := auth.GetPrincipal(r)
+			if pr == nil || !pr.IsAdmin() {
+				handler.WriteJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "msg": "solo admin"})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	// Administration area: page + admin-only action endpoints, all under /admin.
+	r.Route("/admin", func(r chi.Router) {
+		// Admin page (the handler itself redirects non-admins to /).
+		r.Get("/", pageHandler.Admin)
+
+		// Admin-only actions (guarded by requireAdmin → 403 for non-admins).
+		// All endpoints return JSON; the admin UI renders client-side.
+		r.Group(func(r chi.Router) {
+			r.Use(requireAdmin)
+
+			// Application keypair (sensitive: the app's own blockchain credentials).
+			r.Get("/keypair/application", identidadHandler.GetApplicationKeypair)
+
+			// Full user list (all fields) for the admin management table.
+			r.Get("/usuarios", func(w http.ResponseWriter, r *http.Request) {
+				raw := authStore.List()
+				views := make([]map[string]interface{}, 0, len(raw))
+				for _, u := range raw {
+					views = append(views, adminUserView(u))
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "usuarios": views})
+			})
+
+			// Create a platform user (JSON or form).
+			r.Post("/usuarios", func(w http.ResponseWriter, r *http.Request) {
+				in := parseUserInput(r)
+				u := &auth.User{
+					Username:     in.Username,
+					Role:         auth.Role(in.Role),
+					Nombre:       in.Nombre,
+					Apellido:     in.Apellido,
+					NIF:          in.NIF,
+					Direccion:    in.Direccion,
+					Localidad:    in.Localidad,
+					CodigoPostal: in.CodigoPostal,
+					Pais:         in.Pais,
+				}
+				if u.Role != auth.RoleAdmin {
+					u.Role = auth.RoleUser
+				}
+				if err := authStore.CreateUser(u, in.Password); err != nil {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Usuario creado"})
+			})
+
+			// Update a user's personal data and role (password/pubkeys untouched).
+			r.Post("/usuarios/{id}/update", func(w http.ResponseWriter, r *http.Request) {
+				id := chi.URLParam(r, "id")
+				u, err := authStore.GetByID(id)
+				if err != nil {
+					handler.WriteJSON(w, http.StatusNotFound, map[string]interface{}{"ok": false, "msg": "usuario no encontrado"})
+					return
+				}
+				in := parseUserInput(r)
+				newRole := auth.Role(in.Role)
+				if newRole != auth.RoleAdmin {
+					newRole = auth.RoleUser
+				}
+				// Protect against demoting the last admin.
+				if u.Role == auth.RoleAdmin && newRole != auth.RoleAdmin {
+					if last, _ := authStore.IsLastAdmin(id); last {
+						handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "no puedes quitar admin al último administrador"})
+						return
+					}
+				}
+				u.Role = newRole
+				u.Nombre = in.Nombre
+				u.Apellido = in.Apellido
+				u.NIF = in.NIF
+				u.Direccion = in.Direccion
+				u.Localidad = in.Localidad
+				u.CodigoPostal = in.CodigoPostal
+				u.Pais = in.Pais
+				u.DisplayName = in.DisplayName
+				if err := authStore.UpdateUser(u); err != nil {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Usuario actualizado"})
+			})
+
+			// Reset a user's password (admin sets a new one).
+			r.Post("/usuarios/{id}/password", func(w http.ResponseWriter, r *http.Request) {
+				id := chi.URLParam(r, "id")
+				in := parseUserInput(r)
+				if len(in.Password) < 6 {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "la contraseña debe tener al menos 6 caracteres"})
+					return
+				}
+				if err := authStore.SetPassword(id, in.Password); err != nil {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Contraseña restablecida"})
+			})
+
+			// Delete a user, with safeguards.
+			r.Post("/usuarios/{id}/delete", func(w http.ResponseWriter, r *http.Request) {
+				pr := auth.GetPrincipal(r)
+				id := chi.URLParam(r, "id")
+				if id == pr.UserID {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "no puedes borrar tu propia cuenta de administrador"})
+					return
+				}
+				if last, err := authStore.IsLastAdmin(id); err == nil && last {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "no puedes borrar el último administrador"})
+					return
+				}
+				if err := authStore.DeleteUser(id); err != nil {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Usuario eliminado"})
+			})
+
+			// Add a pubkey to a user.
+			r.Post("/usuarios/{id}/pubkeys", func(w http.ResponseWriter, r *http.Request) {
+				id := chi.URLParam(r, "id")
+				var body struct {
+					Pub string `json:"pub"`
+				}
+				json.NewDecoder(r.Body).Decode(&body)
+				if body.Pub == "" {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "pub vacía"})
+					return
+				}
+				if err := authStore.AddPubKey(id, body.Pub); err != nil {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Clave añadida"})
+			})
+
+			// Remove a pubkey from a user.
+			r.Post("/usuarios/{id}/pubkeys/remove", func(w http.ResponseWriter, r *http.Request) {
+				id := chi.URLParam(r, "id")
+				var body struct {
+					Pub string `json:"pub"`
+				}
+				json.NewDecoder(r.Body).Decode(&body)
+				if body.Pub == "" {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "pub vacía"})
+					return
+				}
+				if err := authStore.RemovePubKey(id, body.Pub); err != nil {
+					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Clave eliminada"})
+			})
+		})
+	})
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/system/hello", proxyToBCF(bcfClient, "Hello"))
 		r.Get("/system/time", proxyToBCF(bcfClient, "Time"))
 
+		// Authentication endpoints must be reachable without a prior session.
+		authH := auth.NewHandlers(authStore, cryptoSvc)
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/login", authH.Login)
+			r.Post("/logout", authH.Logout)
+			r.Get("/me", authH.Me)
+			r.Post("/claim/challenge", authH.IssueClaimChallenge)
+			r.Post("/claim", authH.ClaimPub)
+		})
+
+		// Self-service profile (any authenticated user; handlers check the principal).
+		r.Get("/perfil", authH.Profile)
+		r.Post("/perfil", authH.UpdateProfile)
+		r.Post("/perfil/password", authH.ChangePassword)
+
+		// Usuarios de la plataforma (para selects en formularios, evita teclear a mano)
+		// Cualquier usuario logueado puede listar (para rellenar beneficiario/firmante)
+		r.Get("/usuarios", func(w http.ResponseWriter, r *http.Request) {
+			principal := auth.GetPrincipal(r)
+			if principal == nil {
+				handler.WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+				return
+			}
+			users := authStore.List()
+			type UserView struct {
+				ID       string   `json:"id"`
+				Nombre   string   `json:"nombre"`
+				Apellido string   `json:"apellido"`
+				NIF      string   `json:"nif"`
+				PubKeys  []string `json:"pub_keys"`
+			}
+			views := make([]UserView, 0, len(users))
+			for _, u := range users {
+				views = append(views, UserView{
+					ID:       u.ID,
+					Nombre:   u.Nombre,
+					Apellido: u.Apellido,
+					NIF:      u.NIF,
+					PubKeys:  u.PubKeys,
+				})
+			}
+			handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "usuarios": views})
+		})
+
 		r.Route("/identidades", func(r chi.Router) {
 			r.Post("/keypair", identidadHandler.GenerateKeypair)
-			r.Get("/keypair/application", identidadHandler.GetApplicationKeypair)
 			r.Put("/keypair/pub", identidadHandler.AddPubKey)
 			r.Post("/did", identidadHandler.GenerateDID)
 		})
@@ -71,6 +301,11 @@ func main() {
 			r.Get("/propietario", consultaHandler.GetPropietario)
 			r.Get("/public", consultaHandler.GetPublicAsset)
 			r.Get("/alertas", func(w http.ResponseWriter, r *http.Request) {
+				principal := auth.GetPrincipal(r)
+				if principal == nil {
+					handler.WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+					return
+				}
 				alertas, lastRun := checker.Alertas()
 				var last interface{}
 				if !lastRun.IsZero() {
@@ -107,6 +342,67 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Error en apagado: %v", err)
+	}
+}
+
+// adminUserView is the full per-user payload for the admin management table.
+func adminUserView(u *auth.User) map[string]interface{} {
+	pubKeys := u.PubKeys
+	if pubKeys == nil {
+		pubKeys = []string{}
+	}
+	return map[string]interface{}{
+		"id":            u.ID,
+		"username":      u.Username,
+		"role":          string(u.Role),
+		"display_name":  u.DisplayName,
+		"nombre":        u.Nombre,
+		"apellido":      u.Apellido,
+		"nif":           u.NIF,
+		"direccion":     u.Direccion,
+		"localidad":     u.Localidad,
+		"codigo_postal": u.CodigoPostal,
+		"pais":          u.Pais,
+		"pub_keys":      pubKeys,
+		"created_at":    u.CreatedAt.Format(time.RFC3339),
+	}
+}
+
+// userInput carries the editable fields submitted by the admin (JSON or form).
+type userInput struct {
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	Role         string `json:"role"`
+	DisplayName  string `json:"display_name"`
+	Nombre       string `json:"nombre"`
+	Apellido     string `json:"apellido"`
+	NIF          string `json:"nif"`
+	Direccion    string `json:"direccion"`
+	Localidad    string `json:"localidad"`
+	CodigoPostal string `json:"codigo_postal"`
+	Pais         string `json:"pais"`
+}
+
+// parseUserInput reads a userInput from a JSON body or form values.
+func parseUserInput(r *http.Request) userInput {
+	in := userInput{}
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		json.NewDecoder(r.Body).Decode(&in)
+		return in
+	}
+	_ = r.ParseForm()
+	return userInput{
+		Username:     r.FormValue("username"),
+		Password:     r.FormValue("password"),
+		Role:         r.FormValue("role"),
+		DisplayName:  r.FormValue("display_name"),
+		Nombre:       r.FormValue("nombre"),
+		Apellido:     r.FormValue("apellido"),
+		NIF:          r.FormValue("nif"),
+		Direccion:    r.FormValue("direccion"),
+		Localidad:    r.FormValue("localidad"),
+		CodigoPostal: r.FormValue("codigo_postal"),
+		Pais:         r.FormValue("pais"),
 	}
 }
 
