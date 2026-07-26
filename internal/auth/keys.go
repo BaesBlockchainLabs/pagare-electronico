@@ -132,6 +132,26 @@ func (s *Store) GetPrivateKey(userID, pub string) (string, error) {
 	return s.vault.Open(sealed, keyAAD(userID, pub))
 }
 
+// GetUserByPubKey returns the user whose pub_keys list contains pub, or
+// ErrUserNotFound. Used to resolve blockchain participants (endosatario,
+// firmante, endosante) to their registered identity from a public key alone.
+func (s *Store) GetUserByPubKey(pub string) (*User, error) {
+	if pub == "" {
+		return nil, ErrUserNotFound
+	}
+	var id string
+	// pub_keys is a JSON array of strings; match the quoted token.
+	like := "%\"" + pub + "\"%"
+	err := s.db.QueryRow(`SELECT id FROM users WHERE pub_keys LIKE ? LIMIT 1`, like).Scan(&id)
+	if err == sql.ErrNoRows {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.GetByID(id)
+}
+
 // HasPrivateKey reports whether a sealed private key exists for (userID, pub),
 // without decrypting it.
 func (s *Store) HasPrivateKey(userID, pub string) (bool, error) {

@@ -61,6 +61,9 @@ func main() {
 	authStore.SetVault(vault)
 	// Provision blockchain keypairs automatically on user creation.
 	authStore.SetKeyProvisioner(cryptoSvc)
+	// Resolve blockchain participants (firmante/endosatario) to registered users
+	// from their public key, for the PDF.
+	consultaHandler.SetUsers(authStore)
 
 	// Pagaré handler signs on behalf of the logged-in user using their sealed
 	// private key resolved from the store (no private key handled client-side).

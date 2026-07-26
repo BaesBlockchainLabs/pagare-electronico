@@ -16,20 +16,24 @@ import (
 
 // Endoso is one link of the endorsement chain, rendered on the reverse.
 type Endoso struct {
-	Fecha       string
-	Tipo        string // en_propiedad | en_blanco | en_procuracion | en_garantia
-	Endosatario string
-	NIF         string
-	Clausula    string
+	Fecha        string
+	Tipo         string // en_propiedad | en_blanco | en_procuracion | en_garantia
+	Endosatario  string
+	NIF          string
+	Clausula     string
+	EndosantePub string // clave pública del endosante (su "firma")
 }
 
 // Input carries everything needed to render a pagaré document.
 type Input struct {
-	P         *models.PagareElectronico
-	AssetID   string
-	VerifyURL string // enlace público de verificación (para el QR)
-	Endosos   []Endoso
+	P           *models.PagareElectronico
+	AssetID     string
+	VerifyURL   string // enlace público de verificación (para el QR)
+	FirmantePub string // clave pública del firmante (su "firma" en el anverso)
+	Endosos     []Endoso
 }
+
+const fontMono = "Courier" // fuente core monoespaciada para las claves públicas
 
 // Paleta del sistema de diseño "Papel Notarial".
 var (
@@ -186,13 +190,26 @@ func renderAnverso(p *fpdf.Fpdf, in Input) {
 	p.SetXY(mx, baseY+20)
 	p.CellFormat(0, 6, fmt.Sprintf("En %s, a %s.", pg.LocalidadEmision, formatFechaLarga(pg.FechaEmision)), "", 1, "L", false, 0, "")
 
-	setDraw(p, colInk)
-	p.SetLineWidth(0.3)
-	p.Line(mx, baseY+38, mx+70, baseY+38)
+	// Firma electrónica: la clave pública ed25519 del firmante ES la firma.
+	sy := baseY + 30
+	setText(p, colGoldDeep)
+	p.SetFont(fontFamily, "", 8)
+	p.SetXY(mx, sy)
+	p.CellFormat(0, 4.5, "FIRMA ELECTRÓNICA · CLAVE PÚBLICA (ed25519)", "", 1, "L", false, 0, "")
+	if in.FirmantePub != "" {
+		setText(p, colInk)
+		p.SetFont(fontMono, "B", 10)
+		p.SetXY(mx, sy+5)
+		p.CellFormat(0, 5.5, in.FirmantePub, "", 1, "L", false, 0, "")
+	} else {
+		setDraw(p, colInk)
+		p.SetLineWidth(0.3)
+		p.Line(mx, sy+9.5, mx+80, sy+9.5)
+	}
 	setText(p, colInkSoft)
-	p.SetFont(fontFamily, "", 9)
-	p.SetXY(mx, baseY+39)
-	p.CellFormat(70, 5, "Firma del firmante", "", 0, "C", false, 0, "")
+	p.SetFont(fontFamily, "I", 8.5)
+	p.SetXY(mx, sy+11.5)
+	p.CellFormat(0, 4.5, "Firmado digitalmente y registrado de forma fehaciente en blockchain.", "", 0, "L", false, 0, "")
 
 	// QR de verificación (abajo derecha)
 	drawQR(p, in, w-mx-30, baseY+6, 30)
@@ -275,14 +292,19 @@ func drawEndoso(p *fpdf.Fpdf, x, y, wdt float64, n int, e Endoso) float64 {
 	}
 	p.CellFormat(wdt-90, 5, meta, "", 0, "L", false, 0, "")
 
-	// Línea de firma del endosante (derecha)
-	setDraw(p, colInk)
-	p.SetLineWidth(0.3)
-	p.Line(x+wdt-70, y+15, x+wdt-6, y+15)
+	// Firma del endosante = su clave pública (abreviada, en monoespaciada).
 	setText(p, colInkSoft)
-	p.SetFont(fontFamily, "", 8)
-	p.SetXY(x+wdt-70, y+15.5)
-	p.CellFormat(64, 4, "Firma del endosante", "", 0, "C", false, 0, "")
+	p.SetFont(fontFamily, "", 7.5)
+	p.SetXY(x+wdt-78, y+8)
+	p.CellFormat(72, 4, "Firma (clave pública del endosante)", "", 0, "R", false, 0, "")
+	firma := "—"
+	if e.EndosantePub != "" {
+		firma = shortID(e.EndosantePub)
+	}
+	setText(p, colInk)
+	p.SetFont(fontMono, "B", 9)
+	p.SetXY(x+wdt-78, y+12)
+	p.CellFormat(72, 5, firma, "", 0, "R", false, 0, "")
 
 	return y + blockH + 4
 }
@@ -416,5 +438,6 @@ func shortID(id string) string {
 	if len(id) <= 16 {
 		return id
 	}
-	return id[:8] + "…" + id[len(id)-6:]
+	// ASCII "..." (no ellipsis glyph): safe in the core monospace font too.
+	return id[:8] + "..." + id[len(id)-6:]
 }

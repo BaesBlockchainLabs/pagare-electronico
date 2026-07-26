@@ -13,12 +13,35 @@ import (
 	"pagare/internal/pdf"
 )
 
+// UserResolver resolves a blockchain public key to its registered user, so the
+// PDF can show real names/NIF for participants known only by their pub in the
+// asset history. Satisfied by *auth.Store.
+type UserResolver interface {
+	GetUserByPubKey(pub string) (*auth.User, error)
+}
+
 type ConsultaHandler struct {
 	client *bcfclient.Client
+	users  UserResolver
 }
 
 func NewConsultaHandler(client *bcfclient.Client) *ConsultaHandler {
 	return &ConsultaHandler{client: client}
+}
+
+// SetUsers wires the user resolver used to enrich the PDF from public keys.
+func (h *ConsultaHandler) SetUsers(u UserResolver) { h.users = u }
+
+// resolveUser returns the registered user for a pub, or nil if unknown.
+func (h *ConsultaHandler) resolveUser(pub string) *auth.User {
+	if h.users == nil || pub == "" {
+		return nil
+	}
+	u, err := h.users.GetUserByPubKey(pub)
+	if err != nil {
+		return nil
+	}
+	return u
 }
 
 func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
@@ -441,8 +464,9 @@ func (h *ConsultaHandler) DescargarPDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var endosos []pdf.Endoso
+	var firmantePub string
 	if histBody, hs, herr := h.client.GetAssetHistory(id); herr == nil && hs == 200 {
-		endosos = historyToEndosos(histBody)
+		endosos, firmantePub = h.parseHistory(histBody)
 	}
 
 	scheme := "http"
@@ -451,7 +475,7 @@ func (h *ConsultaHandler) DescargarPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	verifyURL := fmt.Sprintf("%s://%s/pagares/verificar?network=test&id=%s", scheme, r.Host, id)
 
-	out, err := pdf.Generate(pdf.Input{P: pagare, AssetID: id, VerifyURL: verifyURL, Endosos: endosos})
+	out, err := pdf.Generate(pdf.Input{P: pagare, AssetID: id, VerifyURL: verifyURL, FirmantePub: firmantePub, Endosos: endosos})
 	if err != nil {
 		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "no se pudo generar el PDF"})
 		return
@@ -492,15 +516,16 @@ func assetToPagare(body []byte) (*models.PagareElectronico, error) {
 	return &p, nil
 }
 
-// historyToEndosos extracts the endorsement chain from a BCF GetAssetHistory
-// response, in chronological order.
-func historyToEndosos(body []byte) []pdf.Endoso {
+// parseHistory extracts, in chronological order, the endorsement chain and the
+// firmante's signing public key from a BCF GetAssetHistory response. Endosatario
+// identities are resolved from their public key (`to`) against the user store,
+// since the history metadata carries only the keys, not the names.
+func (h *ConsultaHandler) parseHistory(body []byte) (endosos []pdf.Endoso, firmantePub string) {
 	var raw map[string]interface{}
 	if json.Unmarshal(body, &raw) != nil {
-		return nil
+		return nil, ""
 	}
 	hist, _ := raw["history"].([]interface{})
-	var out []pdf.Endoso
 	for _, item := range hist {
 		e, _ := item.(map[string]interface{})
 		if e == nil {
@@ -512,20 +537,49 @@ func historyToEndosos(body []byte) []pdf.Endoso {
 		}
 		action := strVal(meta["action"])
 		tipo := strVal(meta["tipo_endoso"])
-		if action != "ENDOSO" && tipo == "" {
-			continue // no es un endoso (CREATE/BURN/UPDATE)
+
+		if action == "CREATE" {
+			firmantePub = strVal(meta["from"]) // la clave que firmó la emisión
+			continue
 		}
-		end := pdf.Endoso{Tipo: tipo, Clausula: strVal(meta["clausula"])}
+		if action != "TRANSFER" && action != "ENDOSO" && tipo == "" {
+			continue // UPDATE/BURN u otros: no son endosos
+		}
+
+		end := pdf.Endoso{
+			Tipo:         tipo,
+			Clausula:     strVal(meta["clausula"]),
+			EndosantePub: strVal(meta["from"]),
+		}
 		if f := strVal(meta["fecha"]); len(f) >= 10 {
-			end.Fecha = f[:10] // normaliza RFC3339 -> YYYY-MM-DD
+			end.Fecha = f[:10] // "2026-07-26 22:27:55" o RFC3339 -> "2026-07-26"
 		}
+
+		// Endosatario: primero por metadata (si viniera), si no por su pub.
 		if en, ok := meta["endosatario"].(map[string]interface{}); ok {
 			end.Endosatario = strings.TrimSpace(strVal(en["nombre"]) + " " + strVal(en["apellido"]))
 			end.NIF = strVal(en["nif"])
 		}
-		out = append(out, end)
+		toPub := strVal(meta["to"])
+		if end.Endosatario == "" && toPub != "" {
+			if u := h.resolveUser(toPub); u != nil {
+				end.Endosatario = strings.TrimSpace(u.Nombre + " " + u.Apellido)
+				end.NIF = u.NIF
+			} else {
+				end.Endosatario = "clave " + shortIDStr(toPub)
+			}
+		}
+		endosos = append(endosos, end)
 	}
-	return out
+	return endosos, firmantePub
+}
+
+// shortIDStr abbreviates a long identifier/pubkey for display.
+func shortIDStr(s string) string {
+	if len(s) <= 16 {
+		return s
+	}
+	return s[:8] + "…" + s[len(s)-6:]
 }
 
 func strVal(v interface{}) string {
