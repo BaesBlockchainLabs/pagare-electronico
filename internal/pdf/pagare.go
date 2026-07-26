@@ -17,7 +17,7 @@ import (
 // Endoso is one link of the endorsement chain, rendered on the reverse.
 type Endoso struct {
 	Fecha       string
-	Tipo        string
+	Tipo        string // en_propiedad | en_blanco | en_procuracion | en_garantia
 	Endosatario string
 	NIF         string
 	Clausula    string
@@ -39,18 +39,23 @@ var (
 	colGold     = [3]int{194, 155, 60}
 	colGoldDeep = [3]int{160, 127, 38}
 	colBorder   = [3]int{210, 194, 158}
+	colCard     = [3]int{255, 253, 248}
+	colChip     = [3]int{246, 239, 217}
 )
 
-// Generate renders the anverso (page 1) of the pagaré. The reverso (endorsement
-// chain) is added by a later iteration.
+// Generate renders the full pagaré document as a 2-page PDF: page 1 = anverso
+// (front), page 2 = reverso (endorsement chain), the two sides of one sheet.
 func Generate(in Input) ([]byte, error) {
 	p := fpdf.New("L", "mm", "A4", "")
 	p.SetMargins(0, 0, 0)
 	p.SetAutoPageBreak(false, 0)
-	tr := p.UnicodeTranslatorFromDescriptor("cp1252")
+	registerFonts(p)
 
 	p.AddPage()
-	renderAnverso(p, tr, in)
+	renderAnverso(p, in)
+
+	p.AddPage()
+	renderReverso(p, in)
 
 	var buf bytes.Buffer
 	if err := p.Output(&buf); err != nil {
@@ -59,11 +64,8 @@ func Generate(in Input) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func renderAnverso(p *fpdf.Fpdf, tr func(string) string, in Input) {
-	w, h := p.GetPageSize()
-	pg := in.P
-
-	// Fondo papel + doble filete dorado (aire de certificado).
+// frame draws the paper background and the double gold border shared by both sides.
+func frame(p *fpdf.Fpdf, w, h float64) {
 	setFill(p, colPaper)
 	p.Rect(0, 0, w, h, "F")
 	setDraw(p, colGold)
@@ -72,37 +74,41 @@ func renderAnverso(p *fpdf.Fpdf, tr func(string) string, in Input) {
 	setDraw(p, colBorder)
 	p.SetLineWidth(0.4)
 	p.Rect(10.5, 10.5, w-21, h-21, "D")
+}
 
-	mx := 20.0 // margen interior de contenido
+func renderAnverso(p *fpdf.Fpdf, in Input) {
+	w, h := p.GetPageSize()
+	pg := in.P
+	frame(p, w, h)
+	mx := 20.0
 
 	// ---- Cabecera ----
 	setText(p, colGoldDeep)
-	p.SetFont("Times", "", 9)
+	p.SetFont(fontFamily, "", 9)
 	p.SetXY(mx, 16)
-	p.CellFormat(0, 5, tr("PAGARÉ ELECTRÓNICO · REGISTRO FEHACIENTE EN BLOCKCHAIN"), "", 0, "L", false, 0, "")
+	p.CellFormat(0, 5, "PAGARÉ ELECTRÓNICO · REGISTRO FEHACIENTE EN BLOCKCHAIN", "", 0, "L", false, 0, "")
 
 	setText(p, colInk)
-	p.SetFont("Times", "B", 40)
+	p.SetFont(fontFamily, "B", 38)
 	p.SetXY(mx, 20)
-	p.CellFormat(120, 20, tr("PAGARÉ"), "", 0, "L", false, 0, "")
+	p.CellFormat(120, 20, "PAGARÉ", "", 0, "L", false, 0, "")
 
 	// ---- Caja de importe (arriba derecha) ----
 	boxW, boxH := 92.0, 22.0
 	boxX, boxY := w-mx-boxW, 20.0
-	setFill(p, [3]int{255, 253, 248})
+	setFill(p, colCard)
 	setDraw(p, colGold)
 	p.SetLineWidth(0.8)
 	p.Rect(boxX, boxY, boxW, boxH, "FD")
 	setText(p, colInkSoft)
-	p.SetFont("Times", "", 8)
+	p.SetFont(fontFamily, "", 8)
 	p.SetXY(boxX+4, boxY+2.5)
-	p.CellFormat(boxW-8, 4, tr("IMPORTE"), "", 0, "L", false, 0, "")
+	p.CellFormat(boxW-8, 4, "IMPORTE", "", 0, "L", false, 0, "")
 	setText(p, colInk)
-	p.SetFont("Times", "B", 22)
-	p.SetXY(boxX+4, boxY+7.5)
-	p.CellFormat(boxW-8, 11, tr(formatEUR(pg.Importe)), "", 0, "R", false, 0, "")
+	p.SetFont(fontFamily, "B", 20)
+	p.SetXY(boxX+4, boxY+8)
+	p.CellFormat(boxW-8, 10, formatEUR(pg.Importe), "", 0, "R", false, 0, "")
 
-	// Filete bajo la cabecera
 	setDraw(p, colBorder)
 	p.SetLineWidth(0.3)
 	p.Line(mx, 46, w-mx, 46)
@@ -114,36 +120,33 @@ func renderAnverso(p *fpdf.Fpdf, tr func(string) string, in Input) {
 	if pg.NoALaOrden {
 		orden = "(no a la orden)"
 	}
-
 	setText(p, colInk)
-	p.SetFont("Times", "", 13)
+	p.SetFont(fontFamily, "", 12.5)
 	p.SetXY(mx, 54)
 	promesa := fmt.Sprintf(
 		"Por el presente PAGARÉ me comprometo a pagar, de forma pura y simple, el día %s, en %s, a %s con NIF %s, %s, la cantidad de:",
 		venc, pg.LocalidadPago, benef, pg.Beneficiario.NIF, orden,
 	)
-	p.MultiCell(w-2*mx, 6.5, tr(promesa), "", "L", false)
+	p.MultiCell(w-2*mx, 6.5, promesa, "", "L", false)
 
-	// Importe en letra, destacado.
 	setText(p, colGoldDeep)
-	p.SetFont("Times", "BI", 15)
+	p.SetFont(fontFamily, "BI", 15)
 	p.SetX(mx)
-	letra := strings.ToUpper(importeEnLetra(pg.Importe))
-	p.MultiCell(w-2*mx, 7, tr("# "+letra+" #"), "", "L", false)
+	p.MultiCell(w-2*mx, 7, strings.ToUpper(importeEnLetra(pg.Importe)), "", "L", false)
 
 	// ---- Cláusulas / aval (chips) ----
 	chipY := p.GetY() + 3
 	chipX := mx
 	drawChip := func(txt string) {
-		p.SetFont("Times", "", 8.5)
-		tw := p.GetStringWidth(tr(txt)) + 8
-		setFill(p, [3]int{246, 239, 217})
+		p.SetFont(fontFamily, "", 8.5)
+		tw := p.GetStringWidth(txt) + 8
+		setFill(p, colChip)
 		setDraw(p, colGold)
 		p.SetLineWidth(0.3)
 		p.Rect(chipX, chipY, tw, 6.5, "FD")
 		setText(p, colGoldDeep)
 		p.SetXY(chipX, chipY)
-		p.CellFormat(tw, 6.5, tr(txt), "", 0, "C", false, 0, "")
+		p.CellFormat(tw, 6.5, txt, "", 0, "C", false, 0, "")
 		chipX += tw + 4
 	}
 	if pg.NoALaOrden {
@@ -163,56 +166,200 @@ func renderAnverso(p *fpdf.Fpdf, tr func(string) string, in Input) {
 
 	// ---- Pie: firmante + emisión (izquierda) y QR (derecha) ----
 	baseY := h - 62
-
-	// Firmante
 	setText(p, colInkSoft)
-	p.SetFont("Times", "", 8.5)
+	p.SetFont(fontFamily, "", 8.5)
 	p.SetXY(mx, baseY)
-	p.CellFormat(0, 5, tr("FIRMANTE (SUSCRIPTOR)"), "", 1, "L", false, 0, "")
+	p.CellFormat(0, 5, "FIRMANTE (SUSCRIPTOR)", "", 1, "L", false, 0, "")
 	setText(p, colInk)
-	p.SetFont("Times", "B", 12)
+	p.SetFont(fontFamily, "B", 12)
 	p.SetX(mx)
 	firm := strings.TrimSpace(pg.Firmante.Nombre + " " + pg.Firmante.Apellido)
-	p.CellFormat(0, 6, tr(firm+"  ·  NIF "+pg.Firmante.NIF), "", 1, "L", false, 0, "")
+	p.CellFormat(0, 6, firm+"  ·  NIF "+pg.Firmante.NIF, "", 1, "L", false, 0, "")
 	setText(p, colInkSoft)
-	p.SetFont("Times", "", 10)
+	p.SetFont(fontFamily, "", 10)
 	p.SetX(mx)
 	dir := pg.Firmante.DireccionPostal
-	dirTxt := strings.TrimSpace(fmt.Sprintf("%s, %s %s (%s)", dir.Direccion, dir.CodigoPostal, dir.Localidad, dir.Pais))
-	p.CellFormat(0, 5.5, tr(dirTxt), "", 1, "L", false, 0, "")
+	p.CellFormat(0, 5.5, strings.TrimSpace(fmt.Sprintf("%s, %s %s (%s)", dir.Direccion, dir.CodigoPostal, dir.Localidad, dir.Pais)), "", 1, "L", false, 0, "")
 
-	// Emisión + firma
 	setText(p, colInk)
-	p.SetFont("Times", "I", 11)
+	p.SetFont(fontFamily, "I", 11)
 	p.SetXY(mx, baseY+20)
-	p.CellFormat(0, 6, tr(fmt.Sprintf("En %s, a %s.", pg.LocalidadEmision, formatFechaLarga(pg.FechaEmision))), "", 1, "L", false, 0, "")
+	p.CellFormat(0, 6, fmt.Sprintf("En %s, a %s.", pg.LocalidadEmision, formatFechaLarga(pg.FechaEmision)), "", 1, "L", false, 0, "")
 
 	setDraw(p, colInk)
 	p.SetLineWidth(0.3)
 	p.Line(mx, baseY+38, mx+70, baseY+38)
 	setText(p, colInkSoft)
-	p.SetFont("Times", "", 9)
+	p.SetFont(fontFamily, "", 9)
 	p.SetXY(mx, baseY+39)
-	p.CellFormat(70, 5, tr("Firma del firmante"), "", 0, "C", false, 0, "")
+	p.CellFormat(70, 5, "Firma del firmante", "", 0, "C", false, 0, "")
 
 	// QR de verificación (abajo derecha)
-	if in.VerifyURL != "" {
-		if png, err := qrcode.Encode(in.VerifyURL, qrcode.Medium, 256); err == nil {
-			opt := fpdf.ImageOptions{ImageType: "PNG"}
-			p.RegisterImageOptionsReader("qr", opt, bytes.NewReader(png))
-			qrSize := 30.0
-			qrX := w - mx - qrSize
-			qrY := baseY + 6
-			p.ImageOptions("qr", qrX, qrY, qrSize, qrSize, false, opt, 0, "")
-			setText(p, colInkSoft)
-			p.SetFont("Times", "", 7.5)
-			p.SetXY(qrX-30, qrY+qrSize+1)
-			p.CellFormat(qrSize+30, 4, tr("Verificable en blockchain"), "", 1, "R", false, 0, "")
-			if in.AssetID != "" {
-				p.SetX(qrX - 30)
-				p.CellFormat(qrSize+30, 4, tr("ID "+shortID(in.AssetID)), "", 0, "R", false, 0, "")
+	drawQR(p, in, w-mx-30, baseY+6, 30)
+}
+
+func renderReverso(p *fpdf.Fpdf, in Input) {
+	w, h := p.GetPageSize()
+	frame(p, w, h)
+	mx := 20.0
+
+	setText(p, colGoldDeep)
+	p.SetFont(fontFamily, "", 9)
+	p.SetXY(mx, 16)
+	p.CellFormat(0, 5, "REVERSO · ENDOSOS, AVALES Y CLÁUSULAS", "", 0, "L", false, 0, "")
+	setText(p, colInk)
+	p.SetFont(fontFamily, "B", 24)
+	p.SetXY(mx, 20)
+	p.CellFormat(0, 12, "Cadena de endosos", "", 0, "L", false, 0, "")
+	setDraw(p, colBorder)
+	p.SetLineWidth(0.3)
+	p.Line(mx, 38, w-mx, 38)
+
+	y := 44.0
+	if len(in.Endosos) == 0 {
+		setText(p, colInkSoft)
+		p.SetFont(fontFamily, "I", 11)
+		p.SetXY(mx, y)
+		p.CellFormat(0, 6, "Sin endosos. El pagaré permanece en poder del primer tenedor.", "", 1, "L", false, 0, "")
+		y += 12
+	} else {
+		for i, e := range in.Endosos {
+			y = drawEndoso(p, mx, y, w-2*mx, i+1, e)
+			if y > h-40 { // salto de seguridad si hubiera muchísimos
+				break
 			}
 		}
+	}
+
+	// Espacios en blanco para endosos manuales (como el dorso físico).
+	drawEndosoEnBlanco(p, mx, &y, w-2*mx, h)
+
+	// Pie: nota legal
+	setText(p, colInkSoft)
+	p.SetFont(fontFamily, "I", 8)
+	p.SetXY(mx, h-18)
+	p.MultiCell(w-2*mx, 4, "El endoso debe ser firmado por el endosante (arts. 16-17 y 96 LCCH). La legitimación del tenedor resulta de una serie no interrumpida de endosos (art. 19). El endoso en blanco se perfecciona con la sola firma.", "", "L", false)
+}
+
+// drawEndoso renders one endorsement block and returns the new Y.
+func drawEndoso(p *fpdf.Fpdf, x, y, wdt float64, n int, e Endoso) float64 {
+	blockH := 22.0
+	setFill(p, colCard)
+	setDraw(p, colBorder)
+	p.SetLineWidth(0.3)
+	p.Rect(x, y, wdt, blockH, "FD")
+
+	// Nº de orden (círculo dorado)
+	setFill(p, colChip)
+	setDraw(p, colGold)
+	p.Circle(x+7, y+7, 4, "FD")
+	setText(p, colGoldDeep)
+	p.SetFont(fontFamily, "B", 9)
+	p.SetXY(x+3, y+4.2)
+	p.CellFormat(8, 6, strconv.Itoa(n), "", 0, "C", false, 0, "")
+
+	setText(p, colInk)
+	p.SetFont(fontFamily, "B", 11)
+	p.SetXY(x+16, y+3)
+	p.CellFormat(wdt-90, 6, formulaEndoso(e), "", 0, "L", false, 0, "")
+
+	setText(p, colInkSoft)
+	p.SetFont(fontFamily, "", 9)
+	p.SetXY(x+16, y+10)
+	meta := tipoEndosoLabel(e.Tipo)
+	if e.Fecha != "" {
+		meta += "  ·  " + formatFechaLarga(e.Fecha)
+	}
+	if e.Clausula != "" {
+		meta += "  ·  " + e.Clausula
+	}
+	p.CellFormat(wdt-90, 5, meta, "", 0, "L", false, 0, "")
+
+	// Línea de firma del endosante (derecha)
+	setDraw(p, colInk)
+	p.SetLineWidth(0.3)
+	p.Line(x+wdt-70, y+15, x+wdt-6, y+15)
+	setText(p, colInkSoft)
+	p.SetFont(fontFamily, "", 8)
+	p.SetXY(x+wdt-70, y+15.5)
+	p.CellFormat(64, 4, "Firma del endosante", "", 0, "C", false, 0, "")
+
+	return y + blockH + 4
+}
+
+// drawEndosoEnBlanco fills the remaining space with ruled blank endorsement slots.
+func drawEndosoEnBlanco(p *fpdf.Fpdf, x float64, y *float64, wdt, h float64) {
+	setText(p, colInkSoft)
+	p.SetFont(fontFamily, "", 8)
+	limit := h - 24
+	first := true
+	for *y+22 < limit {
+		if first {
+			p.SetXY(x, *y-1)
+			p.CellFormat(0, 4, "Espacio para endosos manuales:", "", 1, "L", false, 0, "")
+			*y += 5
+			first = false
+		}
+		setDraw(p, colBorder)
+		p.SetLineWidth(0.25)
+		p.Rect(x, *y, wdt, 18, "D")
+		*y += 22
+	}
+}
+
+func drawQR(p *fpdf.Fpdf, in Input, x, y, size float64) {
+	if in.VerifyURL == "" {
+		return
+	}
+	png, err := qrcode.Encode(in.VerifyURL, qrcode.Medium, 256)
+	if err != nil {
+		return
+	}
+	opt := fpdf.ImageOptions{ImageType: "PNG"}
+	p.RegisterImageOptionsReader("qr", opt, bytes.NewReader(png))
+	p.ImageOptions("qr", x, y, size, size, false, opt, 0, "")
+	setText(p, colInkSoft)
+	p.SetFont(fontFamily, "", 7.5)
+	p.SetXY(x-30, y+size+1)
+	p.CellFormat(size+30, 4, "Verificable en blockchain", "", 1, "R", false, 0, "")
+	if in.AssetID != "" {
+		p.SetX(x - 30)
+		p.CellFormat(size+30, 4, "ID "+shortID(in.AssetID), "", 0, "R", false, 0, "")
+	}
+}
+
+// ---------- fórmulas de endoso ----------
+
+func formulaEndoso(e Endoso) string {
+	dest := strings.TrimSpace(e.Endosatario)
+	if e.NIF != "" {
+		dest += " (NIF " + e.NIF + ")"
+	}
+	switch e.Tipo {
+	case "en_blanco":
+		return "Endoso en blanco (a la orden del portador)"
+	case "en_procuracion":
+		return "Páguese a " + dest + " — valor al cobro"
+	case "en_garantia":
+		return "Páguese a " + dest + " — valor en garantía"
+	default: // en_propiedad
+		if dest == "" {
+			return "Endoso en blanco"
+		}
+		return "Páguese a la orden de " + dest
+	}
+}
+
+func tipoEndosoLabel(t string) string {
+	switch t {
+	case "en_blanco":
+		return "Endoso en blanco (art. 15)"
+	case "en_procuracion":
+		return "Endoso en procuración (art. 21)"
+	case "en_garantia":
+		return "Endoso en garantía (art. 22)"
+	default:
+		return "Endoso en propiedad (art. 17)"
 	}
 }
 

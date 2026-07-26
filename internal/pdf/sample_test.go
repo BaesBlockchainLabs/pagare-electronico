@@ -1,9 +1,12 @@
 package pdf
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/go-pdf/fpdf"
 
 	"pagare/internal/models"
 )
@@ -33,6 +36,11 @@ func sampleInput() Input {
 				Alcance:  "total",
 			},
 		},
+		Endosos: []Endoso{
+			{Fecha: "2026-08-10", Tipo: "en_propiedad", Endosatario: "Pedro García", NIF: "38240458Z"},
+			{Fecha: "2026-09-02", Tipo: "en_garantia", Endosatario: "Banco Ejemplo S.A.", NIF: "A12345674", Clausula: "sin gastos"},
+			{Fecha: "2026-10-01", Tipo: "en_blanco"},
+		},
 	}
 }
 
@@ -44,11 +52,32 @@ func TestGenerateSample(t *testing.T) {
 	if len(b) < 1000 {
 		t.Fatalf("PDF demasiado pequeño: %d", len(b))
 	}
-	if out := os.Getenv("PDF_POC_OUT"); out != "" {
-		path := filepath.Join(out, "anverso.pdf")
-		if err := os.WriteFile(path, b, 0644); err != nil {
-			t.Fatalf("write: %v", err)
-		}
-		t.Logf("anverso escrito en %s (%d bytes)", path, len(b))
+	out := os.Getenv("PDF_POC_OUT")
+	if out == "" {
+		return
 	}
+	write := func(name string, data []byte) {
+		if err := os.WriteFile(filepath.Join(out, name), data, 0644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	write("pagare.pdf", b)
+
+	// Vistas previas de una sola página para inspección visual.
+	write("anverso.pdf", onePage(renderAnverso))
+	write("reverso.pdf", onePage(renderReverso))
+	t.Logf("PDFs escritos en %s", out)
+}
+
+// onePage renders a single side into its own one-page PDF (preview helper).
+func onePage(render func(*fpdf.Fpdf, Input)) []byte {
+	p := fpdf.New("L", "mm", "A4", "")
+	p.SetMargins(0, 0, 0)
+	p.SetAutoPageBreak(false, 0)
+	registerFonts(p)
+	p.AddPage()
+	render(p, sampleInput())
+	var buf bytes.Buffer
+	_ = p.Output(&buf)
+	return buf.Bytes()
 }
