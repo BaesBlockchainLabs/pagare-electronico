@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"pagare/internal/keyvault"
@@ -106,6 +107,58 @@ func TestDeleteUserRemovesKeys(t *testing.T) {
 	}
 	if ok, _ := s.HasPrivateKey(u.ID, "pubZ"); ok {
 		t.Fatal("key should be gone after user delete")
+	}
+}
+
+// fakeProvisioner hands out deterministic, unique keypairs and counts calls.
+type fakeProvisioner struct{ n int }
+
+func (f *fakeProvisioner) GenerateKeypair() (string, string, error) {
+	f.n++
+	return fmt.Sprintf("pub-%d", f.n), fmt.Sprintf("pvt-%d", f.n), nil
+}
+
+func TestEnsureUserKeypairProvisionsOnce(t *testing.T) {
+	s := newVaultStore(t)
+	fp := &fakeProvisioner{}
+	s.SetKeyProvisioner(fp)
+
+	u := &User{Username: "erin", Role: RoleUser}
+	if err := s.CreateUser(u, "pw"); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	pub1, err := s.EnsureUserKeypair(u.ID)
+	if err != nil {
+		t.Fatalf("EnsureUserKeypair: %v", err)
+	}
+	if pub1 == "" {
+		t.Fatal("expected a pub")
+	}
+	// The sealed pvt round-trips.
+	if pvt, err := s.GetPrivateKey(u.ID, pub1); err != nil || pvt != "pvt-1" {
+		t.Fatalf("GetPrivateKey: pvt=%q err=%v", pvt, err)
+	}
+
+	// Idempotent: second call provisions nothing new and returns same pub.
+	pub2, err := s.EnsureUserKeypair(u.ID)
+	if err != nil {
+		t.Fatalf("EnsureUserKeypair 2: %v", err)
+	}
+	if pub2 != pub1 {
+		t.Fatalf("expected same pub, got %q vs %q", pub2, pub1)
+	}
+	if fp.n != 1 {
+		t.Fatalf("expected exactly one provisioning call, got %d", fp.n)
+	}
+}
+
+func TestEnsureUserKeypairNoProvisioner(t *testing.T) {
+	s := newVaultStore(t) // vault but no provisioner
+	u := &User{Username: "frank", Role: RoleUser}
+	_ = s.CreateUser(u, "pw")
+	if _, err := s.EnsureUserKeypair(u.ID); !errors.Is(err, ErrNoKeyProvisioner) {
+		t.Fatalf("expected ErrNoKeyProvisioner, got %v", err)
 	}
 }
 

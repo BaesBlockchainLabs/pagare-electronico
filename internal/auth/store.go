@@ -32,8 +32,9 @@ var (
 )
 
 type Store struct {
-	db    *sql.DB
-	vault *keyvault.Vault // seals/opens users' private keys; see keys.go
+	db     *sql.DB
+	vault  *keyvault.Vault // seals/opens users' private keys; see keys.go
+	keygen KeyProvisioner  // provisions a keypair on user creation; see keys.go
 }
 
 // NewStore opens/creates the SQLite DB for users in the data dir.

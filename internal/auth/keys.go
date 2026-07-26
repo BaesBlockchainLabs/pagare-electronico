@@ -12,12 +12,68 @@ import (
 // has no keyvault wired in (encryption is mandatory for private keys).
 var ErrNoVault = errors.New("keyvault no configurado en el store")
 
+// ErrNoKeyProvisioner is returned when keypair generation is requested but no
+// provisioner is wired in.
+var ErrNoKeyProvisioner = errors.New("generador de keypair no configurado en el store")
+
 // ErrPrivateKeyNotFound is returned when no stored private key matches.
 var ErrPrivateKeyNotFound = errors.New("clave privada no encontrada")
+
+// KeyProvisioner generates a fresh blockchain keypair for a new user. It is
+// satisfied structurally by crypto.Service, keeping auth decoupled from the
+// blockchain client.
+type KeyProvisioner interface {
+	GenerateKeypair() (pub string, pvt string, err error)
+}
 
 // SetVault wires the encryption seam used to seal/open users' private keys.
 // Must be called before any StorePrivateKey/GetPrivateKey.
 func (s *Store) SetVault(v *keyvault.Vault) { s.vault = v }
+
+// SetKeyProvisioner wires the keypair generator used by EnsureUserKeypair.
+func (s *Store) SetKeyProvisioner(k KeyProvisioner) { s.keygen = k }
+
+// EnsureUserKeypair guarantees the user has an identity keypair: if none exists
+// it provisions one and stores the sealed private key, registering the public
+// key on the user. Idempotent — a user that already has a key keeps it, and the
+// existing public key is returned.
+func (s *Store) EnsureUserKeypair(userID string) (pub string, err error) {
+	if existing, err := s.firstUserPub(userID); err != nil {
+		return "", err
+	} else if existing != "" {
+		return existing, nil
+	}
+	if s.keygen == nil {
+		return "", ErrNoKeyProvisioner
+	}
+	if s.vault == nil {
+		return "", ErrNoVault
+	}
+	pub, pvt, err := s.keygen.GenerateKeypair()
+	if err != nil {
+		return "", err
+	}
+	if err := s.StorePrivateKey(userID, pub, pvt); err != nil {
+		return "", err
+	}
+	return pub, nil
+}
+
+// firstUserPub returns any stored public key for the user (empty string if none).
+func (s *Store) firstUserPub(userID string) (string, error) {
+	var pub string
+	err := s.db.QueryRow(
+		`SELECT pub FROM user_keys WHERE user_id = ? ORDER BY created_at LIMIT 1`,
+		userID,
+	).Scan(&pub)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return pub, nil
+}
 
 // keyAAD binds a sealed private key to a specific user+pub so a stolen blob
 // cannot be replayed onto a different record.

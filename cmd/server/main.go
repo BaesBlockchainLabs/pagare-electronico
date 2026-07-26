@@ -56,6 +56,8 @@ func main() {
 		log.Printf("⚠️  keyvault usando clave de DESARROLLO insegura (define KEYS_MASTER_KEY en producción)")
 	}
 	authStore.SetVault(vault)
+	// Provision blockchain keypairs automatically on user creation.
+	authStore.SetKeyProvisioner(cryptoSvc)
 
 	if err := authStore.BootstrapAdmin(); err != nil {
 		log.Printf("Aviso: no se pudo hacer bootstrap del admin: %v", err)
@@ -139,6 +141,12 @@ func main() {
 				}
 				if err := authStore.CreateUser(u, in.Password); err != nil {
 					handler.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				// Auto-provision the user's identity keypair (idempotent).
+				if _, err := authStore.EnsureUserKeypair(u.ID); err != nil {
+					log.Printf("Aviso: no se pudo generar keypair para %s: %v", u.Username, err)
+					handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Usuario creado (sin keypair: " + err.Error() + ")"})
 					return
 				}
 				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "msg": "Usuario creado"})
