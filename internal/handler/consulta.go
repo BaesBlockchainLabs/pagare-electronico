@@ -2,11 +2,15 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
+	"pagare/internal/models"
+	"pagare/internal/pdf"
 )
 
 type ConsultaHandler struct {
@@ -407,6 +411,130 @@ func (h *ConsultaHandler) filterForPrincipal(raw map[string]interface{}, princip
 
 // assetOwnedBy returns true if any of the current owners (by pubkey) matches
 // one of the principal's claimed pubkeys.
+// DescargarPDF renders the pagaré (anverso + reverso) as a downloadable PDF.
+// Access is restricted to the owner (or an admin), reusing the ownership rule.
+func (h *ConsultaHandler) DescargarPDF(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "id es obligatorio"})
+		return
+	}
+	if !principal.IsAdmin() && !h.assetOwnedBy(id, principal) {
+		WriteJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "msg": "no tienes acceso a este pagaré"})
+		return
+	}
+
+	assetBody, status, err := h.client.GetAsset(map[string]string{"id": id})
+	if err != nil || status != 200 {
+		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": "no se pudo obtener el pagaré"})
+		return
+	}
+	pagare, err := assetToPagare(assetBody)
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "datos del pagaré no válidos"})
+		return
+	}
+
+	var endosos []pdf.Endoso
+	if histBody, hs, herr := h.client.GetAssetHistory(id); herr == nil && hs == 200 {
+		endosos = historyToEndosos(histBody)
+	}
+
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	verifyURL := fmt.Sprintf("%s://%s/pagares/verificar?network=test&id=%s", scheme, r.Host, id)
+
+	out, err := pdf.Generate(pdf.Input{P: pagare, AssetID: id, VerifyURL: verifyURL, Endosos: endosos})
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "no se pudo generar el PDF"})
+		return
+	}
+
+	short := id
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="pagare-%s.pdf"`, short))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(out)
+}
+
+// assetToPagare reconstructs a PagareElectronico from a BCF GetAsset response
+// (the stored data mirrors the model's JSON tags).
+func assetToPagare(body []byte) (*models.PagareElectronico, error) {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	var data map[string]interface{}
+	if a, ok := raw["asset"].(map[string]interface{}); ok {
+		data, _ = a["data"].(map[string]interface{})
+	}
+	if data == nil {
+		data, _ = raw["data"].(map[string]interface{})
+	}
+	if data == nil {
+		return nil, fmt.Errorf("sin datos de pagaré")
+	}
+	db, _ := json.Marshal(data)
+	var p models.PagareElectronico
+	if err := json.Unmarshal(db, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// historyToEndosos extracts the endorsement chain from a BCF GetAssetHistory
+// response, in chronological order.
+func historyToEndosos(body []byte) []pdf.Endoso {
+	var raw map[string]interface{}
+	if json.Unmarshal(body, &raw) != nil {
+		return nil
+	}
+	hist, _ := raw["history"].([]interface{})
+	var out []pdf.Endoso
+	for _, item := range hist {
+		e, _ := item.(map[string]interface{})
+		if e == nil {
+			continue
+		}
+		meta, _ := e["metadata"].(map[string]interface{})
+		if meta == nil {
+			continue
+		}
+		action := strVal(meta["action"])
+		tipo := strVal(meta["tipo_endoso"])
+		if action != "ENDOSO" && tipo == "" {
+			continue // no es un endoso (CREATE/BURN/UPDATE)
+		}
+		end := pdf.Endoso{Tipo: tipo, Clausula: strVal(meta["clausula"])}
+		if f := strVal(meta["fecha"]); len(f) >= 10 {
+			end.Fecha = f[:10] // normaliza RFC3339 -> YYYY-MM-DD
+		}
+		if en, ok := meta["endosatario"].(map[string]interface{}); ok {
+			end.Endosatario = strings.TrimSpace(strVal(en["nombre"]) + " " + strVal(en["apellido"]))
+			end.NIF = strVal(en["nif"])
+		}
+		out = append(out, end)
+	}
+	return out
+}
+
+func strVal(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
 // OwnsAsset reports whether the principal owns (or appears in the history of)
 // the asset. Exported so other endpoints (e.g. alert filtering) can reuse the
 // same ownership rule as the consulta views.

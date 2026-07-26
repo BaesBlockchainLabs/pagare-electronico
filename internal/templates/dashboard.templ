@@ -86,6 +86,7 @@ templ Dashboard(user *CurrentUser) {
 						acc += '<a href="/pagares/pagar?id=' + encodeURIComponent(a.id) + '" class="btn btn-danger btn-sm">Pagar</a>';
 					}
 					acc += '<a href="/pagares/historico?id=' + encodeURIComponent(a.id) + '" class="btn btn-ghost btn-sm">Histórico</a>';
+					acc += '<a href="/api/pagares/pdf?id=' + encodeURIComponent(a.id) + '" class="btn btn-ghost btn-sm">PDF</a>';
 					acc += '<a href="/pagares/verificar?network=test&id=' + encodeURIComponent(a.id) + '" class="btn btn-gold btn-sm">Verificar</a>';
 
 					cards += '<article class="pagare-card">' + SEAL +

@@ -355,6 +355,7 @@ func main() {
 			r.Get("/", consultaHandler.ListPagares)
 			r.Get("/buscar", consultaHandler.GetPagare)
 			r.Get("/historico", consultaHandler.GetHistorico)
+			r.Get("/pdf", consultaHandler.DescargarPDF)
 			r.Get("/propietario", consultaHandler.GetPropietario)
 			r.Get("/public", consultaHandler.GetPublicAsset)
 			r.Get("/alertas", func(w http.ResponseWriter, r *http.Request) {
