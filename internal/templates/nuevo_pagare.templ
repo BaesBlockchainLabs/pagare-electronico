@@ -4,12 +4,6 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 	@Base("Emitir Pagaré", user) {
 		<div class="flex-between mb-6">
 			@PageHead("Emisión", "Emitir un nuevo pagaré", "Formulario conforme al art. 94 de la LCCH. Los datos se graban de forma inalterable en blockchain.")
-			if isDev {
-				<button type="button" class="btn btn-outline btn-sm" onclick="rellenarAleatorio()">
-					@Icon("sparkles")
-					Datos de prueba
-				</button>
-			}
 		</div>
 
 		<form id="pagare-form" onsubmit="return emitirPagare(event)">
@@ -182,11 +176,6 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 		</form>
 
 		<script>
-		var nombres = ['María','Juan','Ana','Carlos','Laura','Pedro','Elena','Miguel','Isabel','Javier'];
-		var apellidos = ['García','Fernández','López','Martínez','Sánchez','Pérez','Gómez','Martín','Jiménez','Ruiz'];
-		var ciudades = ['Madrid','Barcelona','Valencia','Sevilla','Bilbao','Zaragoza','Málaga','Murcia','Palma','A Coruña'];
-		var calles = ['Calle Mayor 10','Av. de la Constitución 25','Paseo del Prado 8','Calle Gran Vía 42','Rambla de Cataluña 15','Calle Alcalá 100'];
-
 		function toggleAval() {
 			var on = document.getElementById('aval_enabled').checked;
 			document.getElementById('aval-fields').classList.toggle('hidden', !on);
@@ -194,40 +183,6 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 		function toggleAvalParcial() {
 			var parcial = document.getElementById('aval_alcance').value === 'parcial';
 			document.getElementById('aval-parcial-field').classList.toggle('hidden', !parcial);
-		}
-
-		function pick(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
-		function randNIF() {
-			var n = Math.floor(10000000+Math.random()*89999999);
-			var l = 'TRWAGMYFPDXBNJZSQVHLCKE';
-			return n + l[n%23];
-		}
-		function futureDate() {
-			var d = new Date();
-			d.setMonth(d.getMonth()+1+Math.floor(Math.random()*11));
-			return d.toISOString().split('T')[0];
-		}
-
-		function rellenarAleatorio() {
-			var f = document.getElementById('pagare-form');
-			var n1 = pick(nombres), a1 = pick(apellidos);
-			var n2 = pick(nombres), a2 = pick(apellidos);
-			f.importe.value = (100+Math.floor(Math.random()*9900)).toFixed(2);
-			f.vencimiento_tipo.value = Math.random()>0.3 ? 'fecha_fija' : 'a_la_vista';
-			f.vencimiento_fecha.value = futureDate();
-			f.localidad_pago.value = pick(ciudades);
-			f.localidad_emision.value = pick(ciudades);
-			f.fecha_emision.value = new Date().toISOString().split('T')[0];
-			f.beneficiario_nombre.value = n1;
-			f.beneficiario_apellido.value = a1;
-			f.beneficiario_nif.value = randNIF();
-			f.firmante_nombre.value = n2;
-			f.firmante_apellido.value = a2;
-			f.firmante_nif.value = randNIF();
-			f.firmante_direccion.value = pick(calles);
-			f.firmante_localidad.value = pick(ciudades);
-			f.firmante_cp.value = String(10000+Math.floor(Math.random()*89999));
-			f.firmante_pais.value = 'ES';
 		}
 
 		function emitirPagare(e) {
