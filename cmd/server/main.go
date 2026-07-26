@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -25,6 +26,9 @@ import (
 )
 
 func main() {
+	seedUsers := flag.Int("seed", 0, "provisiona N usuarios de desarrollo (con keypair) y sale; sólo en APP_ENV=development")
+	flag.Parse()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Error cargando configuración: %v", err)
@@ -58,6 +62,20 @@ func main() {
 	authStore.SetVault(vault)
 	// Provision blockchain keypairs automatically on user creation.
 	authStore.SetKeyProvisioner(cryptoSvc)
+
+	// Development seed: provision N users with keypairs, then exit. Never in prod.
+	if *seedUsers > 0 {
+		if !cfg.IsDevelopment() {
+			log.Fatalf("El seed de usuarios sólo está permitido en desarrollo (APP_ENV=development)")
+		}
+		log.Printf("Seed: provisionando %d usuarios de desarrollo…", *seedUsers)
+		created, err := authStore.SeedDevUsers(*seedUsers)
+		if err != nil {
+			log.Fatalf("Seed falló tras crear %d usuarios: %v", created, err)
+		}
+		log.Printf("Seed completado: %d usuarios nuevos (contraseña 'seed1234').", created)
+		return
+	}
 
 	if err := authStore.BootstrapAdmin(); err != nil {
 		log.Printf("Aviso: no se pudo hacer bootstrap del admin: %v", err)
