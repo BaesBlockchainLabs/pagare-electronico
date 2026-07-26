@@ -371,6 +371,16 @@ func main() {
 					return
 				}
 				alertas, lastRun := checker.Alertas()
+				// Regular users only see alerts for pagarés they own; admins see all.
+				if !principal.IsAdmin() {
+					mias := make([]scheduler.Alerta, 0, len(alertas))
+					for _, a := range alertas {
+						if consultaHandler.OwnsAsset(a.ID, principal) {
+							mias = append(mias, a)
+						}
+					}
+					alertas = mias
+				}
 				var last interface{}
 				if !lastRun.IsZero() {
 					last = lastRun.Format(time.RFC3339)

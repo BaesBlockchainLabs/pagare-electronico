@@ -407,6 +407,13 @@ func (h *ConsultaHandler) filterForPrincipal(raw map[string]interface{}, princip
 
 // assetOwnedBy returns true if any of the current owners (by pubkey) matches
 // one of the principal's claimed pubkeys.
+// OwnsAsset reports whether the principal owns (or appears in the history of)
+// the asset. Exported so other endpoints (e.g. alert filtering) can reuse the
+// same ownership rule as the consulta views.
+func (h *ConsultaHandler) OwnsAsset(id string, p *auth.Principal) bool {
+	return h.assetOwnedBy(id, p)
+}
+
 func (h *ConsultaHandler) assetOwnedBy(id string, p *auth.Principal) bool {
 	if p == nil {
 		return false
