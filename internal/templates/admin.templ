@@ -166,6 +166,11 @@ templ Admin(user *CurrentUser) {
 					</div>
 				</div>
 
+				<div id="m-create-hint" class="alert alert-info" style="margin-top:4px; display:none;">
+					@Icon("key")
+					Al crear el usuario se generará automáticamente su identidad (par de claves blockchain). La clave privada se guarda cifrada y nunca se muestra.
+				</div>
+
 				<div class="flex-between" style="margin-top:6px;">
 					<button type="button" class="btn btn-ghost btn-sm" onclick="closeUserModal()">Cancelar</button>
 					<button type="button" class="btn btn-primary btn-sm" id="m-save" onclick="saveUser()">Guardar</button>
@@ -315,6 +320,7 @@ templ Admin(user *CurrentUser) {
 			document.getElementById('m-username-field').style.display = '';
 			document.getElementById('m-password-field').style.display = '';
 			document.getElementById('m-edit-extra').style.display = 'none';
+			document.getElementById('m-create-hint').style.display = '';
 			document.getElementById('modal-error').classList.add('hidden');
 			document.getElementById('user-modal').classList.add('open');
 		}
@@ -341,6 +347,7 @@ templ Admin(user *CurrentUser) {
 			document.getElementById('m-username').setAttribute('disabled', 'disabled');
 			document.getElementById('m-password-field').style.display = 'none';
 			document.getElementById('m-edit-extra').style.display = '';
+			document.getElementById('m-create-hint').style.display = 'none';
 			renderModalPubkeys(u.pub_keys || []);
 			document.getElementById('modal-error').classList.add('hidden');
 			document.getElementById('user-modal').classList.add('open');
