@@ -289,6 +289,7 @@ func main() {
 		authH := auth.NewHandlers(authStore, cryptoSvc)
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", authH.Login)
+			r.Post("/register", authH.Register)
 			r.Post("/logout", authH.Logout)
 			r.Get("/me", authH.Me)
 			r.Post("/claim/challenge", authH.IssueClaimChallenge)

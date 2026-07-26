@@ -61,6 +61,78 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type registerRequest struct {
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	Nombre       string `json:"nombre"`
+	Apellido     string `json:"apellido"`
+	NIF          string `json:"nif"`
+	Direccion    string `json:"direccion"`
+	Localidad    string `json:"localidad"`
+	CodigoPostal string `json:"codigo_postal"`
+	Pais         string `json:"pais"`
+}
+
+// Register creates a new self-service user (role=user), provisions their
+// identity keypair and logs them straight in. Open registration, active
+// immediately. NOTE: this is the future integration point for Logalty KYC —
+// a verification step would gate activation here before the session is set.
+func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
+	var req registerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "invalid body"})
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" || len(req.Password) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "usuario obligatorio y contraseña de al menos 6 caracteres"})
+		return
+	}
+	if req.Nombre == "" || req.NIF == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "nombre y NIF son obligatorios"})
+		return
+	}
+
+	u := &User{
+		Username:     req.Username,
+		Role:         RoleUser,
+		Nombre:       req.Nombre,
+		Apellido:     req.Apellido,
+		NIF:          req.NIF,
+		Direccion:    req.Direccion,
+		Localidad:    req.Localidad,
+		CodigoPostal: req.CodigoPostal,
+		Pais:         req.Pais,
+		DisplayName:  strings.TrimSpace(req.Nombre + " " + req.Apellido),
+	}
+	if err := h.store.CreateUser(u, req.Password); err != nil {
+		if err == ErrUserAlreadyExists {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{"ok": false, "msg": "ese usuario ya existe"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+
+	// Provision the identity keypair (idempotent). Non-fatal: the account still
+	// works; a keypair can be provisioned later.
+	if _, err := h.store.EnsureUserKeypair(u.ID); err != nil {
+		fmt.Printf("[register] no se pudo generar keypair para %s: %v\n", u.Username, err)
+	}
+
+	principal, err := h.store.GetPrincipalByID(u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "usuario creado pero no se pudo iniciar sesión; entra manualmente"})
+		return
+	}
+	if err := SetSessionCookie(w, principal); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "usuario creado pero no se pudo iniciar sesión; entra manualmente"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, loginResponse{OK: true, Username: principal.Username, Role: principal.Role})
+}
+
 // Logout clears the session cookie.
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 	ClearSessionCookie(w)

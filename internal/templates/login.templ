@@ -2,62 +2,141 @@ package templates
 
 templ Login(user *CurrentUser) {
 	@Base("Iniciar sesión", user) {
-		<div class="card" style="max-width:420px;margin:40px auto;">
-			@PageHead("Acceso", "Iniciar sesión", "Identifícate para acceder a tus pagarés y operaciones.")
+		<div class="card" style="max-width:460px;margin:40px auto;">
+			@PageHead("Acceso", "Iniciar sesión", "Identifícate o crea una cuenta para acceder a tus pagarés y operaciones.")
+
+			<div class="tabbar" style="display:flex;gap:8px;margin-bottom:18px;">
+				<button type="button" id="tab-login" class="btn btn-outline btn-sm" style="flex:1;" onclick="showAuthTab('login')">Entrar</button>
+				<button type="button" id="tab-register" class="btn btn-ghost btn-sm" style="flex:1;" onclick="showAuthTab('register')">Crear cuenta</button>
+			</div>
+
+			<div id="auth-error" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+			<div id="auth-ok" class="alert alert-success hidden" style="margin-bottom:12px;"></div>
 
 			<form id="login-form" onsubmit="return doLogin(event)">
 				<div class="field">
 					<label class="form-label">Usuario</label>
-					<input type="text" id="login-user" placeholder="admin" autocomplete="username" />
+					<input type="text" id="login-user" placeholder="usuario" autocomplete="username" />
 				</div>
 				<div class="field">
 					<label class="form-label">Contraseña</label>
 					<input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" />
 				</div>
-
-				<div id="login-error" class="alert alert-error hidden"></div>
-				<div id="login-ok" class="alert alert-success hidden"></div>
-
 				<div class="mt-4">
-					<button type="submit" class="btn btn-primary" style="width:100%;">
-						Entrar
-					</button>
+					<button type="submit" class="btn btn-primary" style="width:100%;">Entrar</button>
+				</div>
+			</form>
+
+			<form id="register-form" class="hidden" onsubmit="return doRegister(event)">
+				<div class="form-grid">
+					<div class="field">
+						<label class="form-label">Usuario (login) *</label>
+						<input type="text" id="reg-user" placeholder="tu-usuario" autocomplete="username" />
+					</div>
+					<div class="field">
+						<label class="form-label">Contraseña * (mín. 6)</label>
+						<input type="password" id="reg-pass" placeholder="••••••••" autocomplete="new-password" />
+					</div>
+					<div class="field">
+						<label class="form-label">Nombre *</label>
+						<input type="text" id="reg-nombre" placeholder="Juan" />
+					</div>
+					<div class="field">
+						<label class="form-label">Apellidos</label>
+						<input type="text" id="reg-apellido" placeholder="Pérez García" />
+					</div>
+					<div class="field">
+						<label class="form-label">NIF / NIE / CIF *</label>
+						<input type="text" id="reg-nif" placeholder="12345678Z" />
+					</div>
+					<div class="field">
+						<label class="form-label">País (ISO)</label>
+						<input type="text" id="reg-pais" placeholder="ES" value="ES" maxlength="2" />
+					</div>
+					<div class="field" style="grid-column:1/-1;">
+						<label class="form-label">Dirección</label>
+						<input type="text" id="reg-direccion" placeholder="Calle Mayor 10" />
+					</div>
+					<div class="field">
+						<label class="form-label">Localidad</label>
+						<input type="text" id="reg-localidad" placeholder="Madrid" />
+					</div>
+					<div class="field">
+						<label class="form-label">Código Postal</label>
+						<input type="text" id="reg-cp" placeholder="28001" />
+					</div>
+				</div>
+				<p class="desc" style="margin-top:8px;">Al crear la cuenta se genera automáticamente tu identidad (par de claves); la privada se guarda cifrada y nunca se muestra.</p>
+				<div class="mt-4">
+					<button type="submit" class="btn btn-primary" style="width:100%;">Crear cuenta y entrar</button>
 				</div>
 			</form>
 		</div>
 
 		<script>
+		function showAuthTab(tab) {
+			var isLogin = tab === 'login';
+			document.getElementById('login-form').classList.toggle('hidden', !isLogin);
+			document.getElementById('register-form').classList.toggle('hidden', isLogin);
+			document.getElementById('tab-login').className = 'btn btn-sm ' + (isLogin ? 'btn-outline' : 'btn-ghost');
+			document.getElementById('tab-register').className = 'btn btn-sm ' + (isLogin ? 'btn-ghost' : 'btn-outline');
+			document.getElementById('tab-login').style.flex = '1';
+			document.getElementById('tab-register').style.flex = '1';
+			document.getElementById('auth-error').classList.add('hidden');
+			document.getElementById('auth-ok').classList.add('hidden');
+		}
+
+		function authResult(data) {
+			var err = document.getElementById('auth-error');
+			var ok = document.getElementById('auth-ok');
+			err.classList.add('hidden'); ok.classList.add('hidden');
+			if (data && data.ok) {
+				ok.textContent = 'Sesión iniciada. Redirigiendo…';
+				ok.classList.remove('hidden');
+				setTimeout(function(){ window.location.href = '/'; }, 250);
+			} else {
+				err.textContent = (data && data.msg) || 'Ha ocurrido un error';
+				err.classList.remove('hidden');
+			}
+		}
+
 		function doLogin(e) {
 			e.preventDefault();
-			var err = document.getElementById('login-error');
-			var ok = document.getElementById('login-ok');
-			err.classList.add('hidden');
-			ok.classList.add('hidden');
-
-			var user = document.getElementById('login-user').value.trim();
-			var pass = document.getElementById('login-pass').value;
-
 			fetch('/api/auth/login', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ username: user, password: pass })
+				body: JSON.stringify({
+					username: document.getElementById('login-user').value.trim(),
+					password: document.getElementById('login-pass').value
+				})
 			})
 			.then(function(r){ return r.json(); })
-			.then(function(data){
-				if (data && data.ok) {
-					ok.textContent = 'Sesión iniciada. Redirigiendo…';
-					ok.classList.remove('hidden');
-					// Small delay so the cookie is definitely set
-					setTimeout(function(){ window.location.href = '/'; }, 250);
-				} else {
-					err.textContent = (data && data.msg) || 'Credenciales incorrectas';
-					err.classList.remove('hidden');
-				}
+			.then(authResult)
+			.catch(function(){ authResult({ok:false, msg:'Error de conexión'}); });
+			return false;
+		}
+
+		function doRegister(e) {
+			e.preventDefault();
+			fetch('/api/auth/register', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					username: document.getElementById('reg-user').value.trim(),
+					password: document.getElementById('reg-pass').value,
+					nombre: document.getElementById('reg-nombre').value.trim(),
+					apellido: document.getElementById('reg-apellido').value.trim(),
+					nif: document.getElementById('reg-nif').value.trim(),
+					direccion: document.getElementById('reg-direccion').value.trim(),
+					localidad: document.getElementById('reg-localidad').value.trim(),
+					codigo_postal: document.getElementById('reg-cp').value.trim(),
+					pais: document.getElementById('reg-pais').value.trim()
+				})
 			})
-			.catch(function(){
-				err.textContent = 'Error de conexión';
-				err.classList.remove('hidden');
-			});
+			.then(function(r){ return r.json(); })
+			.then(authResult)
+			.catch(function(){ authResult({ok:false, msg:'Error de conexión'}); });
+			return false;
 		}
 		</script>
 	}
