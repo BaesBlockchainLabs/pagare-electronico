@@ -31,20 +31,7 @@ templ PagarAnular(user *CurrentUser) {
 						<input type="text" id="pag-motivo" placeholder="Motivo de la anulación si aplica"/>
 					</div>
 				</div>
-				<fieldset>
-					<legend>Identidad del propietario (opcional)</legend>
-					<div id="pag-active-key" class="mb-4"></div>
-					<div class="form-grid">
-						<div class="field">
-							<label class="form-label">Clave pública</label>
-							<input type="text" id="pag-from-pub" placeholder="Pub key"/>
-						</div>
-						<div class="field">
-							<label class="form-label">Clave privada</label>
-							<input type="text" id="pag-from-pvt" placeholder="Pvt key"/>
-						</div>
-					</div>
-				</fieldset>
+				<p class="desc">La acción la firma tu identidad (usuario logueado). Debes ser el tenedor actual del pagaré; no necesitas introducir claves.</p>
 				<div id="pago-error" class="alert alert-error hidden"></div>
 				<div id="pago-ok" class="alert alert-success hidden"></div>
 				<div class="mt-4">
@@ -75,11 +62,7 @@ templ PagarAnular(user *CurrentUser) {
 					motivo: document.getElementById('pag-motivo').value.trim() || undefined
 				}
 			};
-			var fromPub = document.getElementById('pag-from-pub').value.trim();
-			var fromPvt = document.getElementById('pag-from-pvt').value.trim();
-			if (fromPub && fromPvt) {
-				payload.from = {pub: fromPub, pvt: fromPvt};
-			}
+			// El servidor firma con la clave del usuario logueado; no se envía 'from'.
 
 			btn.disabled = true;
 			btn.textContent = 'Procesando…';
@@ -111,8 +94,6 @@ templ PagarAnular(user *CurrentUser) {
 			return false;
 		}
 
-		// Prefill the signing identity from the active key (if loaded in /identidades).
-		applyActiveKey('pag-from-pub', 'pag-from-pvt', 'pag-active-key');
 		</script>
 	}
 }

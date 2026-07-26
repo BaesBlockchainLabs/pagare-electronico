@@ -60,87 +60,68 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			<fieldset>
 				<legend>Beneficiario</legend>
 				<div class="field">
-					<label class="form-label">Seleccionar de usuarios registrados (sale de la base de datos)</label>
+					<label class="form-label">Seleccionar usuario registrado</label>
 					<select id="beneficiario-select" onchange="fillFromUser(this.value, 'beneficiario')">
-						<option value="">-- teclear a mano o seleccionar --</option>
+						<option value="">-- selecciona un usuario --</option>
 					</select>
 				</div>
+				<label class="check-row" for="beneficiario-manual">
+					<input type="checkbox" id="beneficiario-manual" onchange="toggleManual('beneficiario')"/>
+					<span>Introducir a mano <small>(para un beneficiario que no está registrado en la plataforma)</small></span>
+				</label>
 				<div class="form-grid-3">
 					<div class="field">
 						<label class="form-label" for="beneficiario_nombre">Nombre *</label>
-						<input type="text" id="beneficiario_nombre" name="beneficiario_nombre" required/>
+						<input type="text" id="beneficiario_nombre" name="beneficiario_nombre" required readonly/>
 					</div>
 					<div class="field">
 						<label class="form-label" for="beneficiario_apellido">Apellidos</label>
-						<input type="text" id="beneficiario_apellido" name="beneficiario_apellido"/>
+						<input type="text" id="beneficiario_apellido" name="beneficiario_apellido" readonly/>
 					</div>
 					<div class="field">
 						<label class="form-label" for="beneficiario_nif">NIF / NIE / CIF *</label>
-						<input type="text" id="beneficiario_nif" name="beneficiario_nif" required placeholder="12345678Z"/>
+						<input type="text" id="beneficiario_nif" name="beneficiario_nif" required placeholder="12345678Z" readonly/>
 					</div>
 				</div>
 			</fieldset>
 
 			<fieldset>
-				<legend>Firmante</legend>
-				<div class="field">
-					<label class="form-label">Seleccionar de usuarios registrados (sale de la base de datos)</label>
-					<select id="firmante-select" onchange="fillFromUser(this.value, 'firmante')">
-						<option value="">-- teclear a mano o seleccionar --</option>
-					</select>
-				</div>
+				<legend>Firmante (emisor)</legend>
+				<p class="desc" style="margin-bottom:10px;">Eres tú, el usuario que emite el pagaré. Tus datos se rellenan automáticamente y el pagaré se firma con tu identidad; no necesitas introducir claves.</p>
+				<label class="check-row" for="firmante-editar">
+					<input type="checkbox" id="firmante-editar" onchange="toggleEmisorEdit()"/>
+					<span>Editar mis datos para este pagaré <small>(no modifica tu perfil)</small></span>
+				</label>
 				<div class="form-grid-3">
 					<div class="field">
 						<label class="form-label" for="firmante_nombre">Nombre *</label>
-						<input type="text" id="firmante_nombre" name="firmante_nombre" required/>
+						<input type="text" id="firmante_nombre" name="firmante_nombre" required readonly/>
 					</div>
 					<div class="field">
 						<label class="form-label" for="firmante_apellido">Apellidos</label>
-						<input type="text" id="firmante_apellido" name="firmante_apellido"/>
+						<input type="text" id="firmante_apellido" name="firmante_apellido" readonly/>
 					</div>
 					<div class="field">
 						<label class="form-label" for="firmante_nif">NIF / NIE / CIF *</label>
-						<input type="text" id="firmante_nif" name="firmante_nif" required/>
+						<input type="text" id="firmante_nif" name="firmante_nif" required readonly/>
 					</div>
 				</div>
 				<div class="form-grid">
 					<div class="field">
 						<label class="form-label" for="firmante_direccion">Dirección *</label>
-						<input type="text" id="firmante_direccion" name="firmante_direccion" required/>
+						<input type="text" id="firmante_direccion" name="firmante_direccion" required readonly/>
 					</div>
 					<div class="field">
 						<label class="form-label" for="firmante_localidad">Localidad *</label>
-						<input type="text" id="firmante_localidad" name="firmante_localidad" required/>
+						<input type="text" id="firmante_localidad" name="firmante_localidad" required readonly/>
 					</div>
 					<div class="field">
 						<label class="form-label" for="firmante_cp">Código postal *</label>
-						<input type="text" id="firmante_cp" name="firmante_cp" required/>
+						<input type="text" id="firmante_cp" name="firmante_cp" required readonly/>
 					</div>
 					<div class="field">
 						<label class="form-label" for="firmante_pais">País (ISO) *</label>
-						<input type="text" id="firmante_pais" name="firmante_pais" required value="ES" maxlength="2"/>
-					</div>
-				</div>
-			</fieldset>
-
-			<fieldset>
-				<legend>Identidad blockchain del firmante (opcional)</legend>
-				<p style="font-size:0.85rem; color:var(--ink-soft); margin-bottom:8px;">Usa una de tus claves vinculadas para firmar. El pub se vinculará automáticamente a tu cuenta tras emitir.</p>
-				<div id="firmante-active-key" class="mb-4"></div>
-				<div class="field">
-					<label class="form-label">Mis claves vinculadas</label>
-					<select id="firmante-from-pub-select" onchange="if (this.value) document.getElementById('firmante-from-pub').value = this.value;">
-						<option value="">-- cargar mis claves --</option>
-					</select>
-				</div>
-				<div class="form-grid">
-					<div class="field">
-						<label class="form-label">Clave pública</label>
-						<input type="text" id="firmante-from-pub" placeholder="pub de tu keypair"/>
-					</div>
-					<div class="field">
-						<label class="form-label">Clave privada (temporal)</label>
-						<input type="text" id="firmante-from-pvt" placeholder="pvt (solo para esta emisión)"/>
+						<input type="text" id="firmante_pais" name="firmante_pais" required value="ES" maxlength="2" readonly/>
 					</div>
 				</div>
 			</fieldset>
@@ -287,12 +268,8 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 				}
 			};
 
-			// Collect optional blockchain identity for signing (from pub/pvt)
-			var fromPub = document.getElementById('firmante-from-pub').value.trim();
-			var fromPvt = document.getElementById('firmante-from-pvt').value.trim();
-			if (fromPub && fromPvt) {
-				payload.from = { pub: fromPub, pvt: fromPvt };
-			}
+			// No blockchain identity is sent: the server signs on our behalf with
+			// the logged-in user's stored key.
 
 			if (document.getElementById('aval_enabled').checked) {
 				var alcance = f.aval_alcance.value;
@@ -322,18 +299,13 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 					okEl.textContent = "Pagaré emitido correctamente. ID: " + data.id + " (coste: " + data.cost + ")";
 					okEl.classList.remove('hidden');
 
-					// Auto-link the from pub we just used (so the asset belongs to the regular user)
-					if (fromPub && fromPvt) {
-						fetch('/api/auth/claim', {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ pub: fromPub, pvt: fromPvt })
-						}).catch(function(){});
-					}
-
 					f.reset();
 					f.denominacion.value = "PAGARÉ";
 					f.firmante_pais.value = "ES";
+					document.getElementById('beneficiario-manual').checked = false;
+					toggleManual('beneficiario');
+					document.getElementById('firmante-editar').checked = false;
+					fetchAndFillEmisor();
 					toggleAval();
 					toggleAvalParcial();
 					window.scrollTo({top: 0, behavior: 'smooth'});
@@ -355,97 +327,78 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			return false;
 		}
 
-		// Pre-fill the signing pub with one of the user's linked keys (for regular users)
-		// and populate the dropdown
-		fetch('/api/auth/me')
-			.then(function(r) { return r.json(); })
-			.then(function(data) {
-				if (data && data.ok && data.pub_keys && data.pub_keys.length > 0) {
-					var fp = document.getElementById('firmante-from-pub');
-					var sel = document.getElementById('firmante-from-pub-select');
-					if (sel) {
-						// clear and add options
-						sel.innerHTML = '<option value="">-- seleccionar mi clave --</option>';
-						data.pub_keys.forEach(function(pk) {
-							var opt = document.createElement('option');
-							opt.value = pk;
-							opt.textContent = pk.substring(0, 20) + '...';
-							sel.appendChild(opt);
-						});
-					}
-					if (fp && !fp.value && data.pub_keys.length > 0) {
-						fp.value = data.pub_keys[0];
-					}
-				}
-			})
-			.catch(function(){});
+		// Autocompletar el emisor (firmante) con los datos del usuario logueado.
+		var BENEF_IDS = ['beneficiario_nombre','beneficiario_apellido','beneficiario_nif'];
+		var EMISOR_IDS = ['firmante_nombre','firmante_apellido','firmante_nif','firmante_direccion','firmante_localidad','firmante_cp','firmante_pais'];
 
-		// Cargar usuarios de la plataforma para los selects (sale de la "BBDD" de usuarios)
+		function fetchAndFillEmisor() {
+			fetch('/api/perfil')
+				.then(function(r) { return r.json(); })
+				.then(function(u) {
+					if (!u || !u.ok) return;
+					document.getElementById('firmante_nombre').value = u.nombre || '';
+					document.getElementById('firmante_apellido').value = u.apellido || '';
+					document.getElementById('firmante_nif').value = u.nif || '';
+					document.getElementById('firmante_direccion').value = u.direccion || '';
+					document.getElementById('firmante_localidad').value = u.localidad || '';
+					document.getElementById('firmante_cp').value = u.codigo_postal || '';
+					document.getElementById('firmante_pais').value = u.pais || 'ES';
+				})
+				.catch(function(){});
+		}
+
+		// Editar a mano los datos del emisor (sin tocar el perfil).
+		function toggleEmisorEdit() {
+			var on = document.getElementById('firmante-editar').checked;
+			EMISOR_IDS.forEach(function(id){ document.getElementById(id).readOnly = !on; });
+			if (!on) fetchAndFillEmisor(); // al desmarcar, restauramos mis datos
+		}
+
+		// Beneficiario: desplegable por defecto; "introducir a mano" para no registrados.
+		function toggleManual(tipo) {
+			if (tipo !== 'beneficiario') return;
+			var manual = document.getElementById('beneficiario-manual').checked;
+			var sel = document.getElementById('beneficiario-select');
+			sel.disabled = manual;
+			if (manual) { sel.value = ''; }
+			BENEF_IDS.forEach(function(id){
+				var el = document.getElementById(id);
+				el.readOnly = !manual;
+				if (manual) el.value = '';
+			});
+		}
+
+		// Cargar usuarios de la plataforma para el desplegable de beneficiario.
 		function loadUsuariosPlataforma() {
 			fetch('/api/usuarios')
 				.then(function(r) { return r.json(); })
 				.then(function(data) {
 					if (!data.ok || !data.usuarios) return;
 					var bens = document.getElementById('beneficiario-select');
-					var firs = document.getElementById('firmante-select');
-					if (bens) {
-						bens.innerHTML = '<option value="">-- teclear a mano o seleccionar --</option>';
-						data.usuarios.forEach(function(u) {
-							var opt = document.createElement('option');
-							opt.value = JSON.stringify(u);
-							opt.textContent = (u.nombre || '') + ' ' + (u.apellido || '') + ' (' + (u.nif || '') + ')';
-							bens.appendChild(opt);
-						});
-					}
-					if (firs) {
-						firs.innerHTML = '<option value="">-- teclear a mano o seleccionar --</option>';
-						data.usuarios.forEach(function(u) {
-							var opt = document.createElement('option');
-							opt.value = JSON.stringify(u);
-							opt.textContent = (u.nombre || '') + ' ' + (u.apellido || '') + ' (' + (u.nif || '') + ')';
-							firs.appendChild(opt);
-						});
-					}
+					if (!bens) return;
+					bens.innerHTML = '<option value="">-- selecciona un usuario --</option>';
+					data.usuarios.forEach(function(u) {
+						var opt = document.createElement('option');
+						opt.value = JSON.stringify(u);
+						opt.textContent = (u.nombre || '') + ' ' + (u.apellido || '') + ' (' + (u.nif || '') + ')';
+						bens.appendChild(opt);
+					});
 				})
 				.catch(function(){});
 		}
 
 		function fillFromUser(jsonStr, tipo) {
-			if (!jsonStr) return;
+			if (!jsonStr || tipo !== 'beneficiario') return;
 			var u;
 			try { u = JSON.parse(jsonStr); } catch(e) { return; }
-			if (tipo === 'beneficiario') {
-				document.getElementById('beneficiario_nombre').value = u.nombre || '';
-				document.getElementById('beneficiario_apellido').value = u.apellido || '';
-				document.getElementById('beneficiario_nif').value = u.nif || '';
-			} else if (tipo === 'firmante') {
-				document.getElementById('firmante_nombre').value = u.nombre || '';
-				document.getElementById('firmante_apellido').value = u.apellido || '';
-				document.getElementById('firmante_nif').value = u.nif || '';
-				document.getElementById('firmante_direccion').value = u.direccion || '';
-				document.getElementById('firmante_localidad').value = u.localidad || '';
-				document.getElementById('firmante_cp').value = u.codigo_postal || '';
-				document.getElementById('firmante_pais').value = u.pais || 'ES';
-				// Repopulate pub dropdown with this user's keys
-				var pubSel = document.getElementById('firmante-from-pub-select');
-				var pubIn = document.getElementById('firmante-from-pub');
-				if (pubSel && u.pub_keys) {
-					pubSel.innerHTML = '<option value="">-- seleccionar clave --</option>';
-					u.pub_keys.forEach(function(pk) {
-						var o = document.createElement('option');
-						o.value = pk;
-						o.textContent = pk.substring(0,18) + '...';
-						pubSel.appendChild(o);
-					});
-					if (u.pub_keys.length > 0 && pubIn) pubIn.value = u.pub_keys[0];
-				}
-			}
+			document.getElementById('beneficiario_nombre').value = u.nombre || '';
+			document.getElementById('beneficiario_apellido').value = u.apellido || '';
+			document.getElementById('beneficiario_nif').value = u.nif || '';
 		}
 
 		// Cargar al inicio
 		loadUsuariosPlataforma();
-		// Prefill the signing identity from the active key (if loaded in /identidades).
-		applyActiveKey('firmante-from-pub', 'firmante-from-pvt', 'firmante-active-key');
+		fetchAndFillEmisor();
 		</script>
 	}
 }

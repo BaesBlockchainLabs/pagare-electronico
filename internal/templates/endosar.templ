@@ -10,8 +10,17 @@ templ Endosar(user *CurrentUser) {
 					<input type="text" id="end-id" placeholder="ID del asset en blockchain"/>
 				</div>
 				<div class="field">
-					<label class="form-label">Clave pública del endosatario *</label>
-					<input type="text" id="end-to" placeholder="Clave pública del nuevo beneficiario"/>
+					<label class="form-label">Endosatario (nuevo beneficiario) *</label>
+					<select id="end-to-select" onchange="onEndosatarioSelect(this.value)">
+						<option value="">-- selecciona un usuario --</option>
+					</select>
+				</div>
+				<label class="check-row" for="end-to-manual">
+					<input type="checkbox" id="end-to-manual" onchange="toggleEndToManual()"/>
+					<span>Introducir clave pública a mano <small>(endosatario no registrado)</small></span>
+				</label>
+				<div class="field">
+					<input type="text" id="end-to" placeholder="Clave pública del nuevo beneficiario" readonly/>
 				</div>
 				<div class="form-grid">
 					<div class="field">
@@ -33,20 +42,7 @@ templ Endosar(user *CurrentUser) {
 						</select>
 					</div>
 				</div>
-				<fieldset>
-					<legend>Identidad del endosante (opcional)</legend>
-					<div id="end-active-key" class="mb-4"></div>
-					<div class="form-grid">
-						<div class="field">
-							<label class="form-label">Clave pública</label>
-							<input type="text" id="end-from-pub" placeholder="Pub key"/>
-						</div>
-						<div class="field">
-							<label class="form-label">Clave privada</label>
-							<input type="text" id="end-from-pvt" placeholder="Pvt key"/>
-						</div>
-					</div>
-				</fieldset>
+				<p class="desc">Endosas tú, el usuario logueado (endosante). El endoso se firma con tu identidad; no necesitas introducir claves.</p>
 				<div id="endoso-error" class="alert alert-error hidden"></div>
 				<div id="endoso-ok" class="alert alert-success hidden"></div>
 				<div class="mt-4">
@@ -77,11 +73,7 @@ templ Endosar(user *CurrentUser) {
 					clausula: document.getElementById('end-clausula').value || undefined
 				}
 			};
-			var fromPub = document.getElementById('end-from-pub').value.trim();
-			var fromPvt = document.getElementById('end-from-pvt').value.trim();
-			if (fromPub && fromPvt) {
-				payload.from = {pub: fromPub, pvt: fromPvt};
-			}
+			// El servidor firma con la clave del usuario logueado; no se envía 'from'.
 
 			btn.disabled = true;
 			btn.textContent = 'Endosando…';
@@ -113,8 +105,37 @@ templ Endosar(user *CurrentUser) {
 			return false;
 		}
 
-		// Prefill the signing identity from the active key (if loaded in /identidades).
-		applyActiveKey('end-from-pub', 'end-from-pvt', 'end-active-key');
+		// Cargar usuarios para el desplegable de endosatario.
+		function loadEndosatarios() {
+			fetch('/api/usuarios')
+				.then(function(r){ return r.json(); })
+				.then(function(data){
+					if (!data.ok || !data.usuarios) return;
+					var sel = document.getElementById('end-to-select');
+					sel.innerHTML = '<option value="">-- selecciona un usuario --</option>';
+					data.usuarios.forEach(function(u){
+						if (!u.pub_keys || u.pub_keys.length === 0) return; // sin clave no puede recibir
+						var opt = document.createElement('option');
+						opt.value = u.pub_keys[0];
+						opt.textContent = (u.nombre||'') + ' ' + (u.apellido||'') + ' (' + (u.nif||'') + ')';
+						sel.appendChild(opt);
+					});
+				})
+				.catch(function(){});
+		}
+		function onEndosatarioSelect(pub) {
+			if (document.getElementById('end-to-manual').checked) return;
+			document.getElementById('end-to').value = pub || '';
+		}
+		function toggleEndToManual() {
+			var manual = document.getElementById('end-to-manual').checked;
+			document.getElementById('end-to-select').disabled = manual;
+			var to = document.getElementById('end-to');
+			to.readOnly = !manual;
+			if (manual) { document.getElementById('end-to-select').value=''; to.value=''; }
+		}
+
+		loadEndosatarios();
 		</script>
 	}
 }
