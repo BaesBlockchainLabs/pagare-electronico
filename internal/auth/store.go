@@ -14,6 +14,8 @@ import (
 
 	_ "modernc.org/sqlite"
 	"golang.org/x/crypto/bcrypt"
+
+	"pagare/internal/keyvault"
 )
 
 const (
@@ -30,7 +32,8 @@ var (
 )
 
 type Store struct {
-	db *sql.DB
+	db    *sql.DB
+	vault *keyvault.Vault // seals/opens users' private keys; see keys.go
 }
 
 // NewStore opens/creates the SQLite DB for users in the data dir.
@@ -83,6 +86,20 @@ func (s *Store) initSchema() error {
 			created_at DATETIME
 		);
 		CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+		-- Encrypted private keys, one row per public key. pvt_sealed is produced
+		-- by internal/keyvault (never plaintext). enc_version/enc_algo make the
+		-- table self-describing so the sealing scheme can evolve (A -> B) without
+		-- breaking previously stored rows.
+		CREATE TABLE IF NOT EXISTS user_keys (
+			pub         TEXT PRIMARY KEY,
+			user_id     TEXT NOT NULL,
+			pvt_sealed  TEXT NOT NULL,
+			enc_version INTEGER NOT NULL,
+			enc_algo    TEXT NOT NULL,
+			created_at  DATETIME
+		);
+		CREATE INDEX IF NOT EXISTS idx_user_keys_user ON user_keys(user_id);
 	`)
 	return err
 }
@@ -453,8 +470,12 @@ func (s *Store) UpdateProfile(userID string, p ProfileInput) error {
 	return s.UpdateUser(u)
 }
 
-// DeleteUser removes a user completely (admin action).
+// DeleteUser removes a user completely (admin action), including any stored
+// encrypted private keys.
 func (s *Store) DeleteUser(id string) error {
+	if _, err := s.db.Exec(`DELETE FROM user_keys WHERE user_id = ?`, id); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`DELETE FROM users WHERE id = ?`, id)
 	return err
 }

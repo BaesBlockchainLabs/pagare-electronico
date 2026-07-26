@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -16,6 +17,7 @@ import (
 	"pagare/internal/config"
 	"pagare/internal/crypto"
 	"pagare/internal/handler"
+	"pagare/internal/keyvault"
 	"pagare/internal/scheduler"
 
 	"github.com/go-chi/chi/v5"
@@ -42,6 +44,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error inicializando almacén de usuarios: %v", err)
 	}
+
+	// Keyvault: seals users' private keys at rest (AES-256-GCM, master key from
+	// KEYS_MASTER_KEY). Mandatory in production; falls back to an insecure dev
+	// key otherwise so local runs need no setup.
+	vault, err := keyvault.LoadFromEnv(os.Getenv("KEYS_MASTER_KEY"), cfg.IsDevelopment())
+	if err != nil {
+		log.Fatalf("Error inicializando keyvault: %v", err)
+	}
+	if vault.UsingDevKey() {
+		log.Printf("⚠️  keyvault usando clave de DESARROLLO insegura (define KEYS_MASTER_KEY en producción)")
+	}
+	authStore.SetVault(vault)
+
 	if err := authStore.BootstrapAdmin(); err != nil {
 		log.Printf("Aviso: no se pudo hacer bootstrap del admin: %v", err)
 	}
