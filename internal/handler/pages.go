@@ -87,24 +87,6 @@ func (p *PageHandler) Verificar(w http.ResponseWriter, r *http.Request) {
 	templates.Verificar(id, network, user).Render(r.Context(), w)
 }
 
-func (p *PageHandler) Identidades(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Redirect(w, r, "/identidades", http.StatusSeeOther)
-		return
-	}
-	principal := p.requirePrincipal(w, r)
-	if principal == nil {
-		return
-	}
-	user := &templates.CurrentUser{
-		Username: principal.Username,
-		Role:     string(principal.Role),
-		IsAdmin:  principal.IsAdmin(),
-	}
-	w.Header().Set("Content-Type", "text/html")
-	templates.Identidades(user).Render(r.Context(), w)
-}
-
 func (p *PageHandler) Admin(w http.ResponseWriter, r *http.Request) {
 	principal := p.requirePrincipal(w, r)
 	if principal == nil {

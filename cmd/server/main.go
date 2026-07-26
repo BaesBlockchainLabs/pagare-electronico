@@ -105,7 +105,6 @@ func main() {
 	r.Get("/pagares/historico", pageHandler.Historico)
 	r.Get("/pagares/endosar", pageHandler.Endosar)
 	r.Get("/pagares/pagar", pageHandler.PagarAnular)
-	r.Get("/identidades", pageHandler.Identidades)
 	r.Get("/perfil", pageHandler.Perfil)
 
 	// requireAdmin guards admin-only action endpoints (JSON 403 for non-admins).
@@ -347,12 +346,6 @@ func main() {
 				})
 			}
 			handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "usuarios": views})
-		})
-
-		r.Route("/identidades", func(r chi.Router) {
-			r.Post("/keypair", identidadHandler.GenerateKeypair)
-			r.Put("/keypair/pub", identidadHandler.AddPubKey)
-			r.Post("/did", identidadHandler.GenerateDID)
 		})
 
 		r.Route("/pagares", func(r chi.Router) {

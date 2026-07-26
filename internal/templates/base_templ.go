@@ -61,53 +61,49 @@ func Base(title string, user *CurrentUser) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if user != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<a href=\"/identidades\" class=\"nav-link\">Identidades</a> ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
 			if user.IsAdmin {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<a href=\"/admin\" class=\"nav-link\">Admin</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<a href=\"/admin\" class=\"nav-link\">Admin</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, " <a href=\"/perfil\" class=\"nav-link\" style=\"margin:0 4px 0 4px; font-size:0.82rem; white-space:nowrap; align-self:center;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " <a href=\"/perfil\" class=\"nav-link\" style=\"margin:0 4px 0 4px; font-size:0.82rem; white-space:nowrap; align-self:center;\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(user.Username)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/base.templ`, Line: 541, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/base.templ`, Line: 540, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, " <small style=\"opacity:.65\">(")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, " <small style=\"opacity:.65\">(")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(user.Role)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/base.templ`, Line: 541, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/base.templ`, Line: 540, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, ")</small></a> <a href=\"#\" onclick=\"doLogout(); return false;\" class=\"nav-link\" style=\"color:#B3402E; font-weight:600\">Cerrar sesión</a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, ")</small></a> <a href=\"#\" onclick=\"doLogout(); return false;\" class=\"nav-link\" style=\"color:#B3402E; font-weight:600\">Cerrar sesión</a> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<a href=\"/login\" class=\"nav-link\">Iniciar sesión</a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<a href=\"/login\" class=\"nav-link\">Iniciar sesión</a> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<a href=\"/pagares/nuevo\" class=\"nav-cta\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<a href=\"/pagares/nuevo\" class=\"nav-cta\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -115,7 +111,7 @@ func Base(title string, user *CurrentUser) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "Nuevo pagaré</a></div></div></nav><main class=\"main\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "Nuevo pagaré</a></div></div></nav><main class=\"main\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -123,7 +119,7 @@ func Base(title string, user *CurrentUser) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</main><footer class=\"footer\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</main><footer class=\"footer\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -131,7 +127,7 @@ func Base(title string, user *CurrentUser) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div>Pagaré Electrónico sobre <a href=\"https://api.blockchainfue.com/doc/api\">BlockchainFUE</a> — registro fehaciente e inalterable.</div><div style=\"margin-top:6px\"><a href=\"https://www.baeslegalcripto.eu/legalcripto/\">LegalCripto by BAES</a></div></footer><script>\n\t\t// The nav is rendered server-side from the authenticated user, so it is\n\t\t// consistent across every page (including the public verification page).\n\t\tfunction doLogout() {\n\t\t\tclearActiveKey();\n\t\t\tfetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })\n\t\t\t\t.then(function() { window.location.href = '/login'; })\n\t\t\t\t.catch(function() { window.location.href = '/login'; });\n\t\t}\n\n\t\t// ===== Active signing key (kept in sessionStorage until logout / tab close) =====\n\t\tvar ACTIVE_KEY_STORE = 'pagare_active_key';\n\t\twindow.getActiveKey = function() {\n\t\t\ttry { return JSON.parse(sessionStorage.getItem(ACTIVE_KEY_STORE) || 'null'); } catch (e) { return null; }\n\t\t};\n\t\twindow.setActiveKey = function(k) {\n\t\t\tif (!k || !k.pub || !k.pvt) return false;\n\t\t\tsessionStorage.setItem(ACTIVE_KEY_STORE, JSON.stringify({ pub: k.pub, pvt: k.pvt }));\n\t\t\treturn true;\n\t\t};\n\t\twindow.clearActiveKey = function() { sessionStorage.removeItem(ACTIVE_KEY_STORE); };\n\t\t// applyActiveKey fills a pub/pvt field pair from the active key and renders a\n\t\t// banner (with a \"Quitar\" link) into bannerId. Used by the signing forms.\n\t\twindow.applyActiveKey = function(pubId, pvtId, bannerId) {\n\t\t\tvar k = getActiveKey();\n\t\t\tvar banner = bannerId ? document.getElementById(bannerId) : null;\n\t\t\tif (!k || !k.pub) { if (banner) banner.innerHTML = ''; return; }\n\t\t\tvar pub = document.getElementById(pubId), pvt = document.getElementById(pvtId);\n\t\t\tif (pub) pub.value = k.pub;\n\t\t\tif (pvt) pvt.value = k.pvt;\n\t\t\tif (banner) {\n\t\t\t\tbanner.innerHTML = '<div class=\"alert alert-info\" style=\"display:flex;justify-content:space-between;align-items:center;gap:12px;\">' +\n\t\t\t\t\t'<span>Firmando como <strong>' + k.pub.slice(0, 14) + '…</strong></span>' +\n\t\t\t\t\t'<a href=\"#\" style=\"font-weight:600;\" onclick=\"clearActiveKey();applyActiveKey(\\'' + pubId + '\\',\\'' + pvtId + '\\',\\'' + bannerId + '\\');return false;\">Quitar</a>' +\n\t\t\t\t\t'</div>';\n\t\t\t}\n\t\t};\n\n\t\t// ===== Shared key helpers (copy / download / render) =====\n\t\tfunction _fallbackCopy(text) {\n\t\t\tvar ta = document.createElement('textarea');\n\t\t\tta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';\n\t\t\tdocument.body.appendChild(ta); ta.focus(); ta.select();\n\t\t\ttry { document.execCommand('copy'); } catch (e) {}\n\t\t\tdocument.body.removeChild(ta);\n\t\t}\n\t\t// copyText reads the .key-display sibling within the button's .key-row and copies it.\n\t\twindow.copyText = function(btn) {\n\t\t\tvar row = btn.closest ? btn.closest('.key-row') : btn.parentElement;\n\t\t\tvar disp = row ? row.querySelector('.key-display') : null;\n\t\t\tvar text = disp ? disp.textContent : '';\n\t\t\tfunction done() {\n\t\t\t\tvar prev = btn.textContent; btn.textContent = 'Copiado'; btn.disabled = true;\n\t\t\t\tsetTimeout(function() { btn.textContent = prev; btn.disabled = false; }, 1200);\n\t\t\t}\n\t\t\tif (navigator.clipboard && navigator.clipboard.writeText) {\n\t\t\t\tnavigator.clipboard.writeText(text).then(done).catch(function() { _fallbackCopy(text); done(); });\n\t\t\t} else { _fallbackCopy(text); done(); }\n\t\t};\n\t\t// downloadJSON triggers a client-side download of obj as a pretty JSON file.\n\t\twindow.downloadJSON = function(filename, obj) {\n\t\t\tvar blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });\n\t\t\tvar url = URL.createObjectURL(blob);\n\t\t\tvar a = document.createElement('a');\n\t\t\ta.href = url; a.download = filename;\n\t\t\tdocument.body.appendChild(a); a.click(); document.body.removeChild(a);\n\t\t\tsetTimeout(function() { URL.revokeObjectURL(url); }, 1000);\n\t\t};\n\t\t// keyField returns HTML for a labelled key value with a Copy button.\n\t\twindow.keyField = function(label, value) {\n\t\t\tvar safe = (value == null ? '' : String(value))\n\t\t\t\t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\t\t\treturn '<div class=\"field\"><label class=\"form-label\">' + label + '</label>' +\n\t\t\t\t'<div class=\"key-row\"><div class=\"key-display\">' + safe + '</div>' +\n\t\t\t\t'<button type=\"button\" class=\"btn btn-outline btn-sm copy-btn\" onclick=\"copyText(this)\">Copiar</button></div></div>';\n\t\t};\n\t\t</script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div>Pagaré Electrónico sobre <a href=\"https://api.blockchainfue.com/doc/api\">BlockchainFUE</a> — registro fehaciente e inalterable.</div><div style=\"margin-top:6px\"><a href=\"https://www.baeslegalcripto.eu/legalcripto/\">LegalCripto by BAES</a></div></footer><script>\n\t\t// The nav is rendered server-side from the authenticated user, so it is\n\t\t// consistent across every page (including the public verification page).\n\t\tfunction doLogout() {\n\t\t\tclearActiveKey();\n\t\t\tfetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })\n\t\t\t\t.then(function() { window.location.href = '/login'; })\n\t\t\t\t.catch(function() { window.location.href = '/login'; });\n\t\t}\n\n\t\t// ===== Active signing key (kept in sessionStorage until logout / tab close) =====\n\t\tvar ACTIVE_KEY_STORE = 'pagare_active_key';\n\t\twindow.getActiveKey = function() {\n\t\t\ttry { return JSON.parse(sessionStorage.getItem(ACTIVE_KEY_STORE) || 'null'); } catch (e) { return null; }\n\t\t};\n\t\twindow.setActiveKey = function(k) {\n\t\t\tif (!k || !k.pub || !k.pvt) return false;\n\t\t\tsessionStorage.setItem(ACTIVE_KEY_STORE, JSON.stringify({ pub: k.pub, pvt: k.pvt }));\n\t\t\treturn true;\n\t\t};\n\t\twindow.clearActiveKey = function() { sessionStorage.removeItem(ACTIVE_KEY_STORE); };\n\t\t// applyActiveKey fills a pub/pvt field pair from the active key and renders a\n\t\t// banner (with a \"Quitar\" link) into bannerId. Used by the signing forms.\n\t\twindow.applyActiveKey = function(pubId, pvtId, bannerId) {\n\t\t\tvar k = getActiveKey();\n\t\t\tvar banner = bannerId ? document.getElementById(bannerId) : null;\n\t\t\tif (!k || !k.pub) { if (banner) banner.innerHTML = ''; return; }\n\t\t\tvar pub = document.getElementById(pubId), pvt = document.getElementById(pvtId);\n\t\t\tif (pub) pub.value = k.pub;\n\t\t\tif (pvt) pvt.value = k.pvt;\n\t\t\tif (banner) {\n\t\t\t\tbanner.innerHTML = '<div class=\"alert alert-info\" style=\"display:flex;justify-content:space-between;align-items:center;gap:12px;\">' +\n\t\t\t\t\t'<span>Firmando como <strong>' + k.pub.slice(0, 14) + '…</strong></span>' +\n\t\t\t\t\t'<a href=\"#\" style=\"font-weight:600;\" onclick=\"clearActiveKey();applyActiveKey(\\'' + pubId + '\\',\\'' + pvtId + '\\',\\'' + bannerId + '\\');return false;\">Quitar</a>' +\n\t\t\t\t\t'</div>';\n\t\t\t}\n\t\t};\n\n\t\t// ===== Shared key helpers (copy / download / render) =====\n\t\tfunction _fallbackCopy(text) {\n\t\t\tvar ta = document.createElement('textarea');\n\t\t\tta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';\n\t\t\tdocument.body.appendChild(ta); ta.focus(); ta.select();\n\t\t\ttry { document.execCommand('copy'); } catch (e) {}\n\t\t\tdocument.body.removeChild(ta);\n\t\t}\n\t\t// copyText reads the .key-display sibling within the button's .key-row and copies it.\n\t\twindow.copyText = function(btn) {\n\t\t\tvar row = btn.closest ? btn.closest('.key-row') : btn.parentElement;\n\t\t\tvar disp = row ? row.querySelector('.key-display') : null;\n\t\t\tvar text = disp ? disp.textContent : '';\n\t\t\tfunction done() {\n\t\t\t\tvar prev = btn.textContent; btn.textContent = 'Copiado'; btn.disabled = true;\n\t\t\t\tsetTimeout(function() { btn.textContent = prev; btn.disabled = false; }, 1200);\n\t\t\t}\n\t\t\tif (navigator.clipboard && navigator.clipboard.writeText) {\n\t\t\t\tnavigator.clipboard.writeText(text).then(done).catch(function() { _fallbackCopy(text); done(); });\n\t\t\t} else { _fallbackCopy(text); done(); }\n\t\t};\n\t\t// downloadJSON triggers a client-side download of obj as a pretty JSON file.\n\t\twindow.downloadJSON = function(filename, obj) {\n\t\t\tvar blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });\n\t\t\tvar url = URL.createObjectURL(blob);\n\t\t\tvar a = document.createElement('a');\n\t\t\ta.href = url; a.download = filename;\n\t\t\tdocument.body.appendChild(a); a.click(); document.body.removeChild(a);\n\t\t\tsetTimeout(function() { URL.revokeObjectURL(url); }, 1000);\n\t\t};\n\t\t// keyField returns HTML for a labelled key value with a Copy button.\n\t\twindow.keyField = function(label, value) {\n\t\t\tvar safe = (value == null ? '' : String(value))\n\t\t\t\t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\t\t\treturn '<div class=\"field\"><label class=\"form-label\">' + label + '</label>' +\n\t\t\t\t'<div class=\"key-row\"><div class=\"key-display\">' + safe + '</div>' +\n\t\t\t\t'<button type=\"button\" class=\"btn btn-outline btn-sm copy-btn\" onclick=\"copyText(this)\">Copiar</button></div></div>';\n\t\t};\n\t\t</script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
