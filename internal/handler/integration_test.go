@@ -139,7 +139,7 @@ func TestPagareEmitir_WithBCFServer(t *testing.T) {
 	client, server := newTestBCFClient(mux)
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil)
+	ph := NewPagareHandler(client, nil, nil)
 
 	payload := map[string]interface{}{
 		"asset": map[string]interface{}{
@@ -186,7 +186,7 @@ func TestPagareEndosar_WithBCFServer(t *testing.T) {
 	client, server := newTestBCFClient(mux)
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil)
+	ph := NewPagareHandler(client, nil, nil)
 
 	payload := map[string]interface{}{
 		"id": "testasset123",
@@ -222,7 +222,7 @@ func TestPagarePagarAnular_WithBCFServer(t *testing.T) {
 	client, server := newTestBCFClient(mux)
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil)
+	ph := NewPagareHandler(client, nil, nil)
 
 	payload := map[string]interface{}{
 		"id": "testasset123",
@@ -251,7 +251,7 @@ func TestPagareEndoso_EnBlanco_WithBCFServer(t *testing.T) {
 	client, server := newTestBCFClient(mux)
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil)
+	ph := NewPagareHandler(client, nil, nil)
 
 	payload := map[string]interface{}{
 		"id": "test123",

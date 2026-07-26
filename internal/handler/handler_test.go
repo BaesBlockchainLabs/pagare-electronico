@@ -43,7 +43,7 @@ func TestPagareEmitir_BadJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader([]byte("invalid")))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.Emitir(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -65,7 +65,7 @@ func TestPagareEmitir_MissingRequiredFields(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.Emitir(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -80,7 +80,7 @@ func TestPagareEndosar_BadJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/pagares/endoso", bytes.NewReader([]byte("invalid")))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.Endosar(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -93,7 +93,7 @@ func TestPagareEndosar_MissingID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/pagares/endoso", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.Endosar(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -110,7 +110,7 @@ func TestPagareEndosar_MissingTo(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/pagares/endoso", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.Endosar(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -124,7 +124,7 @@ func TestPagarePagarAnular_BadJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/pagares", bytes.NewReader([]byte("invalid")))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.PagarAnular(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -137,7 +137,7 @@ func TestPagarePagarAnular_MissingID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.PagarAnular(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -154,7 +154,7 @@ func TestPagarePagarAnular_MissingAction(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.PagarAnular(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -172,7 +172,7 @@ func TestPagarePagarAnular_InvalidAction(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(nil, nil)
+	ph := NewPagareHandler(nil, nil, nil)
 	ph.PagarAnular(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -210,7 +210,7 @@ func TestPagareEmitir_ValidPayload_Structure(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(client, nil)
+	ph := NewPagareHandler(client, nil, nil)
 	ph.Emitir(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusOK, w.Code)

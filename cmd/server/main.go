@@ -40,7 +40,6 @@ func main() {
 	pageHandler := handler.NewPageHandler(cfg.IsDevelopment())
 	identidadHandler := handler.NewIdentidadHandler(bcfClient)
 	consultaHandler := handler.NewConsultaHandler(bcfClient)
-	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc)
 	checker := scheduler.NewChecker(bcfClient)
 
 	// Auth store (file-backed) + bootstrap first admin if requested via env.
@@ -62,6 +61,10 @@ func main() {
 	authStore.SetVault(vault)
 	// Provision blockchain keypairs automatically on user creation.
 	authStore.SetKeyProvisioner(cryptoSvc)
+
+	// Pagaré handler signs on behalf of the logged-in user using their sealed
+	// private key resolved from the store (no private key handled client-side).
+	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc, authStore)
 
 	// Development seed: provision N users with keypairs, then exit. Never in prod.
 	if *seedUsers > 0 {

@@ -13,18 +13,68 @@ import (
 	"pagare/internal/validator"
 )
 
+// SigningKeys resolves the sealed private key of a user's public key. Satisfied
+// by *auth.Store; lets the server sign on behalf of the logged-in user without
+// the private key ever leaving the backend.
+type SigningKeys interface {
+	GetPrivateKey(userID, pub string) (string, error)
+}
+
 type PagareHandler struct {
 	client    *bcfclient.Client
 	validator *validator.LCCHValidator
 	crypto    *crypto.Service
+	keys      SigningKeys
 }
 
-func NewPagareHandler(client *bcfclient.Client, cryptoSvc *crypto.Service) *PagareHandler {
+func NewPagareHandler(client *bcfclient.Client, cryptoSvc *crypto.Service, keys SigningKeys) *PagareHandler {
 	return &PagareHandler{
 		client:    client,
 		validator: validator.NewLCCHValidator(),
 		crypto:    cryptoSvc,
+		keys:      keys,
 	}
+}
+
+// resolveFrom decides which blockchain identity signs an operation for the
+// logged-in principal.
+//
+//   - If the client supplied a private key (from.Pvt), it is used verbatim — the
+//     "manual / advanced" fallback for keys not stored on the platform.
+//   - Otherwise the server looks up the sealed private key for the chosen public
+//     key (from.Pub, or the principal's first key) and uses it, provided the key
+//     belongs to the principal. This is the default path: the user never handles
+//     their private key.
+//
+// Returns nil (no signing identity) only when the user has no usable key and
+// supplied none, letting the caller decide whether that is an error.
+func (h *PagareHandler) resolveFrom(principal *auth.Principal, from *models.IdentidadBC) (*models.IdentidadBC, error) {
+	// Manual/advanced path: caller provided an explicit private key.
+	if from != nil && from.Pvt != "" {
+		return from, nil
+	}
+
+	pub := ""
+	if from != nil {
+		pub = from.Pub
+	}
+	if pub == "" {
+		if len(principal.PubKeys) == 0 {
+			return nil, nil // nothing to sign with; caller decides
+		}
+		pub = principal.PubKeys[0]
+	}
+	if !principal.HasPubKey(pub) {
+		return nil, fmt.Errorf("la clave %s no pertenece a tu cuenta", pub)
+	}
+	if h.keys == nil {
+		return nil, fmt.Errorf("firma en servidor no disponible")
+	}
+	pvt, err := h.keys.GetPrivateKey(principal.UserID, pub)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo recuperar tu clave de firma: %w", err)
+	}
+	return &models.IdentidadBC{Pub: pub, Pvt: pvt}, nil
 }
 
 func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
@@ -63,18 +113,22 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 
 	pagareJSON, _ := json.Marshal(req.Asset.Data)
 
-	bcfReq := map[string]interface{}{
-		"asset": map[string]interface{}{
-			"data":     buildAssetData(&req.Asset.Data),
-			"metadata": buildEmisionMetadata(req.Asset.Metadata, string(pagareJSON), req.From),
-		},
+	from, err := h.resolveFrom(principal, req.From)
+	if err != nil {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
 	}
-	if req.From != nil {
-		bcfReq["from"] = map[string]string{
-			"pub": req.From.Pub,
-			"pvt": req.From.Pvt,
-		}
+
+	asset := map[string]interface{}{
+		"data":     buildAssetData(&req.Asset.Data),
+		"metadata": buildEmisionMetadata(req.Asset.Metadata, string(pagareJSON), from),
 	}
+	// Per the BCF schema, the creating identity (from) goes INSIDE asset, so the
+	// asset is owned by that identity rather than the application key.
+	if from != nil {
+		asset["from"] = map[string]string{"pub": from.Pub, "pvt": from.Pvt}
+	}
+	bcfReq := map[string]interface{}{"asset": asset}
 
 	body, status, err := h.client.CreateAsset(bcfReq)
 	if err != nil {
@@ -156,13 +210,19 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	from, err := h.resolveFrom(principal, req.From)
+	if err != nil {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+
 	bcfReq := map[string]interface{}{
 		"id":       req.ID,
 		"to":       req.To,
 		"metadata": buildEndosoMetadata(&req.Metadata),
 	}
-	if req.From != nil {
-		bcfReq["from"] = map[string]string{"pub": req.From.Pub, "pvt": req.From.Pvt}
+	if from != nil {
+		bcfReq["from"] = map[string]string{"pub": from.Pub, "pvt": from.Pvt}
 	}
 
 	body, status, err := h.client.UpdateAsset(bcfReq)
@@ -206,11 +266,17 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	from, err := h.resolveFrom(principal, req.From)
+	if err != nil {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+
 	bcfQuery := map[string]interface{}{
 		"id": req.ID,
 	}
-	if req.From != nil {
-		bcfQuery["from"] = map[string]string{"pub": req.From.Pub, "pvt": req.From.Pvt}
+	if from != nil {
+		bcfQuery["from"] = map[string]string{"pub": from.Pub, "pvt": from.Pvt}
 	}
 
 	motivoCierre := map[string]string{
@@ -230,8 +296,8 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 			"motivo":        req.Metadata.Motivo,
 		},
 	}
-	if req.From != nil {
-		updateBody["from"] = map[string]string{"pub": req.From.Pub, "pvt": req.From.Pvt}
+	if from != nil {
+		updateBody["from"] = map[string]string{"pub": from.Pub, "pvt": from.Pvt}
 	}
 
 	updateResp, updateStatus, err := h.client.UpdateAsset(updateBody)
