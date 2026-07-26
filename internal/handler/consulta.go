@@ -468,6 +468,9 @@ func (h *ConsultaHandler) DescargarPDF(w http.ResponseWriter, r *http.Request) {
 	if histBody, hs, herr := h.client.GetAssetHistory(id); herr == nil && hs == 200 {
 		endosos, firmantePub = h.parseHistory(histBody)
 	}
+	estado := h.resolveEstado(id, map[string]string{
+		"PAGO": "PAGADO", "ANULACION": "ANULADO", "PRESCRIPCION": "PRESCRITO",
+	})
 
 	scheme := "http"
 	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
@@ -475,7 +478,7 @@ func (h *ConsultaHandler) DescargarPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	verifyURL := fmt.Sprintf("%s://%s/pagares/verificar?network=test&id=%s", scheme, r.Host, id)
 
-	out, err := pdf.Generate(pdf.Input{P: pagare, AssetID: id, VerifyURL: verifyURL, FirmantePub: firmantePub, Endosos: endosos})
+	out, err := pdf.Generate(pdf.Input{P: pagare, AssetID: id, VerifyURL: verifyURL, FirmantePub: firmantePub, Estado: estado, Endosos: endosos})
 	if err != nil {
 		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "no se pudo generar el PDF"})
 		return

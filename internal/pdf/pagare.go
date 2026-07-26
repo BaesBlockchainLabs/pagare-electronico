@@ -30,6 +30,7 @@ type Input struct {
 	AssetID     string
 	VerifyURL   string // enlace público de verificación (para el QR)
 	FirmantePub string // clave pública del firmante (su "firma" en el anverso)
+	Estado      string // PAGADO | ANULADO | PRESCRITO | ... (para el sello)
 	Endosos     []Endoso
 }
 
@@ -213,6 +214,50 @@ func renderAnverso(p *fpdf.Fpdf, in Input) {
 
 	// QR de verificación (abajo derecha)
 	drawQR(p, in, w-mx-30, baseY+6, 30)
+
+	// Sello de estado (pagaré cerrado) por encima de todo.
+	if isClosedEstado(in.Estado) {
+		drawEstadoSello(p, w, h, in.Estado)
+	}
+}
+
+// isClosedEstado reports whether the pagaré is no longer live (paid/void/expired
+// by prescription), which warrants the red cancellation overprint.
+func isClosedEstado(e string) bool {
+	switch e {
+	case "PAGADO", "ANULADO", "PRESCRITO":
+		return true
+	}
+	return false
+}
+
+// drawEstadoSello overprints the document with a red cancellation mark: two
+// diagonal bars (top and bottom) and the state word across the centre, all
+// semi-transparent so the underlying data stays legible.
+func drawEstadoSello(p *fpdf.Fpdf, w, h float64, estado string) {
+	red := [3]int{198, 42, 42}
+
+	p.SetAlpha(0.30, "Normal")
+	setDraw(p, red)
+	p.SetLineCapStyle("round")
+	p.SetLineWidth(7)
+	// Barras ascendentes (paralelas al texto rotado +20°).
+	p.Line(20, 74, w-20, 52)     // barra superior
+	p.Line(20, h-52, w-20, h-74) // barra inferior
+	p.SetLineCapStyle("butt")
+
+	p.SetAlpha(0.38, "Normal")
+	setText(p, red)
+	p.SetFont(fontFamily, "B", 88)
+	cx, cy := w/2, h/2
+	p.TransformBegin()
+	p.TransformRotate(20, cx, cy)
+	tw := p.GetStringWidth(estado)
+	p.SetXY(cx-tw/2, cy-20)
+	p.CellFormat(tw, 40, estado, "", 0, "C", false, 0, "")
+	p.TransformEnd()
+
+	p.SetAlpha(1, "Normal")
 }
 
 func renderReverso(p *fpdf.Fpdf, in Input) {
@@ -256,11 +301,15 @@ func renderReverso(p *fpdf.Fpdf, in Input) {
 	p.SetFont(fontFamily, "I", 8)
 	p.SetXY(mx, h-18)
 	p.MultiCell(w-2*mx, 4, "El endoso debe ser firmado por el endosante (arts. 16-17 y 96 LCCH). La legitimación del tenedor resulta de una serie no interrumpida de endosos (art. 19). El endoso en blanco se perfecciona con la sola firma.", "", "L", false)
+
+	if isClosedEstado(in.Estado) {
+		drawEstadoSello(p, w, h, in.Estado)
+	}
 }
 
 // drawEndoso renders one endorsement block and returns the new Y.
 func drawEndoso(p *fpdf.Fpdf, x, y, wdt float64, n int, e Endoso) float64 {
-	blockH := 22.0
+	blockH := 28.0
 	setFill(p, colCard)
 	setDraw(p, colBorder)
 	p.SetLineWidth(0.3)
@@ -278,7 +327,7 @@ func drawEndoso(p *fpdf.Fpdf, x, y, wdt float64, n int, e Endoso) float64 {
 	setText(p, colInk)
 	p.SetFont(fontFamily, "B", 11)
 	p.SetXY(x+16, y+3)
-	p.CellFormat(wdt-90, 6, formulaEndoso(e), "", 0, "L", false, 0, "")
+	p.CellFormat(wdt-22, 6, formulaEndoso(e), "", 0, "L", false, 0, "")
 
 	setText(p, colInkSoft)
 	p.SetFont(fontFamily, "", 9)
@@ -290,21 +339,21 @@ func drawEndoso(p *fpdf.Fpdf, x, y, wdt float64, n int, e Endoso) float64 {
 	if e.Clausula != "" {
 		meta += "  ·  " + e.Clausula
 	}
-	p.CellFormat(wdt-90, 5, meta, "", 0, "L", false, 0, "")
+	p.CellFormat(wdt-22, 5, meta, "", 0, "L", false, 0, "")
 
-	// Firma del endosante = su clave pública (abreviada, en monoespaciada).
+	// Firma del endosante = su clave pública completa, en su propia línea.
 	setText(p, colInkSoft)
-	p.SetFont(fontFamily, "", 7.5)
-	p.SetXY(x+wdt-78, y+8)
-	p.CellFormat(72, 4, "Firma (clave pública del endosante)", "", 0, "R", false, 0, "")
+	p.SetFont(fontFamily, "I", 8)
+	p.SetXY(x+16, y+16.5)
+	p.CellFormat(wdt-22, 4, "Firma del endosante (clave pública ed25519):", "", 0, "L", false, 0, "")
 	firma := "—"
 	if e.EndosantePub != "" {
-		firma = shortID(e.EndosantePub)
+		firma = e.EndosantePub
 	}
 	setText(p, colInk)
 	p.SetFont(fontMono, "B", 9)
-	p.SetXY(x+wdt-78, y+12)
-	p.CellFormat(72, 5, firma, "", 0, "R", false, 0, "")
+	p.SetXY(x+16, y+20.5)
+	p.CellFormat(wdt-22, 5, firma, "", 0, "L", false, 0, "")
 
 	return y + blockH + 4
 }
