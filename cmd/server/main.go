@@ -288,21 +288,40 @@ func main() {
 				return
 			}
 			users := authStore.List()
+			// Public directory view for populating form dropdowns. Carries the
+			// fiscal/address fields the pagaré forms autofill (firmante needs
+			// address) but NEVER the private key.
 			type UserView struct {
-				ID       string   `json:"id"`
-				Nombre   string   `json:"nombre"`
-				Apellido string   `json:"apellido"`
-				NIF      string   `json:"nif"`
-				PubKeys  []string `json:"pub_keys"`
+				ID           string   `json:"id"`
+				Username     string   `json:"username"`
+				DisplayName  string   `json:"display_name"`
+				Nombre       string   `json:"nombre"`
+				Apellido     string   `json:"apellido"`
+				NIF          string   `json:"nif"`
+				Direccion    string   `json:"direccion"`
+				Localidad    string   `json:"localidad"`
+				CodigoPostal string   `json:"codigo_postal"`
+				Pais         string   `json:"pais"`
+				PubKeys      []string `json:"pub_keys"`
 			}
 			views := make([]UserView, 0, len(users))
 			for _, u := range users {
+				pubs := u.PubKeys
+				if pubs == nil {
+					pubs = []string{}
+				}
 				views = append(views, UserView{
-					ID:       u.ID,
-					Nombre:   u.Nombre,
-					Apellido: u.Apellido,
-					NIF:      u.NIF,
-					PubKeys:  u.PubKeys,
+					ID:           u.ID,
+					Username:     u.Username,
+					DisplayName:  u.DisplayName,
+					Nombre:       u.Nombre,
+					Apellido:     u.Apellido,
+					NIF:          u.NIF,
+					Direccion:    u.Direccion,
+					Localidad:    u.Localidad,
+					CodigoPostal: u.CodigoPostal,
+					Pais:         u.Pais,
+					PubKeys:      pubs,
 				})
 			}
 			handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "usuarios": views})
