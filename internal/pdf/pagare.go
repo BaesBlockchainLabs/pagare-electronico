@@ -109,7 +109,7 @@ func renderAnverso(p *fpdf.Fpdf, in Input) {
 	setText(p, colGoldDeep)
 	p.SetFont(fontFamily, "", 9)
 	p.SetXY(mx, 16)
-	p.CellFormat(0, 5, "PAGARÉ ELECTRÓNICO · REGISTRO FEHACIENTE EN BLOCKCHAIN", "", 0, "L", false, 0, "")
+	p.CellFormat(0, 5, "PAGARÉ ELECTRÓNICO · REGISTRO EN LIBRO MAYOR ELECTRÓNICO (eIDAS2)", "", 0, "L", false, 0, "")
 
 	setText(p, colInk)
 	p.SetFont(fontFamily, "B", 38)
@@ -241,10 +241,21 @@ func renderAnverso(p *fpdf.Fpdf, in Input) {
 		p.SetLineWidth(0.3)
 		p.Line(mx, sy+9.5, mx+80, sy+9.5)
 	}
+	// Alcance real del registro. La palabra «fehaciente» sobraba: un libro mayor
+	// electrónico NO cualificado garantiza integridad y orden cronológico, pero
+	// no goza de la presunción del art. 45 duodecies.2 eIDAS2, que se reserva a
+	// los cualificados. Y el documento no es título ejecutivo: el juicio
+	// cambiario exige el original (STS, Sala 1ª, 94/2014).
 	setText(p, colInkSoft)
-	p.SetFont(fontFamily, "I", 8.5)
+	p.SetFont(fontFamily, "I", 7)
 	p.SetXY(mx, sy+11.5)
-	p.CellFormat(0, 4.5, "Firmado digitalmente y registrado de forma fehaciente en blockchain.", "", 0, "L", false, 0, "")
+	p.MultiCell(w-2*mx-36, 3.2,
+		"Firmado digitalmente y registrado en un libro mayor electrónico no cualificado "+
+			"(art. 3.52 eIDAS2): garantiza la integridad del registro y la exactitud de su "+
+			"orden cronológico, sin la presunción de unicidad del art. 45 duodecies.2, "+
+			"reservada a los cualificados. Este documento es una representación legible del "+
+			"registro electrónico y no constituye título ejecutivo a efectos del art. 517 LEC.",
+		"", "L", false)
 
 	// QR de verificación (abajo derecha)
 	drawQR(p, in, w-mx-30, baseY+6, 30)

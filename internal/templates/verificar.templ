@@ -40,6 +40,28 @@ templ Verificar(id string, network string, user *CurrentUser) {
 		// Firma del contenido: distinta del registro en blockchain. El registro
 		// acredita cuándo se grabó y que no se reordenó; la firma acredita que el
 		// texto del pagaré es el que firmó el emisor.
+		// Alcance de lo que esta pantalla acredita, y de lo que no. Un libro mayor
+		// no cualificado prueba integridad y cronología, pero no goza de la
+		// presunción del art. 45 duodecies.2 eIDAS2; y ni esta pantalla ni el PDF
+		// son título ejecutivo, porque el juicio cambiario exige el original.
+		function alcanceHTML() {
+			return '<div class="card" style="margin-top:16px">' +
+				'<div class="pc-label">Alcance de esta verificación</div>' +
+				'<p class="desc" style="margin-top:8px">' +
+				'El registro se lleva en un <strong>libro mayor electrónico no cualificado</strong> ' +
+				'(art. 3.52 del Reglamento (UE) 2024/1183): garantiza la integridad de los registros ' +
+				'y la exactitud de su orden cronológico, pero <strong>no goza de la presunción de ' +
+				'unicidad</strong> del art. 45 duodecies.2, reservada a los libros mayores cualificados. ' +
+				'En un litigio, la unicidad habría de probarse.' +
+				'</p>' +
+				'<p class="desc" style="margin-top:8px">' +
+				'El PDF descargable es una representación legible del registro electrónico y ' +
+				'<strong>no constituye título ejecutivo</strong>: el acceso al juicio cambiario exige ' +
+				'la aportación del documento original (STS, Sala 1ª, núm. 94/2014, de 5 de marzo).' +
+				'</p>' +
+				'</div>';
+		}
+
 		function firmaHTML(ver) {
 			if (!ver || !ver.msg) return '';
 			var clase, icono;
@@ -150,6 +172,7 @@ templ Verificar(id string, network string, user *CurrentUser) {
 					h += '<div class="detail-item"><div class="dl">Propietario actual</div><div class="key-display">' + (d.propietario_actual || d.from || '') + '</div></div>';
 					h += '</div>';
 					h += '</div>';
+					h += alcanceHTML();
 					el.innerHTML = h;
 				})
 				.catch(function(e) { document.getElementById('verify-result').innerHTML = '<div class="alert alert-error">Error: ' + e + '</div>'; });

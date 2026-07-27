@@ -61,11 +61,19 @@ La plataforma no aspira a la cualificación en esta fase. Consecuencia práctica
 en un eventual litigio, la unicidad del registro habrá de **probarse**, no se
 presume.
 
+Esto **se advierte al usuario**, en el anverso del PDF y en la pantalla de
+verificación, y no como letra pequeña: el sistema decía antes que el registro era
+«fehaciente e inalterable», y fehaciente significa precisamente que prueba por sí
+mismo, que es lo que un libro mayor no cualificado no hace. La palabra se ha
+retirado de todas partes.
+
 Añadido a lo anterior, y en el plano procesal: la doctrina del Tribunal Supremo
 exige, para el acceso al juicio cambiario, la aportación del documento original
 (STS, Sala Primera, núm. 94/2014, de 5 de marzo). **El PDF que la plataforma
 genera no es título ejecutivo**; es una representación legible del registro
-electrónico. Salvar esto requiere reforma de la LCCH y de la LEC.
+electrónico. Salvar esto requiere reforma de la LCCH y de la LEC. También consta
+en el propio documento y en la pantalla de verificación, para que nadie lo
+descubra al intentar ejecutarlo.
 
 ## 4. Identidad: lo que la firma acredita y lo que no
 

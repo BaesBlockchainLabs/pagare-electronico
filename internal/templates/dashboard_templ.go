@@ -51,7 +51,7 @@ func Dashboard(user *CurrentUser) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = PageHead("Cartera", "Tus pagarés", "Pagarés electrónicos registrados en blockchain con validez fehaciente.").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = PageHead("Cartera", "Tus pagarés", "Pagarés electrónicos registrados en un libro mayor electrónico eIDAS2.").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
