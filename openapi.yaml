@@ -419,6 +419,43 @@ paths:
         "4XX":
           $ref: "#/components/responses/Error"
 
+  /pagares/public:
+    get:
+      tags: [Pagarés - Consulta]
+      summary: Consulta pública y verificación de la firma
+      description: >
+        Endpoint del servicio (servido bajo `/api/pagares/public`, no en BlockchainFUE).
+        No requiere autenticación: es la vía por la que un tercero comprueba un pagaré
+        a partir de su ID.
+
+        Reenvía el asset de BlockchainFUE y le añade el estado, el propietario actual y
+        el bloque `verificacion`, que comprueba la firma del emisor sobre el contenido
+        (véase el esquema `Verificacion`).
+      operationId: consultarPagarePublico
+      security: []
+      parameters:
+        - name: network
+          in: query
+          required: true
+          schema:
+            type: string
+            example: test
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: ID del asset en blockchain.
+      responses:
+        "200":
+          description: Pagaré con su verificación
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagarePublicoResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
+
   /did/sign:
     post:
       tags: [Criptografía]
@@ -1167,6 +1204,20 @@ components:
 
     PublicAssetResponse:
       type: object
+      properties:
+        ok:
+          type: boolean
+        msg:
+          type: string
+        asset:
+          $ref: "#/components/schemas/PagareAsset"
+
+    PagarePublicoResponse:
+      type: object
+      description: >
+        Respuesta de `/api/pagares/public`, el endpoint del servicio. Reenvía el
+        asset de BlockchainFUE y le añade lo que la plataforma calcula: el estado
+        del pagaré, el propietario actual y la verificación de la firma.
       properties:
         ok:
           type: boolean
