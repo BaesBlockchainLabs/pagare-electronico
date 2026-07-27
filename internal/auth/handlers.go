@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
 	"pagare/internal/crypto"
 )
+
+var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// validEmail does a lightweight format check (not full RFC 5322).
+func validEmail(s string) bool { return emailRe.MatchString(s) }
 
 type Handlers struct {
 	store  *Store
@@ -67,6 +73,8 @@ type registerRequest struct {
 	Nombre       string `json:"nombre"`
 	Apellido     string `json:"apellido"`
 	NIF          string `json:"nif"`
+	Email        string `json:"email"`
+	Telefono     string `json:"telefono"`
 	Direccion    string `json:"direccion"`
 	Localidad    string `json:"localidad"`
 	CodigoPostal string `json:"codigo_postal"`
@@ -92,6 +100,10 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "nombre y NIF son obligatorios"})
 		return
 	}
+	if req.Email != "" && !validEmail(req.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "el email no tiene un formato válido"})
+		return
+	}
 
 	u := &User{
 		Username:     req.Username,
@@ -99,6 +111,8 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 		Nombre:       req.Nombre,
 		Apellido:     req.Apellido,
 		NIF:          req.NIF,
+		Email:        req.Email,
+		Telefono:     req.Telefono,
 		Direccion:    req.Direccion,
 		Localidad:    req.Localidad,
 		CodigoPostal: req.CodigoPostal,

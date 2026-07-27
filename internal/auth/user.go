@@ -16,6 +16,8 @@ type User struct {
 	Role         Role      `json:"role"`
 	DisplayName  string    `json:"display_name,omitempty"`
 	NIF          string    `json:"nif,omitempty"`
+	Email        string    `json:"email,omitempty"`
+	Telefono     string    `json:"telefono,omitempty"`
 
 	// Datos personales completos (para usar en formularios de pagarés sin teclear a mano)
 	Nombre       string `json:"nombre,omitempty"`

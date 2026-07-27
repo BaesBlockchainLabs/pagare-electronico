@@ -77,6 +77,8 @@ func (s *Store) initSchema() error {
 			role TEXT NOT NULL,
 			display_name TEXT,
 			nif TEXT,
+			email TEXT,
+			telefono TEXT,
 			nombre TEXT,
 			apellido TEXT,
 			direccion TEXT,
@@ -102,7 +104,36 @@ func (s *Store) initSchema() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_user_keys_user ON user_keys(user_id);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Migraciones aditivas idempotentes para BBDD ya existentes.
+	s.ensureColumn("users", "email", "TEXT")
+	s.ensureColumn("users", "telefono", "TEXT")
+	return nil
+}
+
+// ensureColumn adds a column to a table if it does not already exist (SQLite has
+// no "ADD COLUMN IF NOT EXISTS"). Safe to call on every start.
+func (s *Store) ensureColumn(table, col, typ string) {
+	rows, err := s.db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt interface{}
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			continue
+		}
+		if name == col {
+			return // ya existe
+		}
+	}
+	_, _ = s.db.Exec("ALTER TABLE " + table + " ADD COLUMN " + col + " " + typ)
 }
 
 func (s *Store) migrateFromJSONIfNeeded(dataDir string) error {
@@ -305,6 +336,7 @@ func (s *Store) RemovePubKey(userID, pub string) error {
 func (s *Store) List() []*User {
 	rows, err := s.db.Query(`
 		SELECT id, username, role, COALESCE(display_name, ''), COALESCE(nif, ''),
+		       COALESCE(email, ''), COALESCE(telefono, ''),
 		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
 		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
 		       COALESCE(pub_keys, '[]'), created_at
@@ -320,6 +352,7 @@ func (s *Store) List() []*User {
 		var u User
 		var pubJSON string
 		err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.DisplayName, &u.NIF,
+			&u.Email, &u.Telefono,
 			&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.CodigoPostal,
 			&u.Pais, &pubJSON, &u.CreatedAt)
 		if err != nil {
@@ -338,11 +371,13 @@ func (s *Store) GetByID(id string) (*User, error) {
 	var pubJSON string
 	err := s.db.QueryRow(`
 		SELECT id, username, role, COALESCE(display_name, ''), COALESCE(nif, ''),
+		       COALESCE(email, ''), COALESCE(telefono, ''),
 		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
 		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
 		       COALESCE(pub_keys, '[]'), created_at
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.Role, &u.DisplayName, &u.NIF,
+		&u.Email, &u.Telefono,
 		&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.CodigoPostal,
 		&u.Pais, &pubJSON, &u.CreatedAt)
 	if err == sql.ErrNoRows {
@@ -373,11 +408,11 @@ func (s *Store) CreateUser(u *User, plainPassword string) error {
 	pubJSON, _ := json.Marshal(u.PubKeys)
 
 	_, err := s.db.Exec(`
-		INSERT INTO users 
-		(id, username, password_hash, role, display_name, nif, nombre, apellido, 
+		INSERT INTO users
+		(id, username, password_hash, role, display_name, nif, email, telefono, nombre, apellido,
 		 direccion, localidad, codigo_postal, pais, pub_keys, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.ID, u.Username, u.PasswordHash, u.Role, u.DisplayName, u.NIF, u.Nombre, u.Apellido,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, u.ID, u.Username, u.PasswordHash, u.Role, u.DisplayName, u.NIF, u.Email, u.Telefono, u.Nombre, u.Apellido,
 		u.Direccion, u.Localidad, u.CodigoPostal, u.Pais, string(pubJSON), u.CreatedAt)
 
 	if err != nil {
@@ -408,12 +443,14 @@ func (s *Store) UpdateUser(u *User) error {
 	pubJSON, _ := json.Marshal(u.PubKeys)
 
 	_, err = s.db.Exec(`
-		UPDATE users SET 
+		UPDATE users SET
 			username = ?, password_hash = ?, role = ?, display_name = ?, nif = ?,
+			email = ?, telefono = ?,
 			nombre = ?, apellido = ?, direccion = ?, localidad = ?, codigo_postal = ?,
 			pais = ?, pub_keys = ?, created_at = ?
 		WHERE id = ?
 	`, u.Username, u.PasswordHash, u.Role, u.DisplayName, u.NIF,
+		u.Email, u.Telefono,
 		u.Nombre, u.Apellido, u.Direccion, u.Localidad, u.CodigoPostal,
 		u.Pais, string(pubJSON), u.CreatedAt, u.ID)
 
@@ -447,6 +484,8 @@ type ProfileInput struct {
 	Nombre       string
 	Apellido     string
 	NIF          string
+	Email        string
+	Telefono     string
 	Direccion    string
 	Localidad    string
 	CodigoPostal string
@@ -464,6 +503,8 @@ func (s *Store) UpdateProfile(userID string, p ProfileInput) error {
 	u.Nombre = p.Nombre
 	u.Apellido = p.Apellido
 	u.NIF = p.NIF
+	u.Email = p.Email
+	u.Telefono = p.Telefono
 	u.Direccion = p.Direccion
 	u.Localidad = p.Localidad
 	u.CodigoPostal = p.CodigoPostal

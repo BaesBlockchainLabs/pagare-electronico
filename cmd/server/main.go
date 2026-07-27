@@ -154,6 +154,8 @@ func main() {
 					Nombre:       in.Nombre,
 					Apellido:     in.Apellido,
 					NIF:          in.NIF,
+					Email:        in.Email,
+					Telefono:     in.Telefono,
 					Direccion:    in.Direccion,
 					Localidad:    in.Localidad,
 					CodigoPostal: in.CodigoPostal,
@@ -199,6 +201,8 @@ func main() {
 				u.Nombre = in.Nombre
 				u.Apellido = in.Apellido
 				u.NIF = in.NIF
+				u.Email = in.Email
+				u.Telefono = in.Telefono
 				u.Direccion = in.Direccion
 				u.Localidad = in.Localidad
 				u.CodigoPostal = in.CodigoPostal
@@ -430,6 +434,8 @@ func adminUserView(u *auth.User) map[string]interface{} {
 		"nombre":        u.Nombre,
 		"apellido":      u.Apellido,
 		"nif":           u.NIF,
+		"email":         u.Email,
+		"telefono":      u.Telefono,
 		"direccion":     u.Direccion,
 		"localidad":     u.Localidad,
 		"codigo_postal": u.CodigoPostal,
@@ -448,6 +454,8 @@ type userInput struct {
 	Nombre       string `json:"nombre"`
 	Apellido     string `json:"apellido"`
 	NIF          string `json:"nif"`
+	Email        string `json:"email"`
+	Telefono     string `json:"telefono"`
 	Direccion    string `json:"direccion"`
 	Localidad    string `json:"localidad"`
 	CodigoPostal string `json:"codigo_postal"`
@@ -470,6 +478,8 @@ func parseUserInput(r *http.Request) userInput {
 		Nombre:       r.FormValue("nombre"),
 		Apellido:     r.FormValue("apellido"),
 		NIF:          r.FormValue("nif"),
+		Email:        r.FormValue("email"),
+		Telefono:     r.FormValue("telefono"),
 		Direccion:    r.FormValue("direccion"),
 		Localidad:    r.FormValue("localidad"),
 		CodigoPostal: r.FormValue("codigo_postal"),

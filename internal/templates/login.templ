@@ -53,6 +53,14 @@ templ Login(user *CurrentUser) {
 						<label class="form-label">País (ISO)</label>
 						<input type="text" id="reg-pais" placeholder="ES" value="ES" maxlength="2" />
 					</div>
+					<div class="field">
+						<label class="form-label">Email</label>
+						<input type="email" id="reg-email" placeholder="tu@email.com" autocomplete="email" />
+					</div>
+					<div class="field">
+						<label class="form-label">Teléfono</label>
+						<input type="tel" id="reg-telefono" placeholder="+34 600 000 000" autocomplete="tel" />
+					</div>
 					<div class="field" style="grid-column:1/-1;">
 						<label class="form-label">Dirección</label>
 						<input type="text" id="reg-direccion" placeholder="Calle Mayor 10" />
@@ -127,6 +135,8 @@ templ Login(user *CurrentUser) {
 					nombre: document.getElementById('reg-nombre').value.trim(),
 					apellido: document.getElementById('reg-apellido').value.trim(),
 					nif: document.getElementById('reg-nif').value.trim(),
+					email: document.getElementById('reg-email').value.trim(),
+					telefono: document.getElementById('reg-telefono').value.trim(),
 					direccion: document.getElementById('reg-direccion').value.trim(),
 					localidad: document.getElementById('reg-localidad').value.trim(),
 					codigo_postal: document.getElementById('reg-cp').value.trim(),

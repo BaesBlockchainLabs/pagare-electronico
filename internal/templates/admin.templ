@@ -149,6 +149,14 @@ templ Admin(user *CurrentUser) {
 						<input type="text" id="m-nif" placeholder="12345678Z"/>
 					</div>
 					<div class="field">
+						<label class="form-label">Email</label>
+						<input type="email" id="m-email" placeholder="usuario@ejemplo.com"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Teléfono</label>
+						<input type="tel" id="m-telefono" placeholder="+34 600 000 000"/>
+					</div>
+					<div class="field">
 						<label class="form-label">País (ISO)</label>
 						<input type="text" id="m-pais" placeholder="ES"/>
 					</div>
@@ -305,7 +313,7 @@ templ Admin(user *CurrentUser) {
 
 		// ---------- modal ----------
 		var modalMode = 'edit';
-		var MF = ['username','password','role','display_name','nombre','apellido','nif','direccion','localidad','codigo_postal','pais'];
+		var MF = ['username','password','role','display_name','nombre','apellido','nif','email','telefono','direccion','localidad','codigo_postal','pais'];
 
 		function setField(k, v) { var el = document.getElementById('m-' + k); if (el) el.value = (v == null ? '' : v); }
 
@@ -337,6 +345,8 @@ templ Admin(user *CurrentUser) {
 			setField('nombre', u.nombre);
 			setField('apellido', u.apellido);
 			setField('nif', u.nif);
+			setField('email', u.email);
+			setField('telefono', u.telefono);
 			setField('direccion', u.direccion);
 			setField('localidad', u.localidad);
 			setField('codigo_postal', u.codigo_postal);
@@ -372,6 +382,8 @@ templ Admin(user *CurrentUser) {
 				nombre: document.getElementById('m-nombre').value.trim(),
 				apellido: document.getElementById('m-apellido').value.trim(),
 				nif: document.getElementById('m-nif').value.trim(),
+				email: document.getElementById('m-email').value.trim(),
+				telefono: document.getElementById('m-telefono').value.trim(),
 				direccion: document.getElementById('m-direccion').value.trim(),
 				localidad: document.getElementById('m-localidad').value.trim(),
 				codigo_postal: document.getElementById('m-codigo_postal').value.trim(),

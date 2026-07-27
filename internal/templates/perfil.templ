@@ -34,6 +34,14 @@ templ Perfil(user *CurrentUser) {
 						<label class="form-label">Apellidos</label>
 						<input type="text" id="pf-apellido" placeholder="Pérez García"/>
 					</div>
+					<div class="field">
+						<label class="form-label">Email</label>
+						<input type="email" id="pf-email" placeholder="tu@email.com"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Teléfono</label>
+						<input type="tel" id="pf-telefono" placeholder="+34 600 000 000"/>
+					</div>
 					<div class="field" style="grid-column:1/-1">
 						<label class="form-label">Dirección</label>
 						<input type="text" id="pf-direccion" placeholder="Calle Mayor 10"/>
@@ -90,7 +98,7 @@ templ Perfil(user *CurrentUser) {
 				.then(function(r) { return r.json(); })
 				.then(function(d) {
 					if (!d.ok) return;
-					var f = ['username','role','display_name','nif','nombre','apellido','direccion','localidad','codigo_postal','pais'];
+					var f = ['username','role','display_name','nif','email','telefono','nombre','apellido','direccion','localidad','codigo_postal','pais'];
 					f.forEach(function(k) {
 						var el = document.getElementById('pf-' + k);
 						if (el) el.value = d[k] || '';
@@ -106,6 +114,8 @@ templ Perfil(user *CurrentUser) {
 				nombre: document.getElementById('pf-nombre').value.trim(),
 				apellido: document.getElementById('pf-apellido').value.trim(),
 				nif: document.getElementById('pf-nif').value.trim(),
+				email: document.getElementById('pf-email').value.trim(),
+				telefono: document.getElementById('pf-telefono').value.trim(),
 				direccion: document.getElementById('pf-direccion').value.trim(),
 				localidad: document.getElementById('pf-localidad').value.trim(),
 				codigo_postal: document.getElementById('pf-codigo_postal').value.trim(),
