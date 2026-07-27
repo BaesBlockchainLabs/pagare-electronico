@@ -423,6 +423,46 @@ paths:
         "4XX":
           $ref: "#/components/responses/Error"
 
+  /pagares/cesion:
+    put:
+      tags: [Pagarés - Transmisión]
+      summary: Ceder el crédito por cesión ordinaria
+      description: >
+        Endpoint del servicio (servido bajo `/api/pagares/cesion`, no en BlockchainFUE).
+        Transmite el pagaré por **cesión ordinaria del crédito** (arts. 347-348 CCom,
+        en relación con los arts. 1526 y ss. CC). Es la vía que corresponde al pagaré
+        «no a la orden», al que el art. 14 LCCH excluye del endoso.
+
+        **No es un endoso**, y el régimen difiere en tres puntos que el diseño respeta:
+
+        - El cedente responde de la existencia y legitimidad del crédito pero **no de
+          la solvencia** del deudor, salvo pacto (art. 1529 CC); el endosante sí
+          responde del pago (art. 18 LCCH).
+        - El deudor conserva frente al cesionario las excepciones que tuviera contra
+          el cedente: no hay autonomía cambiaria.
+        - Ha de **notificarse al deudor** para serle oponible; hasta entonces el pago
+          al cedente le libera (art. 1527 CC).
+
+        Se registra con `tipo_operacion: CESION`, el estado resultante es CEDIDO —no
+        ENDOSADO— y el reverso del PDF la presenta bajo epígrafe propio, fuera de la
+        cadena de endosos.
+      operationId: cederPagare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CederPagareRequest"
+      responses:
+        "200":
+          description: Pagaré cedido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleOkResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
+
   /pagares/public:
     get:
       tags: [Pagarés - Consulta]
@@ -1088,6 +1128,35 @@ components:
           description: "Coste de la operación en la blockchain."
         entrega:
           $ref: "#/components/schemas/Entrega"
+
+    CederPagareRequest:
+      type: object
+      required: [id, to]
+      properties:
+        id:
+          type: string
+          description: "ID del asset del pagaré en blockchain."
+        to:
+          type: string
+          description: "Clave pública del cesionario."
+        cesionario:
+          $ref: "#/components/schemas/Persona"
+        notificacion_fecha:
+          type: string
+          format: date
+          description: >
+            Fecha de la notificación de la cesión al deudor (art. 1527 CC). La
+            notificación ocurre fuera de la plataforma; aquí solo se deja constancia.
+            Si no consta, la respuesta advierte de que la cesión no es aún oponible
+            al deudor.
+        notificacion_medio:
+          type: string
+          description: "Medio de la notificación (burofax, acta notarial…)."
+        motivo:
+          type: string
+          description: "Causa de la cesión, si se quiere hacer constar."
+        from:
+          $ref: "#/components/schemas/IdentidadBlockchain"
 
     Entrega:
       type: object

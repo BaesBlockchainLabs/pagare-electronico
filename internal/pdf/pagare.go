@@ -24,6 +24,23 @@ type Endoso struct {
 	EndosantePub string // clave pública del endosante (su "firma")
 }
 
+// Cesion is a transfer by ordinary assignment of the credit, rendered apart
+// from the endorsement chain.
+//
+// It is kept separate on purpose. The cedente answers for the existence of the
+// credit but not for the debtor's solvency (art. 1529 CC), where an endosante
+// does answer for payment (art. 18 LCCH); and the debtor keeps against the
+// cesionario the defences they held against the cedente. Listing a cesión among
+// the endosos would attribute to the cedente a liability they never took on.
+type Cesion struct {
+	Fecha             string
+	Cesionario        string
+	NIF               string
+	CedentePub        string
+	NotificacionFecha string
+	NotificacionMedio string
+}
+
 // Input carries everything needed to render a pagaré document.
 type Input struct {
 	P           *models.PagareElectronico
@@ -32,6 +49,7 @@ type Input struct {
 	FirmantePub string // clave pública del firmante (su "firma" en el anverso)
 	Estado      string // PAGADO | ANULADO | PRESCRITO | ... (para el sello)
 	Endosos     []Endoso
+	Cesiones    []Cesion
 }
 
 const fontMono = "Courier" // fuente core monoespaciada para las claves públicas
@@ -293,6 +311,10 @@ func renderReverso(p *fpdf.Fpdf, in Input) {
 		}
 	}
 
+	// Cesiones, aparte de la cadena: no son endosos ni comprometen al cedente
+	// con la solvencia del deudor.
+	y = drawCesiones(p, mx, y, w-2*mx, h, in.Cesiones)
+
 	// Espacios en blanco para endosos manuales (como el dorso físico).
 	drawEndosoEnBlanco(p, mx, &y, w-2*mx, h)
 
@@ -300,11 +322,74 @@ func renderReverso(p *fpdf.Fpdf, in Input) {
 	setText(p, colInkSoft)
 	p.SetFont(fontFamily, "I", 8)
 	p.SetXY(mx, h-18)
-	p.MultiCell(w-2*mx, 4, "El endoso debe ser firmado por el endosante (arts. 16-17 y 96 LCCH). La legitimación del tenedor resulta de una serie no interrumpida de endosos (art. 19). El endoso en blanco se perfecciona con la sola firma.", "", "L", false)
+	nota := "El endoso debe ser firmado por el endosante (arts. 16-17 y 96 LCCH). La legitimación del tenedor resulta de una serie no interrumpida de endosos (art. 19). El endoso en blanco se perfecciona con la sola firma."
+	if len(in.Cesiones) > 0 {
+		nota += " La cesión ordinaria no es endoso: el cedente responde de la existencia del crédito pero no de la solvencia del deudor (art. 1529 CC), y ha de notificarse al deudor para serle oponible (art. 1527 CC)."
+	}
+	p.MultiCell(w-2*mx, 4, nota, "", "L", false)
 
 	if isClosedEstado(in.Estado) {
 		drawEstadoSello(p, w, h, in.Estado)
 	}
+}
+
+// drawCesiones renders the assignments under a heading of their own, so the
+// reverse never reads as if the cedente had endorsed. Returns the new Y.
+func drawCesiones(p *fpdf.Fpdf, x, y, wdt, h float64, cesiones []Cesion) float64 {
+	if len(cesiones) == 0 {
+		return y
+	}
+
+	y += 4
+	setText(p, colGoldDeep)
+	p.SetFont(fontFamily, "B", 12)
+	p.SetXY(x, y)
+	p.CellFormat(0, 6, "Cesiones ordinarias (arts. 347-348 CCom)", "", 1, "L", false, 0, "")
+	y += 9
+
+	for i, c := range cesiones {
+		if y > h-46 {
+			break
+		}
+		blockH := 24.0
+		setFill(p, colCard)
+		setDraw(p, colBorder)
+		p.SetLineWidth(0.3)
+		p.Rect(x, y, wdt, blockH, "FD")
+
+		setText(p, colInk)
+		p.SetFont(fontFamily, "B", 10)
+		p.SetXY(x+5, y+3)
+		p.CellFormat(0, 5, fmt.Sprintf("%d. Cedido a %s", i+1, c.Cesionario), "", 1, "L", false, 0, "")
+
+		setText(p, colInkSoft)
+		p.SetFont(fontFamily, "", 8)
+		p.SetXY(x+5, y+9)
+		detalle := c.NIF
+		if c.Fecha != "" {
+			detalle = strings.TrimSpace(detalle + "  ·  " + formatFechaLarga(c.Fecha))
+		}
+		p.CellFormat(0, 4, detalle, "", 1, "L", false, 0, "")
+
+		p.SetXY(x+5, y+14)
+		aviso := "Pendiente de notificación al deudor (art. 1527 CC)"
+		if c.NotificacionFecha != "" {
+			aviso = "Notificada al deudor el " + formatFechaLarga(c.NotificacionFecha)
+			if c.NotificacionMedio != "" {
+				aviso += " por " + c.NotificacionMedio
+			}
+		}
+		p.CellFormat(0, 4, aviso, "", 1, "L", false, 0, "")
+
+		if c.CedentePub != "" {
+			p.SetFont(fontMono, "", 7)
+			p.SetXY(x+5, y+18)
+			p.CellFormat(0, 4, "cedente "+shortID(c.CedentePub), "", 1, "L", false, 0, "")
+		}
+
+		y += blockH + 4
+	}
+	return y
 }
 
 // drawEndoso renders one endorsement block and returns the new Y.

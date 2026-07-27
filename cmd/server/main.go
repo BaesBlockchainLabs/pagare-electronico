@@ -109,6 +109,7 @@ func main() {
 	r.Get("/pagares/nuevo", pageHandler.NuevoPagare)
 	r.Get("/pagares/historico", pageHandler.Historico)
 	r.Get("/pagares/endosar", pageHandler.Endosar)
+	r.Get("/pagares/ceder", pageHandler.Ceder)
 	r.Get("/pagares/pagar", pageHandler.PagarAnular)
 	r.Get("/perfil", pageHandler.Perfil)
 
@@ -360,6 +361,7 @@ func main() {
 		r.Route("/pagares", func(r chi.Router) {
 			r.Post("/", pagareHandler.Emitir)
 			r.Put("/endoso", pagareHandler.Endosar)
+			r.Put("/cesion", pagareHandler.Ceder)
 			r.Delete("/", pagareHandler.PagarAnular)
 			r.Get("/", consultaHandler.ListPagares)
 			r.Get("/buscar", consultaHandler.GetPagare)

@@ -231,17 +231,36 @@ Endosar un título no endosable dejaría una cadena de tenedores sobre algo que 
 puede circular, un enredo muy costoso de deshacer, mientras que una negativa
 durante una incidencia de red no es más que un reintento.
 
-Queda pendiente el reverso de esa restricción: **la cesión ordinaria** como
-operación propia (artículos 347-348 CCom), que es la vía que a estos pagarés les
-queda y que hoy la plataforma no ofrece. Se documenta extra-cartularmente, fuera
-del sistema.
+El reverso de esa restricción es **la cesión ordinaria** (artículos 347-348
+CCom, en relación con los artículos 1526 y siguientes CC), que es la vía que a
+estos pagarés les queda y que la plataforma ofrece como operación propia
+(`internal/handler/cesion.go`). Sin ella, impedir el endoso los habría dejado
+sin ninguna forma de circular dentro del sistema, y la única salida sería un
+documento en papel al margen del registro: justo lo que la infraestructura
+existe para evitar.
+
+**La cesión no es un endoso con otro nombre**, y el sistema no debe presentarla
+como tal. En el registro las dos operaciones son idénticas —una transferencia—
+pero el Derecho que arrastran difiere: el cedente responde de la existencia y
+legitimidad del crédito pero **no de la solvencia** del deudor, salvo pacto
+(artículo 1529 CC), mientras que el endosante sí responde del pago (artículo 18
+LCCH); el deudor conserva frente al cesionario las excepciones que tuviera
+contra el cedente, sin la autonomía propia del título cambiario; y la cesión ha
+de **notificarse al deudor** para serle oponible, pues hasta entonces el pago al
+cedente le libera (artículo 1527 CC).
+
+De ahí que se marque con `tipo_operacion: CESION`, que el estado resultante sea
+CEDIDO y no ENDOSADO, y que el reverso del PDF la presente bajo epígrafe propio
+y no dentro de la cadena de endosos: incluirla allí atribuiría al cedente una
+responsabilidad que nunca asumió. La constancia de la notificación se registra
+—fecha y medio—, aunque la notificación misma ocurra fuera del sistema; cuando
+no consta, la respuesta lo advierte expresamente.
 
 ## 9. Resumen de lo pendiente
 
 | Plano | Pendiente | Depende de |
 |---|---|---|
 | Técnico | Reintento de la entrega en pagarés pendientes (§6) | Nosotros |
-| Técnico | Cesión ordinaria como operación propia (§8) | Nosotros |
 | Modelo | Persona jurídica y poder de representación (§4) | Nosotros, con horizonte EBW |
 | Institucional | Presunción legal de unicidad (§3) | Cualificación del prestador |
 | Institucional | Firma cualificada eIDAS y cartera de identidad (§4) | Despliegue EUDI Wallet |

@@ -234,3 +234,108 @@ func TestE2E_NoALaOrdenNoSeEndosa(t *testing.T) {
 	require.Len(t, owners.Owners, 1)
 	assert.Equal(t, beneficiarioPub, owners.Owners[0].Pub, "el endoso no debe haber movido el título")
 }
+
+// La cesión ordinaria es la vía que le queda al pagaré «no a la orden». Emite
+// uno real, lo cede, y comprueba que el crédito cambia de manos sin que el
+// título figure como endosado.
+func TestE2E_CesionDePagareNoALaOrden(t *testing.T) {
+	appID, appKey := os.Getenv("BCF_APP_ID"), os.Getenv("BCF_APP_KEY")
+	if appID == "" || appKey == "" {
+		t.Skip("sin BCF_APP_ID/BCF_APP_KEY: carga el .env antes de ejecutar")
+	}
+	baseURL := os.Getenv("BCF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.blockchainfue.com/api"
+	}
+
+	client := bcfclient.New(config.BlockchainConfig{BaseURL: baseURL, AppID: appID, AppKey: appKey})
+	cryptoSvc := crypto.NewService(client)
+
+	emisorPub, emisorPvt, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+	tenedorPub, tenedorPvt, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+	cesionarioPub, _, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+
+	ph := NewPagareHandler(client, cryptoSvc, nil)
+	ch := NewConsultaHandler(client)
+	ch.SetCrypto(cryptoSvc)
+
+	payload := map[string]interface{}{
+		"asset": map[string]interface{}{
+			"data": map[string]interface{}{
+				"denominacion": "PAGARÉ", "promesa_pago": true,
+				"importe": 750.0, "moneda": "EUR", "no_a_la_orden": true,
+				"vencimiento":       map[string]interface{}{"tipo": "fecha_fija", "fecha": time.Now().AddDate(1, 0, 0).Format("2006-01-02")},
+				"localidad_pago":    "Alicante",
+				"beneficiario":      map[string]interface{}{"nombre": "Ana", "nif": "12345678Z"},
+				"localidad_emision": "Alicante", "fecha_emision": time.Now().Format("2006-01-02"),
+				"firmante": map[string]interface{}{
+					"nombre": "Carlos", "nif": "87654321X",
+					"direccion_postal": map[string]interface{}{
+						"direccion": "Calle Mayor 5", "localidad": "Alicante",
+						"codigo_postal": "03001", "pais": "ES",
+					},
+				},
+			},
+		},
+		"from": map[string]string{"pub": emisorPub, "pvt": emisorPvt},
+		"to":   tenedorPub,
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	ph.Emitir(w, withPrincipal(req))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var emision struct {
+		ID      string  `json:"id"`
+		Entrega Entrega `json:"entrega"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &emision))
+	require.True(t, emision.Entrega.Entregado)
+	t.Logf("emitido «no a la orden» %s", emision.ID)
+
+	// El tenedor lo cede: es la única vía que le queda.
+	cb, _ := json.Marshal(map[string]interface{}{
+		"id": emision.ID, "to": cesionarioPub,
+		"cesionario":         map[string]interface{}{"nombre": "Bea", "apellido": "Soler", "nif": "11111111H"},
+		"notificacion_fecha": time.Now().Format("2006-01-02"),
+		"notificacion_medio": "burofax",
+		"from":               map[string]string{"pub": tenedorPub, "pvt": tenedorPvt},
+	})
+	creq := httptest.NewRequest(http.MethodPut, "/api/pagares/cesion", bytes.NewReader(cb))
+	cw := httptest.NewRecorder()
+	ph.Ceder(cw, withPrincipal(creq))
+	require.Equal(t, http.StatusOK, cw.Code, cw.Body.String())
+	t.Logf("cedido a %s", cesionarioPub)
+
+	// El crédito está en manos del cesionario.
+	ownersBody, status, err := client.GetAssetOwners(emision.ID)
+	require.NoError(t, err)
+	require.Equal(t, 200, status)
+	var owners struct {
+		Owners []struct {
+			Pub string `json:"pub"`
+		} `json:"owners"`
+	}
+	require.NoError(t, json.Unmarshal(ownersBody, &owners))
+	require.Len(t, owners.Owners, 1)
+	assert.Equal(t, cesionarioPub, owners.Owners[0].Pub)
+
+	// Pero el título no está endosado: la cesión no es un endoso.
+	histBody, hs, err := client.GetAssetHistory(emision.ID)
+	require.NoError(t, err)
+	require.Equal(t, 200, hs)
+
+	endosos, cesiones, _ := ch.parseHistoryCompleto(histBody)
+	assert.Empty(t, endosos, "la cesión no pertenece a la cadena de endosos")
+	require.Len(t, cesiones, 1)
+	assert.Equal(t, "Bea Soler", cesiones[0].Cesionario)
+	assert.Equal(t, "burofax", cesiones[0].NotificacionMedio)
+
+	estado := ch.resolveEstado(emision.ID, map[string]string{"ENDOSO": "ENDOSADO"})
+	assert.Equal(t, "CEDIDO", estado)
+	t.Logf("estado: %s · cesiones: %d · endosos: %d", estado, len(cesiones), len(endosos))
+}

@@ -45,6 +45,7 @@ templ Dashboard(user *CurrentUser) {
 				ANULADO:   ['badge-anulado','Anulado'],
 				PRESCRITO: ['badge-prescrito','Prescrito'],
 				ENDOSADO:  ['badge-endosado','Endosado'],
+				CEDIDO:    ['badge-endosado','Cedido'],
 				VENCIDO:   ['badge-vencido','Vencido']
 			};
 			var m = map[estado] || ['badge-activo','Activo'];
@@ -84,6 +85,11 @@ templ Dashboard(user *CurrentUser) {
 						// solo cabe transmitirlo por cesión ordinaria.
 						if (estado !== 'VENCIDO' && !d.no_a_la_orden) {
 							acc += '<a href="/pagares/endosar?id=' + encodeURIComponent(a.id) + '" class="btn btn-outline btn-sm">Endosar</a>';
+						}
+						// Al pagaré "no a la orden" le queda la cesión ordinaria
+						// (arts. 347-348 CCom), que no es un endoso.
+						if (estado !== 'VENCIDO' && d.no_a_la_orden) {
+							acc += '<a href="/pagares/ceder?id=' + encodeURIComponent(a.id) + '" class="btn btn-outline btn-sm">Ceder</a>';
 						}
 						acc += '<a href="/pagares/pagar?id=' + encodeURIComponent(a.id) + '" class="btn btn-danger btn-sm">Pagar</a>';
 					}

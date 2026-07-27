@@ -138,3 +138,15 @@ func (p *PageHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	templates.PagarAnular(user).Render(r.Context(), w)
 }
+
+// Ceder renders the ordinary-assignment form, the route left to a pagaré the
+// «no a la orden» clause bars from endoso.
+func (p *PageHandler) Ceder(w http.ResponseWriter, r *http.Request) {
+	principal := p.requirePrincipal(w, r)
+	if principal == nil {
+		return
+	}
+	user := &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
+	w.Header().Set("Content-Type", "text/html")
+	templates.Ceder(user).Render(r.Context(), w)
+}

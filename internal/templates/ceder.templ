@@ -1,0 +1,134 @@
+package templates
+
+templ Ceder(user *CurrentUser) {
+	@Base("Ceder pagaré", user) {
+		@PageHead("Transmisión", "Ceder un pagaré", "Cesión ordinaria del crédito (arts. 347-348 CCom). Es la vía que corresponde al pagaré «no a la orden», que el art. 14 LCCH excluye del endoso.")
+		<div class="card" style="max-width:760px">
+			<div class="alert alert-info">
+				@Icon("info")
+				<span>
+					<strong>La cesión no es un endoso.</strong> El cedente responde de la existencia
+					y legitimidad del crédito, pero <strong>no de la solvencia</strong> del deudor
+					(art. 1529 CC), a diferencia del endosante (art. 18 LCCH); y el deudor conserva
+					frente al cesionario las excepciones que tuviera contra el cedente.
+				</span>
+			</div>
+			<form id="cesion-form" onsubmit="return cederPagare(event)">
+				<div class="field">
+					<label class="form-label">ID del pagaré *</label>
+					<input type="text" id="ces-id" placeholder="ID del asset en blockchain"/>
+				</div>
+				<div class="field">
+					<label class="form-label">Cesionario (nuevo titular) *</label>
+					<select id="ces-to-select" onchange="onCesionarioSelect(this.value)">
+						<option value="">-- selecciona un usuario --</option>
+					</select>
+				</div>
+				<div class="field">
+					<input type="text" id="ces-to" placeholder="Clave pública del cesionario" readonly/>
+				</div>
+				<fieldset>
+					<legend>Notificación al deudor (art. 1527 CC)</legend>
+					<p class="desc" style="margin-bottom:10px;">
+						Hasta que se notifica, la cesión no es oponible al deudor y el pago al cedente
+						le libera. La notificación se hace fuera de la plataforma; aquí solo se deja
+						constancia de que se hizo.
+					</p>
+					<div class="form-grid">
+						<div class="field">
+							<label class="form-label" for="ces-notif-fecha">Fecha de notificación</label>
+							<input type="date" id="ces-notif-fecha"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="ces-notif-medio">Medio</label>
+							<input type="text" id="ces-notif-medio" placeholder="burofax, acta notarial…"/>
+						</div>
+					</div>
+				</fieldset>
+				<p class="desc">Cedes tú, el usuario logueado. La cesión se firma con tu identidad; no necesitas introducir claves.</p>
+				<div id="cesion-error" class="alert alert-error hidden"></div>
+				<div id="cesion-ok" class="alert alert-success hidden"></div>
+				<div class="mt-4">
+					<button type="submit" id="cesion-btn" class="btn btn-primary">
+						@Icon("repeat")
+						Ceder pagaré
+					</button>
+				</div>
+			</form>
+		</div>
+		<script>
+		var urlId = new URLSearchParams(window.location.search).get('id');
+		if (urlId) document.getElementById('ces-id').value = urlId;
+
+		function onCesionarioSelect(jsonStr) {
+			if (!jsonStr) { document.getElementById('ces-to').value = ''; return; }
+			var u;
+			try { u = JSON.parse(jsonStr); } catch(e) { return; }
+			document.getElementById('ces-to').value = (u.pub_keys && u.pub_keys[0]) || '';
+		}
+
+		function cederPagare(e) {
+			e.preventDefault();
+			var errEl = document.getElementById('cesion-error');
+			var okEl = document.getElementById('cesion-ok');
+			var btn = document.getElementById('cesion-btn');
+			errEl.classList.add('hidden');
+			okEl.classList.add('hidden');
+
+			var sel = document.getElementById('ces-to-select').value;
+			var cesionario;
+			if (sel) { try { var u = JSON.parse(sel); cesionario = {nombre: u.nombre, apellido: u.apellido, nif: u.nif}; } catch(e2) {} }
+
+			var payload = {
+				id: document.getElementById('ces-id').value.trim(),
+				to: document.getElementById('ces-to').value.trim(),
+				cesionario: cesionario,
+				notificacion_fecha: document.getElementById('ces-notif-fecha').value || undefined,
+				notificacion_medio: document.getElementById('ces-notif-medio').value || undefined
+			};
+
+			btn.disabled = true;
+			btn.textContent = 'Cediendo…';
+
+			fetch('/api/pagares/cesion', {
+				method: 'PUT',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify(payload)
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				btn.disabled = false;
+				btn.textContent = 'Ceder pagaré';
+				if (data.ok) {
+					okEl.textContent = data.msg || 'Pagaré cedido.';
+					okEl.classList.remove('hidden');
+				} else {
+					errEl.textContent = data.msg || 'Error desconocido';
+					errEl.classList.remove('hidden');
+				}
+			})
+			.catch(function(err) {
+				btn.disabled = false;
+				btn.textContent = 'Ceder pagaré';
+				errEl.textContent = 'Error de conexión: ' + err.message;
+				errEl.classList.remove('hidden');
+			});
+			return false;
+		}
+
+		fetch('/api/usuarios')
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				if (!data.ok || !data.usuarios) return;
+				var sel = document.getElementById('ces-to-select');
+				data.usuarios.forEach(function(u) {
+					var opt = document.createElement('option');
+					opt.value = JSON.stringify(u);
+					opt.textContent = (u.nombre || '') + ' ' + (u.apellido || '') + ' (' + (u.nif || '') + ')';
+					sel.appendChild(opt);
+				});
+			})
+			.catch(function(){});
+		</script>
+	}
+}

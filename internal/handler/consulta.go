@@ -154,10 +154,15 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 			}
 		}
 		action, _ := metadata["action"].(string)
-		// La entrega al beneficiario se registra como TRANSFER, igual que un
-		// endoso, pero no lo es: un pagaré recién emitido no está endosado.
+		// La entrega y la cesión se registran como TRANSFER, igual que un
+		// endoso, pero no lo son: un pagaré recién emitido no está endosado, y
+		// uno cedido lo fue por cesión ordinaria, con otro régimen.
 		if action == "TRANSFER" && transfer == "" && !esEntrega(metadata) {
-			transfer = "ENDOSADO"
+			if esCesion(metadata) {
+				transfer = "CEDIDO"
+			} else {
+				transfer = "ENDOSADO"
+			}
 		}
 		if action == "ENDOSO" && update == "" {
 			update = "ENDOSADO"
@@ -268,6 +273,8 @@ func (h *ConsultaHandler) GetHistorico(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case esEntrega(metadata):
 			metadata["action_label"] = "Entrega al beneficiario"
+		case esCesion(metadata):
+			metadata["action_label"] = "Cesión ordinaria (arts. 347-348 CCom)"
 		default:
 			if label, found := actionLabels[action]; found {
 				metadata["action_label"] = label
@@ -482,9 +489,10 @@ func (h *ConsultaHandler) DescargarPDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var endosos []pdf.Endoso
+	var cesiones []pdf.Cesion
 	var firmantePub string
 	if histBody, hs, herr := h.client.GetAssetHistory(id); herr == nil && hs == 200 {
-		endosos, firmantePub = h.parseHistory(histBody)
+		endosos, cesiones, firmantePub = h.parseHistoryCompleto(histBody)
 	}
 	estado := h.resolveEstado(id, map[string]string{
 		"PAGO": "PAGADO", "ANULACION": "ANULADO", "PRESCRIPCION": "PRESCRITO",
@@ -496,7 +504,7 @@ func (h *ConsultaHandler) DescargarPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	verifyURL := fmt.Sprintf("%s://%s/pagares/verificar?network=test&id=%s", scheme, r.Host, id)
 
-	out, err := pdf.Generate(pdf.Input{P: pagare, AssetID: id, VerifyURL: verifyURL, FirmantePub: firmantePub, Estado: estado, Endosos: endosos})
+	out, err := pdf.Generate(pdf.Input{P: pagare, AssetID: id, VerifyURL: verifyURL, FirmantePub: firmantePub, Estado: estado, Endosos: endosos, Cesiones: cesiones})
 	if err != nil {
 		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "no se pudo generar el PDF"})
 		return
@@ -537,9 +545,16 @@ func assetToPagare(body []byte) (*models.PagareElectronico, error) {
 // identities are resolved from their public key (`to`) against the user store,
 // since the history metadata carries only the keys, not the names.
 func (h *ConsultaHandler) parseHistory(body []byte) (endosos []pdf.Endoso, firmantePub string) {
+	endosos, _, firmantePub = h.parseHistoryCompleto(body)
+	return endosos, firmantePub
+}
+
+// parseHistoryCompleto also returns the assignments, which travel apart from
+// the endorsement chain because they bind the cedente to a different régimen.
+func (h *ConsultaHandler) parseHistoryCompleto(body []byte) (endosos []pdf.Endoso, cesiones []pdf.Cesion, firmantePub string) {
 	var raw map[string]interface{}
 	if json.Unmarshal(body, &raw) != nil {
-		return nil, ""
+		return nil, nil, ""
 	}
 	hist, _ := raw["history"].([]interface{})
 	for _, item := range hist {
@@ -560,6 +575,33 @@ func (h *ConsultaHandler) parseHistory(body []byte) (endosos []pdf.Endoso, firma
 		}
 		if esEntrega(meta) {
 			continue // la entrega al beneficiario no abre la cadena de endosos
+		}
+		if esCesion(meta) {
+			// La cesión transmite bajo otro régimen, sin responsabilidad del
+			// cedente por la solvencia: va aparte, no en la cadena de endosos.
+			c := pdf.Cesion{
+				CedentePub:        strVal(meta["from"]),
+				NotificacionFecha: strVal(meta["notificacion_fecha"]),
+				NotificacionMedio: strVal(meta["notificacion_medio"]),
+			}
+			if f := strVal(meta["fecha"]); len(f) >= 10 {
+				c.Fecha = f[:10]
+			}
+			if ce, ok := meta["cesionario"].(map[string]interface{}); ok {
+				c.Cesionario = strings.TrimSpace(strVal(ce["nombre"]) + " " + strVal(ce["apellido"]))
+				c.NIF = strVal(ce["nif"])
+			}
+			toPub := strVal(meta["to"])
+			if c.Cesionario == "" && toPub != "" {
+				if u := h.resolveUser(toPub); u != nil {
+					c.Cesionario = strings.TrimSpace(u.Nombre + " " + u.Apellido)
+					c.NIF = u.NIF
+				} else {
+					c.Cesionario = "clave " + shortIDStr(toPub)
+				}
+			}
+			cesiones = append(cesiones, c)
+			continue
 		}
 		if action != "TRANSFER" && action != "ENDOSO" && tipo == "" {
 			continue // UPDATE/BURN u otros: no son endosos
@@ -590,7 +632,7 @@ func (h *ConsultaHandler) parseHistory(body []byte) (endosos []pdf.Endoso, firma
 		}
 		endosos = append(endosos, end)
 	}
-	return endosos, firmantePub
+	return endosos, cesiones, firmantePub
 }
 
 // shortIDStr abbreviates a long identifier/pubkey for display.
