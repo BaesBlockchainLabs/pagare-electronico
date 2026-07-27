@@ -1173,7 +1173,34 @@ components:
         msg:
           type: string
         asset:
-          $ref: "#/components/schemas/PagareAsset"
+          allOf:
+            - $ref: "#/components/schemas/PagareAsset"
+            - type: object
+              properties:
+                verificacion:
+                  $ref: "#/components/schemas/Verificacion"
+
+    Verificacion:
+      type: object
+      description: >
+        Resultado de comprobar la firma del emisor sobre el contenido del
+        pagaré. Responde a dos preguntas distintas: si el contenido lo firmó la
+        clave que creó el asset (`firmado`) y si el contenido almacenado hoy es
+        el que se firmó (`integro`). Un pagaré puede estar firmado y no ser
+        íntegro, que es justo el caso del que hay que advertir al tenedor.
+      properties:
+        firmado:
+          type: boolean
+          description: "La firma es válida para la clave que emitió el pagaré."
+        integro:
+          type: boolean
+          description: "El contenido coincide con el que se firmó al emitir."
+        clave:
+          type: string
+          description: "Clave pública del emisor con la que se ha verificado."
+        msg:
+          type: string
+          description: "Explicación legible del resultado."
 
     SimpleOkResponse:
       type: object

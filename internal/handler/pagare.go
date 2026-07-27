@@ -111,17 +111,27 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pagareJSON, _ := json.Marshal(req.Asset.Data)
-
 	from, err := h.resolveFrom(principal, req.From)
 	if err != nil {
 		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
 		return
 	}
 
+	// Sign the canonical content with the firmante's identity (art. 94.7 LCCH).
+	// The signature travels inside the asset data, not in the metadata: the
+	// public endpoint only exposes data, and a third party must be able to
+	// verify integrity without an account.
+	firma, err := h.firmarContenido(&req.Asset.Data, from)
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"ok": false, "msg": fmt.Sprintf("No se pudo firmar el pagaré: %v", err),
+		})
+		return
+	}
+
 	asset := map[string]interface{}{
-		"data":     buildAssetData(&req.Asset.Data),
-		"metadata": buildEmisionMetadata(req.Asset.Metadata, string(pagareJSON), from),
+		"data":     buildAssetData(&req.Asset.Data, firma),
+		"metadata": buildEmisionMetadata(req.Asset.Metadata),
 	}
 	// Per the BCF schema, the creating identity (from) goes INSIDE asset, so the
 	// asset is owned by that identity rather than the application key.
@@ -318,33 +328,38 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 	WriteRaw(w, status, body)
 }
 
-func buildAssetData(p *models.PagareElectronico) map[string]interface{} {
-	data := map[string]interface{}{
-		"type":              "pagare_electronico",
-		"denominacion":      p.Denominacion,
-		"promesa_pago":      p.PromesaPago,
-		"importe":           p.Importe,
-		"moneda":            p.Moneda,
-		"vencimiento":       p.Vencimiento,
-		"localidad_pago":    p.LocalidadPago,
-		"beneficiario":      p.Beneficiario,
-		"localidad_emision": p.LocalidadEmision,
-		"fecha_emision":     p.FechaEmision,
-		"firmante":          p.Firmante,
+// firmarContenido signs the canonical form of the pagaré with the firmante's
+// identity. Returns an empty signature (and no error) when there is no signing
+// identity or no crypto service, which is the keyless path used by tests and by
+// accounts that have not been provisioned a key; verification then reports the
+// pagaré as unsigned rather than as tampered with.
+func (h *PagareHandler) firmarContenido(p *models.PagareElectronico, from *models.IdentidadBC) (string, error) {
+	if h.crypto == nil || from == nil || from.Pvt == "" || from.Pub == "" {
+		return "", nil
 	}
-	if p.Aval != nil {
-		data["aval"] = p.Aval
+	canonical, err := models.CanonicalJSON(p)
+	if err != nil {
+		return "", err
 	}
-	if len(p.Clausulas) > 0 {
-		data["clausulas"] = p.Clausulas
-	}
-	if p.NoALaOrden {
-		data["no_a_la_orden"] = true
+	return h.crypto.SignPagareContent(string(canonical), from.Pvt, from.Pub)
+}
+
+// buildAssetData is the canonical content plus the platform's own type marker
+// and the firmante's signature over that content. Keeping the stored data and
+// the signed form in step is what lets a verifier recompute the latter from the
+// former.
+func buildAssetData(p *models.PagareElectronico, firma string) map[string]interface{} {
+	data := models.CanonicalContent(p)
+	data["type"] = "pagare_electronico"
+	if firma != "" {
+		if firmante, ok := data["firmante"].(map[string]interface{}); ok {
+			firmante["firma_digital"] = firma
+		}
 	}
 	return data
 }
 
-func buildEmisionMetadata(meta *models.MetadataEmision, pagareJSON string, from *models.IdentidadBC) map[string]interface{} {
+func buildEmisionMetadata(meta *models.MetadataEmision) map[string]interface{} {
 	m := map[string]interface{}{
 		"action": "CREATE",
 	}

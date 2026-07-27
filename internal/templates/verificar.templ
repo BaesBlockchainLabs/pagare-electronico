@@ -36,6 +36,31 @@ templ Verificar(id string, network string, user *CurrentUser) {
 			return '<span class="badge ' + m[0] + '"><span class="dot"></span>' + m[1] + '</span>';
 		}
 
+		// Firma del contenido: distinta del registro en blockchain. El registro
+		// acredita cuándo se grabó y que no se reordenó; la firma acredita que el
+		// texto del pagaré es el que firmó el emisor.
+		function firmaHTML(ver) {
+			if (!ver || !ver.msg) return '';
+			var clase, icono;
+			if (ver.integro) {
+				clase = 'alert-success';
+				icono = '<path d="M20 6 9 17l-5-5"></path>';
+			} else if (ver.firmado) {
+				clase = 'alert-error';
+				icono = '<path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path>';
+			} else {
+				clase = 'alert-info';
+				icono = '<circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path>';
+			}
+			var h = '<div class="alert ' + clase + '">' +
+				'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + icono + '</svg>' +
+				'<span>' + ver.msg;
+			if (ver.clave) {
+				h += ' <small>· clave del emisor ' + ver.clave.slice(0, 8) + '…' + ver.clave.slice(-6) + '</small>';
+			}
+			return h + '</span></div>';
+		}
+
 		var urlId = new URLSearchParams(window.location.search).get('id') || document.getElementById('verify-id').value;
 		if (urlId) {
 			document.getElementById('verify-id').value = urlId;
@@ -64,11 +89,15 @@ templ Verificar(id string, network string, user *CurrentUser) {
 					var impStr = (d.importe != null ? Number(d.importe).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '') + ' ' + (d.moneda || 'EUR');
 					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha ? fmtFecha(ven.fecha) : '');
 
+					var ver = a.verificacion || {};
+
 					var h = '<div class="verify-banner">' +
 						'<svg class="seal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"></circle><path d="M9.2 9.3 11.1 11.2 14.8 7.3"></path><path d="M8.4 14.1 7 21 l5-2.6 5 2.6 -1.4-6.9"></path></svg>' +
-						'<div style="flex:1"><div class="vb-title">Verificado en blockchain</div><div class="vb-sub">Registro fehaciente e inalterable · red ' + network + '</div></div>' +
+						'<div style="flex:1"><div class="vb-title">Registrado en blockchain</div><div class="vb-sub">Orden cronológico e integridad del registro · red ' + network + '</div></div>' +
 						badgeHTML(estado) +
 					'</div>';
+
+					h += firmaHTML(ver);
 
 					h += '<div class="card" style="margin-bottom:0">';
 					if (d.no_a_la_orden) {

@@ -27,7 +27,7 @@ la sección 2(2) de la *Electronic Trade Documents Act 2023* británica.
 | ii | **Identificación** del titular del control | Par de claves ed25519 por usuario (`internal/crypto`), asociación usuario↔pubkey en `internal/auth`, consulta de titularidad vía `GetAssetOwners` | **Parcial** — identidad de plataforma, no eIDAS (§4) |
 | iii | **Exclusividad** del control | Propiedad del asset en la red; solo el poseedor de la clave privada puede transferirlo. La red rechaza la operación si `from` no es el titular | **Parcial** — control ejercido por tercero (§5) y no transferido en la emisión (§6) |
 | iv | **Trazabilidad** de la cadena de portadores | `GetAssetHistory` → `parseHistory` (`internal/handler/consulta.go`) → cadena de endosos en el reverso del PDF (`internal/pdf/pagare.go`). Orden cronológico garantizado por la red | **Cubierto** |
-| v | **Integridad** de la información incorporada | Inmutabilidad del registro en la red | **Insuficiente** — falta firma separable del contenido (§7) |
+| v | **Integridad** de la información incorporada | Inmutabilidad del registro, más firma del emisor sobre la forma canónica del contenido, verificable públicamente (§7) | **Cubierto** |
 
 ## 2. Régimen aplicable y exclusiones
 
@@ -123,18 +123,45 @@ atómica de la operación de emisión.
 
 ## 7. Integridad: firma del contenido
 
-**Divergencia conocida.** El contenido del pagaré (las menciones del artículo 94
-LCCH) **no se firma de forma separable**. La integridad descansa hoy únicamente
-en la inmutabilidad del asset en la red.
+En la emisión, el firmante firma la **forma canónica** del contenido del pagaré
+—las menciones del artículo 94 LCCH, más el aval y las cláusulas— y la firma se
+almacena en `firmante.firma_digital`, dentro del propio contenido del asset.
 
-Los medios existen y están sin cablear: `crypto.SignPagareContent` y
-`crypto.VerifyPagareSignature` (`internal/crypto/service.go`) no se invocan desde
-ningún punto del flujo, y el formulario de emisión no envía
-`firma_digital_pagare`. La consecuencia es que un tercero no puede verificar la
-integridad del contenido con independencia de la red: debe confiar en ella.
+Que la firma viaje dentro del contenido, y no en los metadatos, responde a una
+restricción real: el endpoint público de la red devuelve `data` pero no
+`metadata`, de modo que una firma en metadatos sería invisible para quien
+consulta sin credenciales. Doctrinalmente además encaja: la firma es una mención
+del título (artículo 94.7), no un dato externo a él.
 
-Pendiente de resolver: firma del JSON canónico del pagaré en la emisión y
-verificación pública en `/pagares/verificar`.
+**La forma canónica** (`internal/models/canonical.go`) es una lista blanca
+explícita, construida con mapas anidados y no a partir de las estructuras Go. Dos
+razones. La red **añade campos propios** al `data` almacenado (`app`, `from`,
+`namespace`, `token`, `created_at`) que no deben entrar en la firma; y lo que se
+firmó no debe desplazarse por un cambio posterior en una etiqueta de estructura.
+Quedan fuera también `firmante.firma_digital` —una firma no puede cubrirse a sí
+misma— y `firmante.identidad_blockchain`, que nunca debe llegar al registro
+porque podría arrastrar una clave privada.
+
+**La verificación** (`internal/handler/verificacion.go`) responde a dos preguntas
+distintas y las informa por separado:
+
+- `firmado` — la firma es válida para `data.from`, la clave que la **red**
+  registra como creadora del asset, no una clave que declaremos nosotros.
+- `integro` — el contenido almacenado hoy, recalculado a forma canónica, coincide
+  byte a byte con lo que esa clave firmó.
+
+Recalcular en lugar de confiar en el mensaje que la firma lleva dentro es lo
+esencial: el blob firmado contiene su propio mensaje, de modo que verificarlo
+aisladamente solo probaría que alguien firmó *algo*. Un pagaré puede estar
+firmado y no ser íntegro —alguien alteró un campo tras la emisión— y ése es
+justamente el caso del que hay que advertir al tenedor.
+
+El resultado se expone en el endpoint público y en `/pagares/verificar`, de modo
+que **un tercero sin cuenta puede comprobarlo**.
+
+Límite que conviene no perder de vista: esto acredita que el contenido es el que
+firmó la clave emisora, no que esa clave corresponda a quien dice ser ni que
+tenga poder para obligar a una sociedad. Eso es el §4.
 
 ## 8. Validación sustantiva LCCH
 
@@ -165,7 +192,6 @@ electrónica.
 | Plano | Pendiente | Depende de |
 |---|---|---|
 | Técnico | Entrega del control al beneficiario en la emisión (§6) | Nosotros |
-| Técnico | Firma separable del contenido y su verificación (§7) | Nosotros |
 | Técnico | Bloqueo del endoso en pagarés «no a la orden» (§8) | Nosotros |
 | Modelo | Persona jurídica y poder de representación (§4) | Nosotros, con horizonte EBW |
 | Institucional | Presunción legal de unicidad (§3) | Cualificación del prestador |

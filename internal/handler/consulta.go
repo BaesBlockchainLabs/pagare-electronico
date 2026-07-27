@@ -20,9 +20,16 @@ type UserResolver interface {
 	GetUserByPubKey(pub string) (*auth.User, error)
 }
 
+// SignatureVerifier checks a signed message against a public key, returning the
+// message that was signed. Satisfied by *crypto.Service.
+type SignatureVerifier interface {
+	VerifyPagareSignature(signedMessage, verifyKey string) (string, error)
+}
+
 type ConsultaHandler struct {
 	client *bcfclient.Client
 	users  UserResolver
+	crypto SignatureVerifier
 }
 
 func NewConsultaHandler(client *bcfclient.Client) *ConsultaHandler {
@@ -31,6 +38,9 @@ func NewConsultaHandler(client *bcfclient.Client) *ConsultaHandler {
 
 // SetUsers wires the user resolver used to enrich the PDF from public keys.
 func (h *ConsultaHandler) SetUsers(u UserResolver) { h.users = u }
+
+// SetCrypto wires the verifier used to check the firmante's signature.
+func (h *ConsultaHandler) SetCrypto(c SignatureVerifier) { h.crypto = c }
 
 // resolveUser returns the registered user for a pub, or nil if unknown.
 func (h *ConsultaHandler) resolveUser(pub string) *auth.User {
@@ -396,6 +406,7 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 	}
 
 	asset["data"] = data
+	asset["verificacion"] = h.verificarContenido(data)
 
 	WriteJSON(w, status, raw)
 }
@@ -511,12 +522,7 @@ func assetToPagare(body []byte) (*models.PagareElectronico, error) {
 	if data == nil {
 		return nil, fmt.Errorf("sin datos de pagaré")
 	}
-	db, _ := json.Marshal(data)
-	var p models.PagareElectronico
-	if err := json.Unmarshal(db, &p); err != nil {
-		return nil, err
-	}
-	return &p, nil
+	return pagareFromData(data)
 }
 
 // parseHistory extracts, in chronological order, the endorsement chain and the

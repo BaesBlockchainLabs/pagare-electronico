@@ -64,6 +64,7 @@ func main() {
 	// Resolve blockchain participants (firmante/endosatario) to registered users
 	// from their public key, for the PDF.
 	consultaHandler.SetUsers(authStore)
+	consultaHandler.SetCrypto(cryptoSvc)
 
 	// Pagaré handler signs on behalf of the logged-in user using their sealed
 	// private key resolved from the store (no private key handled client-side).
