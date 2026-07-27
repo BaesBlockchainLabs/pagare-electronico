@@ -9,8 +9,18 @@ import (
 )
 
 type Config struct {
-	Server     ServerConfig
-	Blockchain BlockchainConfig
+	Server       ServerConfig
+	Blockchain   BlockchainConfig
+	Certificador CertificadorConfig
+}
+
+// CertificadorConfig identifica a quien expide y firma los certificados de
+// registro y verificación. Va en configuración porque es una persona con un
+// cargo, y ambos cambian.
+type CertificadorConfig struct {
+	Nombre  string
+	Cargo   string
+	Entidad string
 }
 
 type ServerConfig struct {
@@ -48,6 +58,11 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
+		Certificador: CertificadorConfig{
+			Nombre:  getEnv("CERT_NOMBRE", "La dirección"),
+			Cargo:   getEnv("CERT_CARGO", "Director"),
+			Entidad: getEnv("CERT_ENTIDAD", "BlockchainFUE"),
+		},
 		Server: ServerConfig{
 			Port:         port,
 			Env:          env,

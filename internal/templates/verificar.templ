@@ -46,6 +46,22 @@ templ Verificar(id string, network string, user *CurrentUser) {
 		// son título ejecutivo, porque el juicio cambiario exige el original.
 		// La vista recortada debe explicarse: quien consulta sin ser parte no ve
 		// menos por un fallo, sino porque los datos de las partes no son suyos.
+		// El certificado sólo se ofrece a quien es parte: reúne en un documento
+		// pensado para circular todos los datos identificativos del título.
+		function certificadoHTML(id, network) {
+			return '<div class="card" style="margin-top:16px">' +
+				'<div class="pc-label">Certificado</div>' +
+				'<p class="desc" style="margin-top:8px">' +
+				'Documento en el que la dirección da fe del contenido del título, del resultado ' +
+				'de esta verificación y del histórico de operaciones, explicado con su fundamento ' +
+				'legal. Pensado para acompañar al protesto, que se levanta por acta notarial ' +
+				'(art. 51.1 LCCH) y cuyo notario no puede leer el registro por sí mismo.' +
+				'</p>' +
+				'<a class="btn btn-primary" style="margin-top:10px" href="/api/pagares/certificado?id=' +
+				encodeURIComponent(id) + '&network=' + encodeURIComponent(network) + '">Descargar certificado (PDF)</a>' +
+				'</div>';
+		}
+
 		function vistaPublicaHTML() {
 			return '<div class="alert alert-info" style="margin-top:16px">' +
 				'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>' +
@@ -193,6 +209,7 @@ templ Verificar(id string, network string, user *CurrentUser) {
 					h += '</div>';
 					h += '</div>';
 					if (a.vista === 'publica') h += vistaPublicaHTML();
+					else h += certificadoHTML(a.id, network);
 					h += alcanceHTML();
 					el.innerHTML = h;
 				})

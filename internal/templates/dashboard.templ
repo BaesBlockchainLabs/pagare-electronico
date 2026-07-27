@@ -106,6 +106,10 @@ templ Dashboard(user *CurrentUser) {
 					}
 					acc += '<a href="/pagares/historico?id=' + encodeURIComponent(a.id) + '" class="btn btn-ghost btn-sm">Histórico</a>';
 					acc += '<a href="/api/pagares/pdf?id=' + encodeURIComponent(a.id) + '" class="btn btn-ghost btn-sm">PDF</a>';
+					// Certificado: quien aparece en esta lista es parte del pagaré,
+					// así que siempre puede pedirlo. Va aquí porque quien lo necesita
+					// —el tenedor que va a protestar— parte de su propia cartera.
+					acc += '<a href="/api/pagares/certificado?id=' + encodeURIComponent(a.id) + '&network=test" class="btn btn-ghost btn-sm">Certificado</a>';
 					acc += '<a href="/pagares/verificar?network=test&id=' + encodeURIComponent(a.id) + '" class="btn btn-gold btn-sm">Verificar</a>';
 
 					cards += '<article class="pagare-card">' + SEAL +

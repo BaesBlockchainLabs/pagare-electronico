@@ -27,9 +27,10 @@ type SignatureVerifier interface {
 }
 
 type ConsultaHandler struct {
-	client *bcfclient.Client
-	users  UserResolver
-	crypto SignatureVerifier
+	client       *bcfclient.Client
+	users        UserResolver
+	crypto       SignatureVerifier
+	certificador Certificador
 }
 
 func NewConsultaHandler(client *bcfclient.Client) *ConsultaHandler {

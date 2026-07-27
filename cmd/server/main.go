@@ -65,6 +65,11 @@ func main() {
 	// from their public key, for the PDF.
 	consultaHandler.SetUsers(authStore)
 	consultaHandler.SetCrypto(cryptoSvc)
+	consultaHandler.SetCertificador(handler.Certificador{
+		Nombre:  cfg.Certificador.Nombre,
+		Cargo:   cfg.Certificador.Cargo,
+		Entidad: cfg.Certificador.Entidad,
+	})
 
 	// Pagaré handler signs on behalf of the logged-in user using their sealed
 	// private key resolved from the store (no private key handled client-side).
@@ -379,6 +384,7 @@ func main() {
 			r.Get("/buscar", consultaHandler.GetPagare)
 			r.Get("/historico", consultaHandler.GetHistorico)
 			r.Get("/pdf", consultaHandler.DescargarPDF)
+			r.Get("/certificado", consultaHandler.DescargarCertificado)
 			r.Get("/propietario", consultaHandler.GetPropietario)
 			r.Get("/public", consultaHandler.GetPublicAsset)
 			r.Get("/alertas", func(w http.ResponseWriter, r *http.Request) {

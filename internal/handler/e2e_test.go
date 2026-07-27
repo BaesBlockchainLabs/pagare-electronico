@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
 	"pagare/internal/config"
 	"pagare/internal/crypto"
@@ -640,4 +641,62 @@ func TestE2E_LaVistaPublicaNoExponeALasPartes(t *testing.T) {
 	assert.Equal(t, 3200.0, resp.Asset.Data["importe"])
 	t.Logf("vista=%s · importe=%v · verificación: %s",
 		resp.Asset.Vista, resp.Asset.Data["importe"], resp.Asset.Verificacion.Msg)
+}
+
+// Genera el certificado de un pagaré real y lo deja en disco para poder leerlo.
+// La ruta se indica con CERT_OUT; si no, no escribe nada.
+func TestE2E_GenerarCertificadoParaRevision(t *testing.T) {
+	appID, appKey := os.Getenv("BCF_APP_ID"), os.Getenv("BCF_APP_KEY")
+	if appID == "" || appKey == "" {
+		t.Skip("sin BCF_APP_ID/BCF_APP_KEY: carga el .env antes de ejecutar")
+	}
+	destino := os.Getenv("CERT_OUT")
+	if destino == "" {
+		t.Skip("sin CERT_OUT: no hay dónde escribir el certificado")
+	}
+	id := os.Getenv("CERT_ID")
+	if id == "" {
+		id = "eeee8519b35b27fb54bd8092f443da4ce078dcdae19490659f458d91ef5c393c"
+	}
+	network := os.Getenv("BCF_NETWORK")
+	if network == "" {
+		network = "test"
+	}
+	baseURL := os.Getenv("BCF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.blockchainfue.com/api"
+	}
+
+	client := bcfclient.New(config.BlockchainConfig{
+		BaseURL: baseURL, AppID: appID, AppKey: appKey, Network: network,
+	})
+	ch := NewConsultaHandler(client)
+	ch.SetCrypto(crypto.NewService(client))
+	ch.SetCertificador(Certificador{
+		Nombre: os.Getenv("CERT_NOMBRE"), Cargo: os.Getenv("CERT_CARGO"),
+		Entidad: os.Getenv("CERT_ENTIDAD"),
+	})
+
+	// El certificado sólo se expide a quien es parte: tomamos el titular real.
+	ownerBody, status, err := client.GetAssetOwners(id)
+	require.NoError(t, err)
+	require.Equal(t, 200, status)
+	var owners struct {
+		Owners []struct {
+			Pub string `json:"pub"`
+		} `json:"owners"`
+	}
+	require.NoError(t, json.Unmarshal(ownerBody, &owners))
+	require.NotEmpty(t, owners.Owners)
+
+	req := httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/certificado?id=%s&network=%s", id, network), nil)
+	req = req.WithContext(auth.ContextWithPrincipal(req.Context(),
+		&auth.Principal{UserID: "revisor", PubKeys: []string{owners.Owners[0].Pub}}))
+	w := httptest.NewRecorder()
+	ch.DescargarCertificado(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	require.NoError(t, os.WriteFile(destino, w.Body.Bytes(), 0o644))
+	t.Logf("certificado de %s… escrito en %s (%d bytes)", id[:12], destino, w.Body.Len())
 }

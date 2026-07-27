@@ -514,6 +514,47 @@ paths:
                 $ref: '#/components/schemas/HistoricoResponse'
         4XX:
           $ref: '#/components/responses/Error'
+  /api/pagares/certificado:
+    get:
+      tags: [Pagarés]
+      summary: Certificado de registro y verificación
+      description: >
+        Documento en el que la dirección da fe del contenido del título, del resultado
+        de su verificación y del histórico de operaciones, cada dato con el precepto
+        que lo exige.
+
+        Pensado para acompañar al protesto, que se levanta por acta notarial
+        (art. 51.1 LCCH) y cuyo notario no puede leer el registro por sí mismo.
+
+        **Sólo se expide a quienes son parte** del pagaré: reúne en un documento
+        pensado para circular todos los datos identificativos del título.
+
+        Queda pendiente de firma electrónica cualificada y sello de tiempo
+        cualificado; el propio documento lo advierte en su pie.
+      operationId: certificadoPagare
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+        description: ID del asset en blockchain.
+      - name: network
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Certificado en PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        4XX:
+          $ref: '#/components/responses/Error'
+
   /api/pagares/pdf:
     get:
       tags:
