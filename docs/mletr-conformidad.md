@@ -195,7 +195,7 @@ mapea cada error a su artículo (`internal/validator/lcch.go`):
 | Suplencias | art. 95 | Parcial (vencimiento a la vista) |
 | Importe en cifra y letra | art. 7 | Conversión número→letra en el PDF |
 | Vencimiento a la vista, plazo de un año | art. 39 | Aviso al emitir |
-| Cláusula «no a la orden» | art. 14 | Modelo y PDF; **no bloquea el endoso** |
+| Cláusula «no a la orden» | art. 14 | Modelo, PDF e impedimento efectivo del endoso |
 | Endoso: propiedad, blanco, procuración, garantía | arts. 15, 17, 21, 22 | Los cuatro tipos |
 | Cláusulas del endoso | arts. 18, 56 | Sin responsabilidad, prohibición de nuevo endoso, sin gastos |
 | Aval total y parcial | arts. 35-37 | Con avalado y tope del principal |
@@ -207,12 +207,24 @@ implementación del endoso está hecha, y es el plano institucional —no el
 técnico— el que sigue sin resolver la eficacia cambiaria de su circulación
 electrónica.
 
+**La cláusula «no a la orden» impide efectivamente el endoso.** La comprobación
+se hace consultando el título antes de transferir, y **falla cerrada**: si el
+registro no puede leerse, el endoso se rechaza en lugar de dejarse pasar.
+Endosar un título no endosable dejaría una cadena de tenedores sobre algo que no
+puede circular, un enredo muy costoso de deshacer, mientras que una negativa
+durante una incidencia de red no es más que un reintento.
+
+Queda pendiente el reverso de esa restricción: **la cesión ordinaria** como
+operación propia (artículos 347-348 CCom), que es la vía que a estos pagarés les
+queda y que hoy la plataforma no ofrece. Se documenta extra-cartularmente, fuera
+del sistema.
+
 ## 9. Resumen de lo pendiente
 
 | Plano | Pendiente | Depende de |
 |---|---|---|
-| Técnico | Bloqueo del endoso en pagarés «no a la orden» (§8) | Nosotros |
 | Técnico | Reintento de la entrega en pagarés pendientes (§6) | Nosotros |
+| Técnico | Cesión ordinaria como operación propia (§8) | Nosotros |
 | Modelo | Persona jurídica y poder de representación (§4) | Nosotros, con horizonte EBW |
 | Institucional | Presunción legal de unicidad (§3) | Cualificación del prestador |
 | Institucional | Firma cualificada eIDAS y cartera de identidad (§4) | Despliegue EUDI Wallet |

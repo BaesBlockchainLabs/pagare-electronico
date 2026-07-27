@@ -217,6 +217,13 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.comprobarEndosable(req.ID); err != nil {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "msg": err.Error(), "articulo_lcch": "art. 14 LCCH",
+		})
+		return
+	}
+
 	if req.Metadata.TipoEndoso == "" {
 		req.Metadata.TipoEndoso = "en_propiedad"
 	}
@@ -345,6 +352,32 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteRaw(w, status, body)
+}
+
+// comprobarEndosable rejects the endoso of a pagaré the librador issued with
+// the «no a la orden» clause (art. 14 LCCH), which strips the title of its
+// endorsable condition: it can only pass by ordinary assignment.
+//
+// The check fails closed. If the asset cannot be read we do not know whether
+// the clause is there, and endorsing a non-endorsable title would put a chain
+// of holders on something that cannot circulate — a mess to unwind, whereas a
+// refusal during a network hiccup is merely a retry.
+func (h *PagareHandler) comprobarEndosable(id string) error {
+	body, status, err := h.client.GetAsset(map[string]string{"id": id})
+	if err != nil {
+		return fmt.Errorf("no se pudo comprobar si el pagaré es endosable: %w", err)
+	}
+	if status != 200 {
+		return fmt.Errorf("no se pudo recuperar el pagaré para comprobar si es endosable")
+	}
+	p, err := assetToPagare(body)
+	if err != nil {
+		return fmt.Errorf("no se pudo interpretar el pagaré para comprobar si es endosable")
+	}
+	if p.NoALaOrden {
+		return fmt.Errorf("este pagaré se emitió «no a la orden» y no puede endosarse; solo cabe transmitirlo por cesión ordinaria")
+	}
+	return nil
 }
 
 // firmarContenido signs the canonical form of the pagaré with the firmante's

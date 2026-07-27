@@ -147,3 +147,90 @@ func TestE2E_EmisionEntregaYVerificacion(t *testing.T) {
 
 	t.Logf("verificable en /pagares/verificar?id=%s", emision.ID)
 }
+
+// Un pagaré emitido «no a la orden» no puede endosarse (art. 14 LCCH). Emite
+// uno real y comprueba que la red no llega a transferirlo.
+func TestE2E_NoALaOrdenNoSeEndosa(t *testing.T) {
+	appID, appKey := os.Getenv("BCF_APP_ID"), os.Getenv("BCF_APP_KEY")
+	if appID == "" || appKey == "" {
+		t.Skip("sin BCF_APP_ID/BCF_APP_KEY: carga el .env antes de ejecutar")
+	}
+	baseURL := os.Getenv("BCF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.blockchainfue.com/api"
+	}
+
+	client := bcfclient.New(config.BlockchainConfig{BaseURL: baseURL, AppID: appID, AppKey: appKey})
+	cryptoSvc := crypto.NewService(client)
+
+	emisorPub, emisorPvt, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+	beneficiarioPub, beneficiarioPvt, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+
+	ph := NewPagareHandler(client, cryptoSvc, nil)
+
+	payload := map[string]interface{}{
+		"asset": map[string]interface{}{
+			"data": map[string]interface{}{
+				"denominacion": "PAGARÉ", "promesa_pago": true,
+				"importe": 300.0, "moneda": "EUR", "no_a_la_orden": true,
+				"vencimiento":       map[string]interface{}{"tipo": "fecha_fija", "fecha": time.Now().AddDate(1, 0, 0).Format("2006-01-02")},
+				"localidad_pago":    "Alicante",
+				"beneficiario":      map[string]interface{}{"nombre": "Ana", "nif": "12345678Z"},
+				"localidad_emision": "Alicante", "fecha_emision": time.Now().Format("2006-01-02"),
+				"firmante": map[string]interface{}{
+					"nombre": "Carlos", "nif": "87654321X",
+					"direccion_postal": map[string]interface{}{
+						"direccion": "Calle Mayor 5", "localidad": "Alicante",
+						"codigo_postal": "03001", "pais": "ES",
+					},
+				},
+			},
+		},
+		"from": map[string]string{"pub": emisorPub, "pvt": emisorPvt},
+		"to":   beneficiarioPub,
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	ph.Emitir(w, withPrincipal(req))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var emision struct {
+		ID      string  `json:"id"`
+		Entrega Entrega `json:"entrega"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &emision))
+	require.True(t, emision.Entrega.Entregado)
+	t.Logf("emitido «no a la orden» %s", emision.ID)
+
+	// El tenedor intenta endosarlo: debe rechazarse.
+	eb, _ := json.Marshal(map[string]interface{}{
+		"id": emision.ID, "to": emisorPub,
+		"metadata": map[string]interface{}{"tipo_endoso": "en_propiedad"},
+		"from":     map[string]string{"pub": beneficiarioPub, "pvt": beneficiarioPvt},
+	})
+	ereq := httptest.NewRequest(http.MethodPut, "/api/pagares/endoso", bytes.NewReader(eb))
+	ew := httptest.NewRecorder()
+	ph.Endosar(ew, withPrincipal(ereq))
+
+	assert.Equal(t, http.StatusBadRequest, ew.Code, ew.Body.String())
+	var rechazo map[string]interface{}
+	require.NoError(t, json.Unmarshal(ew.Body.Bytes(), &rechazo))
+	assert.Equal(t, "art. 14 LCCH", rechazo["articulo_lcch"])
+	t.Logf("endoso rechazado: %v", rechazo["msg"])
+
+	// Y el control sigue donde estaba.
+	ownersBody, status, err := client.GetAssetOwners(emision.ID)
+	require.NoError(t, err)
+	require.Equal(t, 200, status)
+	var owners struct {
+		Owners []struct {
+			Pub string `json:"pub"`
+		} `json:"owners"`
+	}
+	require.NoError(t, json.Unmarshal(ownersBody, &owners))
+	require.Len(t, owners.Owners, 1)
+	assert.Equal(t, beneficiarioPub, owners.Owners[0].Pub, "el endoso no debe haber movido el título")
+}

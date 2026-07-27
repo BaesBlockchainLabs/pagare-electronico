@@ -175,10 +175,25 @@ func TestPagareEmitir_WithBCFServer(t *testing.T) {
 	assert.Equal(t, "testasset123", resp["id"])
 }
 
+// assetEndosable answers the lookup the endoso does to check the «no a la
+// orden» clause, with a pagaré that carries no such clause.
+func assetEndosable(w http.ResponseWriter) {
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok": true,
+		"asset": map[string]interface{}{
+			"id":   "testasset123",
+			"data": map[string]interface{}{"type": "pagare_electronico", "no_a_la_orden": false},
+		},
+	})
+}
+
 func TestPagareEndosar_WithBCFServer(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/asset", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut {
+		switch r.Method {
+		case http.MethodGet:
+			assetEndosable(w)
+		case http.MethodPut:
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "msg": "Asset has been transferred"})
 		}
 	})
@@ -243,7 +258,10 @@ func TestPagarePagarAnular_WithBCFServer(t *testing.T) {
 func TestPagareEndoso_EnBlanco_WithBCFServer(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/asset", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut {
+		switch r.Method {
+		case http.MethodGet:
+			assetEndosable(w)
+		case http.MethodPut:
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "msg": "Asset has been transferred"})
 		}
 	})

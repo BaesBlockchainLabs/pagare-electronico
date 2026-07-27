@@ -80,7 +80,9 @@ templ Dashboard(user *CurrentUser) {
 
 					var acc = '';
 					if (!sinAcciones) {
-						if (estado !== 'VENCIDO') {
+						// Un pagaré "no a la orden" no es endosable (art. 14 LCCH):
+						// solo cabe transmitirlo por cesión ordinaria.
+						if (estado !== 'VENCIDO' && !d.no_a_la_orden) {
 							acc += '<a href="/pagares/endosar?id=' + encodeURIComponent(a.id) + '" class="btn btn-outline btn-sm">Endosar</a>';
 						}
 						acc += '<a href="/pagares/pagar?id=' + encodeURIComponent(a.id) + '" class="btn btn-danger btn-sm">Pagar</a>';

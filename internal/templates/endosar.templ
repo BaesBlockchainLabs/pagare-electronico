@@ -43,6 +43,10 @@ templ Endosar(user *CurrentUser) {
 					</div>
 				</div>
 				<p class="desc">Endosas tú, el usuario logueado (endosante). El endoso se firma con tu identidad; no necesitas introducir claves.</p>
+				<div id="endoso-no-orden" class="alert alert-info hidden">
+					@Icon("info")
+					Este pagaré se emitió <strong>"no a la orden"</strong> (art. 14 LCCH): no puede endosarse, solo transmitirse por cesión ordinaria.
+				</div>
 				<div id="endoso-error" class="alert alert-error hidden"></div>
 				<div id="endoso-ok" class="alert alert-success hidden"></div>
 				<div class="mt-4">
@@ -56,6 +60,27 @@ templ Endosar(user *CurrentUser) {
 		<script>
 		var urlId = new URLSearchParams(window.location.search).get('id');
 		if (urlId) document.getElementById('end-id').value = urlId;
+
+		// Avisar antes de rellenar el formulario si el pagaré no es endosable.
+		// El servidor lo rechaza igualmente, pero llegar hasta el botón para que
+		// entonces falle es una pérdida de tiempo del usuario.
+		function comprobarEndosable() {
+			var id = document.getElementById('end-id').value.trim();
+			var aviso = document.getElementById('endoso-no-orden');
+			var btn = document.getElementById('endoso-btn');
+			if (!id) { aviso.classList.add('hidden'); btn.disabled = false; return; }
+			fetch('/api/pagares/buscar?id=' + encodeURIComponent(id))
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					var d = (data.asset && data.asset.data) || {};
+					var bloqueado = !!d.no_a_la_orden;
+					aviso.classList.toggle('hidden', !bloqueado);
+					btn.disabled = bloqueado;
+				})
+				.catch(function(){});
+		}
+		document.getElementById('end-id').addEventListener('change', comprobarEndosable);
+		if (urlId) comprobarEndosable();
 
 		function endosarPagare(e) {
 			e.preventDefault();
