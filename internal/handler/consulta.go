@@ -141,7 +141,7 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 	}
 	history, _ := histRaw["history"].([]interface{})
 	var cierre, transfer, update string
-	var hasBurn bool
+	var hasBurn, hasTransfer bool
 	for i := len(history) - 1; i >= 0; i-- {
 		entry, _ := history[i].(map[string]interface{})
 		metadata, _ := entry["metadata"].(map[string]interface{})
@@ -157,6 +157,9 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 		// La entrega y la cesión se registran como TRANSFER, igual que un
 		// endoso, pero no lo son: un pagaré recién emitido no está endosado, y
 		// uno cedido lo fue por cesión ordinaria, con otro régimen.
+		if action == "TRANSFER" {
+			hasTransfer = true
+		}
 		if action == "TRANSFER" && transfer == "" && !esEntrega(metadata) {
 			if esCesion(metadata) {
 				transfer = "CEDIDO"
@@ -187,6 +190,12 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 	}
 	if update != "" {
 		return update
+	}
+	// Sin transferencia alguna el control sigue en el emisor: el pagaré está
+	// firmado pero no ha llegado a manos de su beneficiario, y hasta que llegue
+	// éste no tiene nada. Conviene que se vea.
+	if !hasTransfer {
+		return "PENDIENTE_ENTREGA"
 	}
 	return ""
 }

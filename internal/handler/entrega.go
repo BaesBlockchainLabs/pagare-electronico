@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"pagare/internal/auth"
 	"pagare/internal/models"
@@ -96,4 +98,109 @@ func (h *PagareHandler) pubDelBeneficiario(p *models.PagareElectronico) string {
 // than an endoso.
 func esEntrega(metadata map[string]interface{}) bool {
 	return strVal(metadata["tipo_operacion"]) == TipoOperacionEntrega
+}
+
+// Entregar completes the handover of a pagaré that was issued but never
+// delivered — the beneficiario had no identity at the time, or the ledger
+// refused the transfer.
+//
+// Without this the title would stay in the issuer's hands for good, since the
+// only other way out is to void it and issue again under a new ID. A pagaré
+// pending delivery is a valid title, and it should be able to reach its holder
+// without losing its identity on the way.
+func (h *PagareHandler) Entregar(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
+	var req struct {
+		ID   string              `json:"id"`
+		To   string              `json:"to,omitempty"`
+		From *models.IdentidadBC `json:"from,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "Body JSON inválido"})
+		return
+	}
+	if req.ID == "" {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "id es obligatorio"})
+		return
+	}
+
+	// A second handover is not a handover: once the title has moved, any
+	// further transmission is an endoso or a cesión, with their own régimen.
+	entregado, err := h.yaFueEntregado(req.ID)
+	if err != nil {
+		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+	if entregado {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false,
+			"msg": "Este pagaré ya fue entregado. Una transmisión posterior es un " +
+				"endoso o una cesión, no una entrega.",
+		})
+		return
+	}
+
+	body, status, err := h.client.GetAsset(map[string]string{"id": req.ID})
+	if err != nil || status != 200 {
+		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": "no se pudo recuperar el pagaré"})
+		return
+	}
+	pagare, err := assetToPagare(body)
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "datos del pagaré no válidos"})
+		return
+	}
+
+	from, err := h.resolveFrom(principal, req.From)
+	if err != nil {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+
+	entrega := h.entregar(req.ID, pagare, req.To, from)
+	if !entrega.Entregado {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "msg": entrega.Msg, "entrega": entrega,
+		})
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "msg": entrega.Msg, "id": req.ID, "entrega": entrega,
+	})
+}
+
+// yaFueEntregado reports whether the title has already left the issuer's hands,
+// by handover or by any later transmission.
+func (h *PagareHandler) yaFueEntregado(id string) (bool, error) {
+	body, status, err := h.client.GetAssetHistory(id)
+	if err != nil {
+		return false, fmt.Errorf("no se pudo comprobar si el pagaré ya fue entregado: %w", err)
+	}
+	if status != 200 {
+		return false, fmt.Errorf("no se pudo recuperar el historial del pagaré")
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return false, fmt.Errorf("historial del pagaré ilegible")
+	}
+	history, _ := raw["history"].([]interface{})
+	for _, item := range history {
+		e, _ := item.(map[string]interface{})
+		if e == nil {
+			continue
+		}
+		meta, _ := e["metadata"].(map[string]interface{})
+		if meta == nil {
+			continue
+		}
+		if strVal(meta["action"]) == "TRANSFER" {
+			return true, nil
+		}
+	}
+	return false, nil
 }

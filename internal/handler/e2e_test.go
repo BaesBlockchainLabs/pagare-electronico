@@ -339,3 +339,101 @@ func TestE2E_CesionDePagareNoALaOrden(t *testing.T) {
 	assert.Equal(t, "CEDIDO", estado)
 	t.Logf("estado: %s · cesiones: %d · endosos: %d", estado, len(cesiones), len(endosos))
 }
+
+// Un pagaré cuya entrega no pudo completarse queda pendiente; la operación de
+// entrega lo lleva a su beneficiario después, sin cambiar de ID.
+func TestE2E_EntregaPendienteSeCompletaDespues(t *testing.T) {
+	appID, appKey := os.Getenv("BCF_APP_ID"), os.Getenv("BCF_APP_KEY")
+	if appID == "" || appKey == "" {
+		t.Skip("sin BCF_APP_ID/BCF_APP_KEY: carga el .env antes de ejecutar")
+	}
+	baseURL := os.Getenv("BCF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.blockchainfue.com/api"
+	}
+
+	client := bcfclient.New(config.BlockchainConfig{BaseURL: baseURL, AppID: appID, AppKey: appKey})
+	cryptoSvc := crypto.NewService(client)
+
+	emisorPub, emisorPvt, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+	beneficiarioPub, _, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+
+	ph := NewPagareHandler(client, cryptoSvc, nil)
+	ch := NewConsultaHandler(client)
+
+	// Emisión sin destino: el beneficiario no tiene identidad en la plataforma.
+	payload := map[string]interface{}{
+		"asset": map[string]interface{}{
+			"data": map[string]interface{}{
+				"denominacion": "PAGARÉ", "promesa_pago": true,
+				"importe": 420.0, "moneda": "EUR",
+				"vencimiento":       map[string]interface{}{"tipo": "fecha_fija", "fecha": time.Now().AddDate(1, 0, 0).Format("2006-01-02")},
+				"localidad_pago":    "Alicante",
+				"beneficiario":      map[string]interface{}{"nombre": "Ana", "nif": "12345678Z"},
+				"localidad_emision": "Alicante", "fecha_emision": time.Now().Format("2006-01-02"),
+				"firmante": map[string]interface{}{
+					"nombre": "Carlos", "nif": "87654321X",
+					"direccion_postal": map[string]interface{}{
+						"direccion": "Calle Mayor 5", "localidad": "Alicante",
+						"codigo_postal": "03001", "pais": "ES",
+					},
+				},
+			},
+		},
+		"from": map[string]string{"pub": emisorPub, "pvt": emisorPvt},
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	ph.Emitir(w, withPrincipal(req))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var emision struct {
+		ID      string  `json:"id"`
+		Msg     string  `json:"msg"`
+		Entrega Entrega `json:"entrega"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &emision))
+	require.False(t, emision.Entrega.Entregado, "sin destino no debe entregarse")
+	t.Logf("emitido pendiente %s — %s", emision.ID, emision.Msg)
+
+	assert.Equal(t, "PENDIENTE_ENTREGA",
+		ch.resolveEstado(emision.ID, map[string]string{"ENDOSO": "ENDOSADO"}))
+
+	// Más tarde se conoce la clave del beneficiario y se completa la entrega.
+	eb, _ := json.Marshal(map[string]interface{}{
+		"id": emision.ID, "to": beneficiarioPub,
+		"from": map[string]string{"pub": emisorPub, "pvt": emisorPvt},
+	})
+	ereq := httptest.NewRequest(http.MethodPut, "/api/pagares/entrega", bytes.NewReader(eb))
+	ew := httptest.NewRecorder()
+	ph.Entregar(ew, withPrincipal(ereq))
+	require.Equal(t, http.StatusOK, ew.Code, ew.Body.String())
+	t.Logf("entregado después a %s", beneficiarioPub)
+
+	ownersBody, status, err := client.GetAssetOwners(emision.ID)
+	require.NoError(t, err)
+	require.Equal(t, 200, status)
+	var owners struct {
+		Owners []struct {
+			Pub string `json:"pub"`
+		} `json:"owners"`
+	}
+	require.NoError(t, json.Unmarshal(ownersBody, &owners))
+	require.Len(t, owners.Owners, 1)
+	assert.Equal(t, beneficiarioPub, owners.Owners[0].Pub)
+
+	// Y ya no está pendiente, ni figura como endosado.
+	estado := ch.resolveEstado(emision.ID, map[string]string{"ENDOSO": "ENDOSADO"})
+	assert.NotEqual(t, "PENDIENTE_ENTREGA", estado)
+	assert.NotEqual(t, "ENDOSADO", estado)
+
+	// Un segundo intento debe rechazarse: ya no sería una entrega.
+	ereq2 := httptest.NewRequest(http.MethodPut, "/api/pagares/entrega", bytes.NewReader(eb))
+	ew2 := httptest.NewRecorder()
+	ph.Entregar(ew2, withPrincipal(ereq2))
+	assert.Equal(t, http.StatusBadRequest, ew2.Code)
+	t.Logf("segundo intento rechazado, estado final: %q", estado)
+}

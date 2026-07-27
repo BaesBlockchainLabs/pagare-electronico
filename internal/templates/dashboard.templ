@@ -46,6 +46,7 @@ templ Dashboard(user *CurrentUser) {
 				PRESCRITO: ['badge-prescrito','Prescrito'],
 				ENDOSADO:  ['badge-endosado','Endosado'],
 				CEDIDO:    ['badge-endosado','Cedido'],
+				PENDIENTE_ENTREGA: ['badge-vencido','Pendiente de entrega'],
 				VENCIDO:   ['badge-vencido','Vencido']
 			};
 			var m = map[estado] || ['badge-activo','Activo'];
@@ -93,6 +94,11 @@ templ Dashboard(user *CurrentUser) {
 						if (estado !== 'VENCIDO') {
 							acc += '<a href="/pagares/ceder?id=' + encodeURIComponent(a.id) + '" class="btn btn-outline btn-sm">Ceder</a>';
 						}
+						// Emitido pero nunca entregado: el control sigue en el emisor
+						// y el beneficiario aún no tiene nada. Se puede completar.
+						if (estado === 'PENDIENTE_ENTREGA') {
+							acc += '<button onclick="entregarPagare(\'' + a.id + '\')" class="btn btn-primary btn-sm">Entregar</button>';
+						}
 						acc += '<a href="/pagares/pagar?id=' + encodeURIComponent(a.id) + '" class="btn btn-danger btn-sm">Pagar</a>';
 					}
 					acc += '<a href="/pagares/historico?id=' + encodeURIComponent(a.id) + '" class="btn btn-ghost btn-sm">Histórico</a>';
@@ -124,6 +130,26 @@ templ Dashboard(user *CurrentUser) {
 			.catch(function(err) {
 				document.getElementById('pagares-list').innerHTML = '<div class="alert alert-error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>Error cargando pagarés: ' + esc(err) + '</div>';
 			});
+
+		// Completar la entrega de un pagaré que se emitió sin llegar a su
+		// beneficiario. El destino se resuelve en el servidor por el NIF que
+		// consta en el título.
+		function entregarPagare(id) {
+			fetch('/api/pagares/entrega', {
+				method: 'PUT',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({id: id})
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				if (data.ok) {
+					location.reload();
+				} else {
+					alert(data.msg || 'No se pudo entregar el pagaré');
+				}
+			})
+			.catch(function(err) { alert('Error de conexión: ' + err.message); });
+		}
 		</script>
 	}
 }

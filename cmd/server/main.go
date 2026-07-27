@@ -362,6 +362,7 @@ func main() {
 			r.Post("/", pagareHandler.Emitir)
 			r.Put("/endoso", pagareHandler.Endosar)
 			r.Put("/cesion", pagareHandler.Ceder)
+			r.Put("/entrega", pagareHandler.Entregar)
 			r.Delete("/", pagareHandler.PagarAnular)
 			r.Get("/", consultaHandler.ListPagares)
 			r.Get("/buscar", consultaHandler.GetPagare)

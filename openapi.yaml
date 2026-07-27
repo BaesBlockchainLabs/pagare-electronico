@@ -423,6 +423,51 @@ paths:
         "4XX":
           $ref: "#/components/responses/Error"
 
+  /pagares/entrega:
+    put:
+      tags: [Pagarés - Transmisión]
+      summary: Completar la entrega de un pagaré pendiente
+      description: >
+        Endpoint del servicio (servido bajo `/api/pagares/entrega`, no en BlockchainFUE).
+        Entrega al beneficiario un pagaré que se emitió sin llegar a sus manos, porque
+        no tenía identidad en la plataforma o porque la red rechazó la transferencia.
+
+        Sin esta operación el control se quedaría en el emisor indefinidamente y la
+        única salida sería anular y reemitir bajo un ID nuevo.
+
+        **Sólo cabe una vez.** En cuanto el pagaré ha salido de manos del emisor, toda
+        transmisión posterior es un endoso o una cesión, con el régimen de
+        responsabilidad que cada uno arrastra; llamarla entrega permitiría transmitir
+        sin asumirlo. Un segundo intento se rechaza.
+      operationId: entregarPagare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  description: "ID del asset del pagaré en blockchain."
+                to:
+                  type: string
+                  description: >
+                    Clave pública del beneficiario. Si se omite, se resuelve por el NIF
+                    que consta en el título.
+                from:
+                  $ref: "#/components/schemas/IdentidadBlockchain"
+      responses:
+        "200":
+          description: Pagaré entregado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleOkResponse"
+        "4XX":
+          $ref: "#/components/responses/Error"
+
   /pagares/cesion:
     put:
       tags: [Pagarés - Transmisión]

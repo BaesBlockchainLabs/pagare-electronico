@@ -135,8 +135,17 @@ no tiene clave, o la red rechaza la transferencia— el pagaré queda *emitido y
 pendiente de entrega*. No es un fallo: es el título firmado que aún no ha
 cambiado de manos, un estado real también en papel. Lo que sería incorrecto es
 darlo por entregado, porque el control seguiría siendo del emisor. La respuesta
-de la emisión lo dice expresamente en el bloque `entrega`, y la interfaz lo
-advierte.
+de la emisión lo dice expresamente en el bloque `entrega`, y ese estado se
+refleja como **PENDIENTE_ENTREGA** en el listado, de modo que el emisor vea que
+queda algo por terminar.
+
+**La entrega puede completarse después**, sin que el título pierda su
+identidad. De otro modo el control se quedaría en el emisor para siempre y la
+única salida sería anular y reemitir bajo un ID nuevo, lo que para un título ya
+firmado es un remedio desproporcionado. Solo cabe una vez: en cuanto el pagaré
+ha salido de manos del emisor, toda transmisión posterior es un endoso o una
+cesión, con el régimen de responsabilidad que cada uno arrastra, y llamarla
+entrega permitiría transmitir sin asumirlo.
 
 El destinatario se toma de `to` si el cliente lo aporta y, si no, se resuelve por
 el NIF del beneficiario, que es la mención que el artículo 94 exige en el título.
@@ -274,7 +283,6 @@ recibir y ofrece endosar en su lugar.
 
 | Plano | Pendiente | Depende de |
 |---|---|---|
-| Técnico | Reintento de la entrega en pagarés pendientes (§6) | Nosotros |
 | Modelo | Persona jurídica y poder de representación (§4) | Nosotros, con horizonte EBW |
 | Institucional | Presunción legal de unicidad (§3) | Cualificación del prestador |
 | Institucional | Firma cualificada eIDAS y cartera de identidad (§4) | Despliegue EUDI Wallet |
