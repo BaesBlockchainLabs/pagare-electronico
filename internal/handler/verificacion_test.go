@@ -232,6 +232,8 @@ func TestVerificacion_DetectaFirmaDeOtraClave(t *testing.T) {
 	assert.False(t, v.Integro)
 }
 
+// A pagaré issued before the signature became compulsory still exists on the
+// ledger. Verification must say so plainly instead of calling it tampered with.
 func TestVerificacion_PagareSinFirmaNoEsPagareAlterado(t *testing.T) {
 	f, ph, ch, done := setup(t)
 	defer done()
@@ -245,16 +247,16 @@ func TestVerificacion_PagareSinFirmaNoEsPagareAlterado(t *testing.T) {
 	assert.Contains(t, v.Msg, "sin firma")
 }
 
-// Without a signing identity the emission still goes through, unsigned; the
-// keyless path must not be reported as tampering.
-func TestVerificacion_EmisionSinClaveNoFirma(t *testing.T) {
+// Art. 94.7 LCCH counts the issuer's signature among the essential menciones,
+// and art. 95 párr. 1 denies validity as a pagaré to a document missing one. So
+// an emission that cannot be signed — no signing identity, and no key store to
+// provision one — is refused rather than written to the ledger unsigned.
+func TestVerificacion_SinFirmaNoSeEmite(t *testing.T) {
 	f := newFakeBCF(t)
 	client, server := newTestBCFClient(f.mux(t))
 	defer server.Close()
 
 	ph := NewPagareHandler(client, crypto.NewService(client), nil)
-	ch := NewConsultaHandler(client)
-	ch.SetCrypto(crypto.NewService(client))
 
 	payload := map[string]interface{}{
 		"asset": map[string]interface{}{
@@ -277,9 +279,12 @@ func TestVerificacion_EmisionSinClaveNoFirma(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	ph.Emitir(w, withPrincipal(req))
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	v := verificar(t, ch, f.assetID)
-	assert.False(t, v.Firmado)
-	assert.Contains(t, v.Msg, "sin firma")
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Nil(t, f.stored, "no debe haberse grabado nada en el registro")
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "art. 94.7 LCCH", resp["articulo_lcch"])
+	assert.Contains(t, resp["msg"], "sin firmar")
 }

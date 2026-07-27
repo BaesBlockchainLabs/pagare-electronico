@@ -179,6 +179,23 @@ justamente el caso del que hay que advertir al tenedor.
 El resultado se expone en el endpoint público y en `/pagares/verificar`, de modo
 que **un tercero sin cuenta puede comprobarlo**.
 
+**La firma es obligatoria para emitir.** El artículo 94.7 cuenta la firma del
+que emite entre las menciones esenciales, y el artículo 95, párrafo 1, priva de
+validez como pagaré al documento al que le falte una: un pagaré sin firma no es
+un pagaré defectuoso, no es un pagaré. La emisión que no pueda firmarse se
+rechaza en lugar de grabarse sin firma.
+
+Esto obligó a resolver antes un supuesto real: **una cuenta puede no tener
+clave**. El aprovisionamiento se hace en el registro con criterio best-effort y
+su fallo no es fatal, y el administrador inicial (`BootstrapAdmin`) ni siquiera
+lo intenta. Rechazar sin más habría dejado a esas cuentas sin poder emitir, así
+que la emisión **aprovisiona la clave que falte** y solo rechaza si tampoco eso
+es posible.
+
+Los pagarés emitidos antes de esta exigencia siguen en el registro sin firma. La
+verificación los informa como «emitido sin firma del contenido», que es distinto
+de «alterado», y conviene que siga siéndolo.
+
 Límite que conviene no perder de vista: esto acredita que el contenido es el que
 firmó la clave emisora, no que esa clave corresponda a quien dice ser ni que
 tenga poder para obligar a una sociedad. Eso es el §4.

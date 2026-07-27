@@ -13,11 +13,19 @@ import (
 	"pagare/internal/validator"
 )
 
-// SigningKeys resolves the sealed private key of a user's public key. Satisfied
-// by *auth.Store; lets the server sign on behalf of the logged-in user without
-// the private key ever leaving the backend.
+// SigningKeys resolves the sealed private key of a user's public key, and
+// provisions one for a user who has none. Satisfied by *auth.Store; lets the
+// server sign on behalf of the logged-in user without the private key ever
+// leaving the backend.
+//
+// Provisioning belongs here because a key can genuinely be missing: it is
+// created on a best-effort basis at registration, and a failure there is not
+// fatal to the account. Since art. 94.7 LCCH makes the firmante's signature an
+// essential mención, an account without a key must get one rather than be
+// turned away — or, worse, be allowed to issue an unsigned pagaré.
 type SigningKeys interface {
 	GetPrivateKey(userID, pub string) (string, error)
+	EnsureUserKeypair(userID string) (string, error)
 }
 
 type PagareHandler struct {
@@ -51,8 +59,10 @@ func NewPagareHandler(client *bcfclient.Client, cryptoSvc *crypto.Service, keys 
 //     belongs to the principal. This is the default path: the user never handles
 //     their private key.
 //
-// Returns nil (no signing identity) only when the user has no usable key and
-// supplied none, letting the caller decide whether that is an error.
+// A principal with no key of their own gets one provisioned here, since keys
+// are created on a best-effort basis at registration and may legitimately be
+// missing. Returns nil (no signing identity) only when none could be obtained,
+// letting the caller decide whether that is an error.
 func (h *PagareHandler) resolveFrom(principal *auth.Principal, from *models.IdentidadBC) (*models.IdentidadBC, error) {
 	// Manual/advanced path: caller provided an explicit private key.
 	if from != nil && from.Pvt != "" {
@@ -63,17 +73,29 @@ func (h *PagareHandler) resolveFrom(principal *auth.Principal, from *models.Iden
 	if from != nil {
 		pub = from.Pub
 	}
-	if pub == "" {
-		if len(principal.PubKeys) == 0 {
-			return nil, nil // nothing to sign with; caller decides
-		}
+	elegidaPorElUsuario := pub != ""
+	if pub == "" && len(principal.PubKeys) > 0 {
 		pub = principal.PubKeys[0]
+		elegidaPorElUsuario = true
 	}
-	if !principal.HasPubKey(pub) {
-		return nil, fmt.Errorf("la clave %s no pertenece a tu cuenta", pub)
-	}
+
 	if h.keys == nil {
+		if pub == "" {
+			return nil, nil // nothing to sign with and no way to provision
+		}
 		return nil, fmt.Errorf("firma en servidor no disponible")
+	}
+
+	if pub == "" {
+		// The account has no identity yet. Provision one now: ownership is
+		// certain by construction, so it needs no further check.
+		provisionada, err := h.keys.EnsureUserKeypair(principal.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("no se pudo crear tu clave de firma: %w", err)
+		}
+		pub = provisionada
+	} else if elegidaPorElUsuario && !principal.HasPubKey(pub) {
+		return nil, fmt.Errorf("la clave %s no pertenece a tu cuenta", pub)
 	}
 	pvt, err := h.keys.GetPrivateKey(principal.UserID, pub)
 	if err != nil {
@@ -133,6 +155,19 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"ok": false, "msg": fmt.Sprintf("No se pudo firmar el pagaré: %v", err),
+		})
+		return
+	}
+	// Sin firma no hay pagaré. El art. 94.7 LCCH cuenta la firma del que emite
+	// entre las menciones esenciales, y su ausencia priva al documento de su
+	// validez como pagaré (art. 95, párr. 1): más vale no emitirlo que emitir
+	// algo que no lo es.
+	if firma == "" {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false,
+			"msg": "No se puede emitir sin firmar: la firma del que emite es " +
+				"mención esencial del pagaré. Falta una identidad de firma.",
+			"articulo_lcch": "art. 94.7 LCCH",
 		})
 		return
 	}

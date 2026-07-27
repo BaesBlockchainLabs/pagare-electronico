@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"pagare/internal/crypto"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -183,7 +185,7 @@ func TestPagareEmitir_ValidPayload_Structure(t *testing.T) {
 	mux.HandleFunc("/asset", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "id": "test", "cost": 0.01})
 	})
-	client, server := newTestBCFClient(mux)
+	client, server := newTestBCFClient(conFirma(mux))
 	defer server.Close()
 
 	payload := map[string]interface{}{
@@ -210,7 +212,7 @@ func TestPagareEmitir_ValidPayload_Structure(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), clavesDePrueba())
 	ph.Emitir(w, withPrincipal(req))
 
 	assert.Equal(t, http.StatusOK, w.Code)

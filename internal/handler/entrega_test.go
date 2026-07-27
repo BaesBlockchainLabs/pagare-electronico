@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"pagare/internal/auth"
+	"pagare/internal/crypto"
 	"pagare/internal/pdf"
 
 	"github.com/stretchr/testify/assert"
@@ -100,10 +101,10 @@ func emitirCon(t *testing.T, ph *PagareHandler, to string) map[string]interface{
 
 func TestEntrega_TransfiereElControlAlBeneficiario(t *testing.T) {
 	l := &ledgerEntrega{}
-	client, server := newTestBCFClient(l.mux(t))
+	client, server := newTestBCFClient(conFirma(l.mux(t)))
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), nil)
 	resp := emitirCon(t, ph, "pub-beneficiario")
 
 	assert.True(t, l.creado)
@@ -119,10 +120,10 @@ func TestEntrega_TransfiereElControlAlBeneficiario(t *testing.T) {
 // field of our own or it will pass for an endoso.
 func TestEntrega_SeMarcaParaNoConfundirseConEndoso(t *testing.T) {
 	l := &ledgerEntrega{}
-	client, server := newTestBCFClient(l.mux(t))
+	client, server := newTestBCFClient(conFirma(l.mux(t)))
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), nil)
 	emitirCon(t, ph, "pub-beneficiario")
 
 	require.NotNil(t, l.metadata)
@@ -131,10 +132,10 @@ func TestEntrega_SeMarcaParaNoConfundirseConEndoso(t *testing.T) {
 
 func TestEntrega_ResuelveElBeneficiarioPorNIF(t *testing.T) {
 	l := &ledgerEntrega{}
-	client, server := newTestBCFClient(l.mux(t))
+	client, server := newTestBCFClient(conFirma(l.mux(t)))
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), nil)
 	ph.SetBeneficiarios(usuariosFalsos{
 		"12345678Z": {ID: "u1", Nombre: "Ana", NIF: "12345678Z", PubKeys: []string{"pub-de-ana"}},
 	})
@@ -149,10 +150,10 @@ func TestEntrega_ResuelveElBeneficiarioPorNIF(t *testing.T) {
 // must not be reported as delivered.
 func TestEntrega_BeneficiarioSinIdentidadQuedaPendiente(t *testing.T) {
 	l := &ledgerEntrega{}
-	client, server := newTestBCFClient(l.mux(t))
+	client, server := newTestBCFClient(conFirma(l.mux(t)))
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), nil)
 	resp := emitirCon(t, ph, "")
 
 	assert.True(t, l.creado, "el pagaré se emite igualmente")
@@ -165,10 +166,10 @@ func TestEntrega_BeneficiarioSinIdentidadQuedaPendiente(t *testing.T) {
 
 func TestEntrega_FalloDeRedNoSeReportaComoEntregado(t *testing.T) {
 	l := &ledgerEntrega{fallaUpdate: true}
-	client, server := newTestBCFClient(l.mux(t))
+	client, server := newTestBCFClient(conFirma(l.mux(t)))
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), nil)
 	resp := emitirCon(t, ph, "pub-beneficiario")
 
 	entrega := resp["entrega"].(map[string]interface{})
@@ -180,10 +181,10 @@ func TestEntrega_FalloDeRedNoSeReportaComoEntregado(t *testing.T) {
 
 func TestEntrega_BeneficiarioQueEsElPropioEmisorNoSeTransfiere(t *testing.T) {
 	l := &ledgerEntrega{}
-	client, server := newTestBCFClient(l.mux(t))
+	client, server := newTestBCFClient(conFirma(l.mux(t)))
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), nil)
 	resp := emitirCon(t, ph, "pub-emisor")
 
 	assert.Empty(t, l.transferidoA)

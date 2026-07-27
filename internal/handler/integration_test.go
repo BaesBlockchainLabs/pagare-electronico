@@ -9,6 +9,7 @@ import (
 
 	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
+	"pagare/internal/crypto"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -136,10 +137,10 @@ func TestPagareEmitir_WithBCFServer(t *testing.T) {
 		}
 	})
 
-	client, server := newTestBCFClient(mux)
+	client, server := newTestBCFClient(conFirma(mux))
 	defer server.Close()
 
-	ph := NewPagareHandler(client, nil, nil)
+	ph := NewPagareHandler(client, crypto.NewService(client), clavesDePrueba())
 
 	payload := map[string]interface{}{
 		"asset": map[string]interface{}{
