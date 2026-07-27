@@ -103,6 +103,17 @@ func main() {
 	r.Get("/pagares/verificar", pageHandler.Verificar)
 	r.Get("/health", handler.New().Health)
 
+	// Documentación de la API: la página y las propias especificaciones. Ambas
+	// describen la interfaz, no datos de nadie, así que son públicas.
+	r.Get("/docs", pageHandler.ApiDocs)
+	for _, spec := range []string{"openapi.yaml", "openapi-bcf.yaml"} {
+		fichero := spec
+		r.Get("/"+fichero, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+			http.ServeFile(w, r, fichero)
+		})
+	}
+
 	// Protected pages (require authentication; admin sees everything exactly as before)
 	r.Get("/", pageHandler.Dashboard)
 	r.Get("/pagares", pageHandler.Dashboard)

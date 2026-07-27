@@ -1,0 +1,83 @@
+package templates
+
+import (
+	"fmt"
+	"pagare/internal/apidocs"
+)
+
+// ApiDocs renders the endpoint index of one or more OpenAPI specs.
+templ ApiDocs(user *CurrentUser, specs []*apidocs.Spec, err string) {
+	@Base("API", user) {
+		@PageHead("Documentación", "API del servicio", "Referencia de los extremos que expone esta plataforma, generada a partir de sus especificaciones OpenAPI.")
+		if err != "" {
+			<div class="alert alert-error">
+				@Icon("info")
+				{ err }
+			</div>
+		}
+		for _, spec := range specs {
+			<div class="card">
+				<div class="flex-between">
+					<div>
+						<div class="pc-label">{ spec.Fichero }</div>
+						<h2 style="margin:4px 0">{ spec.Titulo }</h2>
+					</div>
+					<a href={ templ.SafeURL("/" + spec.Fichero) } class="btn btn-ghost btn-sm">Descargar YAML</a>
+				</div>
+				<p class="desc" style="white-space:pre-line">{ spec.Descripcion }</p>
+				<p class="desc">
+					<b>{ fmt.Sprint(spec.Rutas) }</b> operaciones · <b>{ fmt.Sprint(spec.Esquemas) }</b> esquemas · versión { spec.Version }
+				</p>
+				for _, g := range spec.Grupos {
+					<div class="pc-rule"></div>
+					<div class="pc-label">{ g.Nombre }</div>
+					if g.Descripcion != "" {
+						<p class="desc" style="margin-top:2px">{ g.Descripcion }</p>
+					}
+					<div style="margin-top:10px">
+						for _, op := range g.Operaciones {
+							<div class="detail-item" style="margin-bottom:10px">
+								<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+									<span class={ "badge", metodoClase(op.Metodo) }>{ mayus(op.Metodo) }</span>
+									<code style="font-weight:600">{ op.Ruta }</code>
+									if op.Publica {
+										<span class="badge badge-activo"><span class="dot"></span>Pública</span>
+									}
+								</div>
+								if op.Resumen != "" {
+									<div class="dv" style="margin-top:4px">{ op.Resumen }</div>
+								}
+								if op.Descripcion != "" {
+									<p class="desc" style="margin-top:4px;white-space:pre-line">{ op.Descripcion }</p>
+								}
+							</div>
+						}
+					</div>
+				}
+			</div>
+		}
+	}
+}
+
+// metodoClase colours the HTTP verb by how much it changes.
+func metodoClase(m string) string {
+	switch m {
+	case "get":
+		return "badge-activo"
+	case "delete":
+		return "badge-anulado"
+	default:
+		return "badge-endosado"
+	}
+}
+
+func mayus(s string) string {
+	out := ""
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' {
+			r -= 32
+		}
+		out += string(r)
+	}
+	return out
+}

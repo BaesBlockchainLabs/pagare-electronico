@@ -1,482 +1,399 @@
 openapi: 3.0.3
 info:
-  title: Pagaré Electrónico - API
-  description: >
-    API para la gestión de pagarés electrónicos con registro en BlockchainFUE.
-    
-    Incluye validaciones según la Ley Cambiaria y del Cheque (LCCH) arts. 94-97
-    (y normas de la letra aplicables al pagaré por el art. 96), flujo de endoso
-    múltiple, firma digital y cifrado.
+  title: Pagaré Electrónico — API
+  description: >-
+    API del servicio de pagarés electrónicos. Todo lo que aquí figura lo expone **esta** plataforma; la
+    API de BlockchainFUE que consumimos por debajo está documentada aparte, en openapi-bcf.yaml.
+
+
+    Las validaciones siguen la Ley 19/1985, Cambiaria y del Cheque (LCCH), arts. 94-97 para el pagaré
+    y las normas de la letra que le aplica el art. 96.
+
+
+    **Alcance.** El registro se lleva en un libro mayor electrónico no cualificado (art. 3.52 del Reglamento
+    (UE) 2024/1183): garantiza integridad y orden cronológico, pero no goza de la presunción de unicidad
+    del art. 45 duodecies.2, reservada a los cualificados. El PDF que genera no es título ejecutivo: el
+    juicio cambiario exige el documento original (STS, Sala 1ª, núm. 94/2014).
   version: 1.0.0
-  contact:
-    name: Soporte
-    url: https://api.blockchainfue.com/doc/support
   license:
     name: Propietario — BAES Blockchain Labs (uso interno)
     url: https://github.com/BaesBlockchainLabs/pagare-electronico
-
 servers:
-  - url: https://api.blockchainfue.com/api
-    description: BlockchainFUE API (producción - red MAIN)
-  - url: https://api.blockchainfue.com/api
-    description: BlockchainFUE API (desarrollo - red TEST)
-
+- url: /
+  description: La propia instancia del servicio
 security:
-  - AppAuth: []
-
+- SesionCookie: []
 tags:
-  - name: Sistema
-    description: Funciones de sistema y pruebas
-  - name: Identidades
-    description: Gestión de identidades blockchain y digitales (DID)
-  - name: Pagarés - Emisión
-    description: Creación y emisión de pagarés electrónicos
-  - name: Pagarés - Endoso
-    description: Endoso y transferencia de pagarés (flujo múltiple)
-  - name: Pagarés - Pago y Ciclo de Vida
-    description: Pago, cancelación y consulta del ciclo de vida
-  - name: Pagarés - Consulta
-    description: Búsqueda y recuperación de pagarés
-  - name: Criptografía
-    description: Firmas digitales, cifrado y verificación
-
+- name: Sistema
+  description: Estado del servicio y de la red
+- name: Autenticación
+  description: Sesión y vinculación de identidades blockchain
+- name: Usuarios
+  description: Perfil propio y directorio
+- name: Pagarés
+  description: Emisión, transmisión, cobro y consulta
+- name: Administración
+  description: Gestión de usuarios (sólo administrador)
 paths:
-  /system/hello:
+  /health:
     get:
-      tags: [Sistema]
-      summary: Prueba de conectividad
+      tags:
+      - Sistema
+      summary: Estado del servicio
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/system/hello:
+    get:
+      tags:
+      - Sistema
+      summary: Conectividad con BlockchainFUE
+      description: Reenvía a BlockchainFUE. Útil para comprobar credenciales y conectividad.
       operationId: systemHello
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HelloResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /system/time:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/system/time:
     get:
-      tags: [Sistema]
-      summary: Hora del servidor (UNIX Timestamp)
+      tags:
+      - Sistema
+      summary: Hora de la red
+      description: Reenvía a BlockchainFUE. Útil para comprobar credenciales y conectividad.
       operationId: systemTime
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TimeResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /keypair:
-    get:
-      tags: [Identidades]
-      summary: Generar identidad blockchain (keypair)
-      description: >
-        Genera un par de claves ed25519 a partir de una semilla y un PIN.
-        La identidad debe ser custodiada por la aplicación.
-        (LCCH art. 94 - identificación del firmante/beneficiario)
-      operationId: generateKeypair
-      parameters:
-        - name: query
-          in: query
-          required: true
-          schema:
-            $ref: "#/components/schemas/KeypairQuery"
-      responses:
-        "200":
-          description: Keypair generado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeypairResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /keypair/application:
-    get:
-      tags: [Identidades]
-      summary: Recuperar identidad principal de la aplicación
-      operationId: getApplicationKeypair
-      responses:
-        "200":
-          description: Keypair de la aplicación
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeypairResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /key/add/pub:
-    put:
-      tags: [Identidades]
-      summary: Añadir clave pública de identidad propia
-      operationId: addPubKey
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/auth/login:
+    post:
+      tags:
+      - Autenticación
+      summary: Iniciar sesión
+      description: Devuelve una cookie de sesión firmada. Acepta JSON o formulario.
+      operationId: login
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [pub]
-              properties:
-                pub:
-                  type: string
-                  description: Clave pública ed25519
+              $ref: '#/components/schemas/LoginRequest'
       responses:
-        "200":
-          description: Clave añadida
+        '200':
+          description: Sesión iniciada
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimpleOkResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /did:
+                $ref: '#/components/schemas/SesionResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/auth/register:
     post:
-      tags: [Identidades]
-      summary: Generar identidad digital (DID Sovrin)
-      description: >
-        Genera una identidad digital according al estándar Sovrin DID.
-        Permite firmar, verificar, cifrar y descifrar.
-      operationId: generateDID
+      tags:
+      - Autenticación
+      summary: Registrar usuario
+      description: 'Crea la cuenta e inicia sesión. Aprovisiona además su identidad blockchain, aunque
+        el fallo no es fatal: la emisión la crea si falta, porque el art. 94.7 LCCH exige la firma del
+        que emite.'
+      operationId: register
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DIDGenerateRequest"
+              $ref: '#/components/schemas/RegistroRequest'
       responses:
-        "200":
-          description: Identidad DID generada
+        '200':
+          description: Cuenta creada
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DIDIdentityResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /asset:
+                $ref: '#/components/schemas/SesionResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/auth/logout:
     post:
-      tags: [Pagarés - Emisión]
-      summary: Emitir pagaré electrónico
+      tags:
+      - Autenticación
+      summary: Cerrar sesión
+      operationId: logout
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/auth/me:
+    get:
+      tags:
+      - Autenticación
+      summary: Identidad de la sesión actual
+      operationId: me
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SesionResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/auth/claim/challenge:
+    post:
+      tags:
+      - Autenticación
+      summary: Reto para reclamar una clave pública
+      description: 'Primer paso para asociar a la cuenta una clave que ya se posee: el servidor emite
+        un reto que el titular debe firmar con su clave privada.'
+      operationId: claimChallenge
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimChallengeResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/auth/claim:
+    post:
+      tags:
+      - Autenticación
+      summary: Reclamar una clave pública firmando el reto
+      description: Asocia la clave a la cuenta si la firma del reto valida contra ella.
+      operationId: claimPub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/perfil:
+    get:
+      tags:
+      - Usuarios
+      summary: Datos del usuario en sesión
+      description: Los formularios de pagaré los usan para rellenar al firmante.
+      operationId: perfil
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+    post:
+      tags:
+      - Usuarios
+      summary: Actualizar los datos propios
+      description: No cambia el rol ni el nombre de usuario.
+      operationId: actualizarPerfil
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerfilInput'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/perfil/password:
+    post:
+      tags:
+      - Usuarios
+      summary: Cambiar la contraseña propia
+      operationId: cambiarPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambioPasswordRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/usuarios:
+    get:
+      tags:
+      - Usuarios
+      summary: Directorio de usuarios
+      description: 'Vista pública para los desplegables de los formularios: datos fiscales y de dirección,
+        y las claves públicas. **Nunca** claves privadas.'
+      operationId: directorioUsuarios
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectorioResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares:
+    post:
+      tags:
+      - Pagarés
+      summary: Emitir un pagaré
       description: >
         Crea un nuevo pagaré como asset en BlockchainFUE.
-        
-        **Requisitos LCCH (art. 94):**
-        - La palabra "PAGARÉ" debe constar en el título (campo `denominacion`)
-        - Promesa pura y simple de pagar una cantidad determinada (`promesa_pago = true`)
-        - Nombre del beneficiario o persona a cuya orden se paga
-        - Fecha de vencimiento o "a la vista" (art. 39 LCCH - plazo máx. 1 año)
-        - Lugar de pago
-        - Nombre, firma y lugar de emisión del firmante
-        
-        **Validaciones automáticas:**
-        - Todos los campos obligatorios del art. 94 LCCH
-        - Si vencimiento es "a_la_vista", la fecha no puede exceder 1 año (art. 39)
-        - NIF/NIE/NIF válido del firmante y beneficiario
-        - El contenido se firma digitalmente antes de grabar
 
-        **Entrega.** La blockchain crea el asset a nombre de quien firma la creación,
-        de modo que el servicio encadena una transferencia al beneficiario (`to`) para
-        que el control pase a él. El resultado se informa en `entrega`.
+        **Requisitos LCCH (art. 94):** - La palabra "PAGARÉ" debe constar en el título (campo `denominacion`)
+        - Promesa pura y simple de pagar una cantidad determinada (`promesa_pago = true`) - Nombre del
+        beneficiario o persona a cuya orden se paga - Fecha de vencimiento o "a la vista" (art. 39 LCCH
+        - plazo máx. 1 año) - Lugar de pago - Nombre, firma y lugar de emisión del firmante
+
+        **Validaciones automáticas:** - Todos los campos obligatorios del art. 94 LCCH - Si vencimiento
+        es "a_la_vista", la fecha no puede exceder 1 año (art. 39) - NIF/NIE/NIF válido del firmante y
+        beneficiario - El contenido se firma digitalmente antes de grabar
+
+        **Entrega.** La blockchain crea el asset a nombre de quien firma la creación, de modo que el servicio
+        encadena una transferencia al beneficiario (`to`) para que el control pase a él. El resultado
+        se informa en `entrega`.
       operationId: emitirPagare
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EmitirPagareRequest"
+              $ref: '#/components/schemas/EmitirPagareRequest'
       responses:
-        "200":
-          description: Pagaré emitido y grabado en blockchain
+        '200':
+          description: Pagaré emitido
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PagareCreatedResponse"
-        "400":
-          description: Error de validación (campos LCCH incorrectos)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: No autorizado
-        "409":
-          description: Error de blockchain / TSA
-
+                $ref: '#/components/schemas/PagareCreatedResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
     get:
-      tags: [Pagarés - Consulta]
-      summary: Consultar pagarés
-      description: >
-        Recupera pagarés de la aplicación. Permite búsqueda por ID,
-        por campos data, por rango de fechas, y paginación.
-      operationId: consultarPagares
+      tags:
+      - Pagarés
+      summary: Listar pagarés
+      description: Devuelve los pagarés con su estado calculado. Un usuario corriente sólo ve los suyos;
+        el administrador, todos.
+      operationId: listarPagares
       parameters:
-        - name: query
-          in: query
-          required: false
-          schema:
-            $ref: "#/components/schemas/AssetSearchQuery"
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Consulta JSON de búsqueda (opcional).
       responses:
-        "200":
-          description: Lista de pagarés
+        '200':
+          description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PagareListResponse"
-        "404":
-          description: Pagaré no encontrado
-
+                $ref: '#/components/schemas/PagareListResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags:
+      - Pagarés
+      summary: Pagar, anular o declarar prescrito
+      description: 'Cierra el ciclo de vida del pagaré: actualiza los metadatos con el motivo y quema
+        el asset, de modo que el crédito deja de existir en el registro.'
+      operationId: pagarAnularPagare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PagarAnularRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/endoso:
     put:
-      tags: [Pagarés - Endoso]
-      summary: Endosar / transferir pagaré
-      description: >
-        Transfiere el pagaré a un nuevo beneficiario (endoso) o actualiza sus metadatos.
-        
-        **Endoso múltiple (LCCH arts. 14-24, aplicables por el art. 96):**
-        - Cada endoso se registra en metadata como una operación tipo `ENDOSO`
-        - Se mantiene la cadena completa de endosantes en el histórico
-        - Tipos de endoso:
-          - **En propiedad** (por defecto): transfiere la titularidad completa
-          - **En procuración**: solo autoriza cobro, no transfiere titularidad
-          - **En blanco**: sin indicar beneficiario, el portador legítimo puede cobrar
-        
-        El endosante debe firmar con su identidad blockchain (from).
-        El nuevo beneficiario se indica en `to` con su clave pública.
+      tags:
+      - Pagarés
+      summary: Endosar un pagaré
+      description: >-
+        Transmite el pagaré por endoso (arts. 14-24 LCCH). El endosante responde del pago frente a los
+        tenedores posteriores (art. 18) y el adquirente recibe un derecho autónomo.
+
+
+        Se rechaza si el pagaré se emitió «no a la orden» (art. 14 LCCH): ese título sólo cabe transmitirlo
+        por cesión. La comprobación falla cerrada — si el registro no puede leerse, el endoso se rechaza.
       operationId: endosarPagare
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EndosarPagareRequest"
+              $ref: '#/components/schemas/EndosarPagareRequest'
       responses:
-        "200":
-          description: Pagaré endosado/actualizado correctamente
+        '200':
+          description: Pagaré endosado
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimpleOkResponse"
-        "400":
-          description: Error en el endoso
-        "401":
-          description: El firmante no es propietario del pagaré
-
-    delete:
-      tags: [Pagarés - Pago y Ciclo de Vida]
-      summary: Pagar / cancelar / anular pagaré
-      description: >
-        Quema el asset del pagaré en blockchain.
-        
-        **Estados finales del pagaré:**
-        - **Pagado**: El pagaré ha sido liquidado. Se quema el asset.
-          Metadata: `{ action: "PAGO", fecha_pago, referencia }`
-        - **Anulado**: El pagaré se anula por acuerdo de las partes.
-          Metadata: `{ action: "ANULACION", motivo }`
-        - **Prescrito**: Ha pasado el plazo de prescripción (3 años, art. 88 LCCH).
-        
-        Una vez quemado, el pagaré es inalterable e intransferible permanentemente,
-        pero su histórico se conserva para consulta.
-      operationId: pagarPagare
-      parameters:
-        - name: query
-          in: query
-          required: true
-          schema:
-            $ref: "#/components/schemas/BurnQuery"
-      responses:
-        "200":
-          description: Pagaré pagado/quemado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SimpleOkResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /asset/history:
-    get:
-      tags: [Pagarés - Consulta]
-      summary: Histórico del pagaré (cadena de endosos)
-      description: >
-        Devuelve el libro mayor completo del pagaré: emisión, endosos,
-        actualizaciones y pago/cancelación.
-        
-        Cada entrada incluye:
-        - Tipo de operación (CREATE, UPDATE, TRANSFER)
-        - Fecha y hora (UNIX Timestamp)
-        - Identidad que realizó la operación
-        - Metadatos asociados (datos del endoso, motivo, etc.)
-        
-        Esto constituye la **cadena completa de endosos** con valor probatorio.
-      operationId: historicoPagare
-      parameters:
-        - name: query
-          in: query
-          required: true
-          schema:
-            type: object
-            required: [id]
-            properties:
-              id:
-                type: string
-                description: ID del pagaré en blockchain
-      responses:
-        "200":
-          description: Histórico completo
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HistoricoResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /asset/owners:
-    get:
-      tags: [Pagarés - Consulta]
-      summary: Propietario actual del pagaré
-      description: >
-        Devuelve el propietario actual del pagaré.
-        Para un asset (no token) siempre será uno solo.
-      operationId: propietarioPagare
-      parameters:
-        - name: query
-          in: query
-          required: true
-          schema:
-            type: object
-            required: [id]
-            properties:
-              id:
-                type: string
-                description: ID del pagaré en blockchain
-              from:
-                type: string
-                description: Clave pública de un propietario específico (opcional)
-      responses:
-        "200":
-          description: Propietario(s)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OwnersResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /public/{network}/{id}:
-    get:
-      tags: [Pagarés - Consulta]
-      summary: Consulta pública de pagaré
-      description: >
-        Consulta pública de un pagaré sin necesidad de autenticación.
-        Permite a terceros verificar la existencia y contenido de un pagaré.
-      operationId: consultaPublica
-      security: []
-      parameters:
-        - name: network
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [main, test]
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            description: ID del asset en blockchain
-      responses:
-        "200":
-          description: Pagaré público
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PublicAssetResponse"
-        "404":
-          description: No encontrado
-
-  /pagares/alertas:
-    get:
-      tags: [Pagarés - Consulta]
-      summary: Alertas de vencimiento y prescripción
-      description: >
-        Endpoint del servicio (servido bajo `/api/pagares/alertas`, no en BlockchainFUE).
-        Devuelve el índice de pagarés que han sobrepasado un plazo legal, calculado por
-        el chequeo periódico interno (solo lectura, no muta la blockchain):
-        - VENCIDO: superada la fecha fija de vencimiento.
-        - CADUCADO_VISTA: pagaré a la vista no presentado en 1 año desde la emisión (art. 39).
-        - PRESCRITO: 3 años desde la emisión (art. 88).
-      operationId: alertasPagares
-      responses:
-        "200":
-          description: Índice de alertas
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AlertasResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /pagares/entrega:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/cesion:
     put:
-      tags: [Pagarés - Transmisión]
-      summary: Completar la entrega de un pagaré pendiente
-      description: >
-        Endpoint del servicio (servido bajo `/api/pagares/entrega`, no en BlockchainFUE).
-        Entrega al beneficiario un pagaré que se emitió sin llegar a sus manos, porque
-        no tenía identidad en la plataforma o porque la red rechazó la transferencia.
-
-        Sin esta operación el control se quedaría en el emisor indefinidamente y la
-        única salida sería anular y reemitir bajo un ID nuevo.
-
-        **Sólo cabe una vez.** En cuanto el pagaré ha salido de manos del emisor, toda
-        transmisión posterior es un endoso o una cesión, con el régimen de
-        responsabilidad que cada uno arrastra; llamarla entrega permitiría transmitir
-        sin asumirlo. Un segundo intento se rechaza.
-      operationId: entregarPagare
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [id]
-              properties:
-                id:
-                  type: string
-                  description: "ID del asset del pagaré en blockchain."
-                to:
-                  type: string
-                  description: >
-                    Clave pública del beneficiario. Si se omite, se resuelve por el NIF
-                    que consta en el título.
-                from:
-                  $ref: "#/components/schemas/IdentidadBlockchain"
-      responses:
-        "200":
-          description: Pagaré entregado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SimpleOkResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /pagares/cesion:
-    put:
-      tags: [Pagarés - Transmisión]
+      tags:
+      - Pagarés - Transmisión
       summary: Ceder el crédito por cesión ordinaria
       description: >
-        Endpoint del servicio (servido bajo `/api/pagares/cesion`, no en BlockchainFUE).
-        Transmite el pagaré por **cesión ordinaria del crédito** (arts. 347-348 CCom,
-        en relación con los arts. 1526 y ss. CC). Es la vía que corresponde al pagaré
-        «no a la orden», al que el art. 14 LCCH excluye del endoso.
+        Endpoint del servicio (servido bajo `/api/pagares/cesion`, no en BlockchainFUE). Transmite el
+        pagaré por **cesión ordinaria del crédito** (arts. 347-348 CCom, en relación con los arts. 1526
+        y ss. CC). Es la vía que corresponde al pagaré «no a la orden», al que el art. 14 LCCH excluye
+        del endoso.
 
         **No es un endoso**, y el régimen difiere en tres puntos que el diseño respeta:
 
@@ -488,394 +405,433 @@ paths:
         - Ha de **notificarse al deudor** para serle oponible; hasta entonces el pago
           al cedente le libera (art. 1527 CC).
 
-        Se registra con `tipo_operacion: CESION`, el estado resultante es CEDIDO —no
-        ENDOSADO— y el reverso del PDF la presenta bajo epígrafe propio, fuera de la
-        cadena de endosos.
+        Se registra con `tipo_operacion: CESION`, el estado resultante es CEDIDO —no ENDOSADO— y el reverso
+        del PDF la presenta bajo epígrafe propio, fuera de la cadena de endosos.
       operationId: cederPagare
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CederPagareRequest"
+              $ref: '#/components/schemas/CederPagareRequest'
       responses:
-        "200":
+        '200':
           description: Pagaré cedido
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimpleOkResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/entrega:
+    put:
+      tags:
+      - Pagarés - Transmisión
+      summary: Completar la entrega de un pagaré pendiente
+      description: >
+        Endpoint del servicio (servido bajo `/api/pagares/entrega`, no en BlockchainFUE). Entrega al beneficiario
+        un pagaré que se emitió sin llegar a sus manos, porque no tenía identidad en la plataforma o porque
+        la red rechazó la transferencia.
 
-  /pagares/public:
+        Sin esta operación el control se quedaría en el emisor indefinidamente y la única salida sería
+        anular y reemitir bajo un ID nuevo.
+
+        **Sólo cabe una vez.** En cuanto el pagaré ha salido de manos del emisor, toda transmisión posterior
+        es un endoso o una cesión, con el régimen de responsabilidad que cada uno arrastra; llamarla entrega
+        permitiría transmitir sin asumirlo. Un segundo intento se rechaza.
+      operationId: entregarPagare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - id
+              properties:
+                id:
+                  type: string
+                  description: ID del asset del pagaré en blockchain.
+                to:
+                  type: string
+                  description: >
+                    Clave pública del beneficiario. Si se omite, se resuelve por el NIF que consta en
+                    el título.
+                from:
+                  $ref: '#/components/schemas/IdentidadBlockchain'
+      responses:
+        '200':
+          description: Pagaré entregado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/buscar:
     get:
-      tags: [Pagarés - Consulta]
+      tags:
+      - Pagarés
+      summary: Recuperar un pagaré por su ID
+      operationId: buscarPagare
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+        description: ID del asset en blockchain.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagareAsset'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/historico:
+    get:
+      tags:
+      - Pagarés
+      summary: Historial de un pagaré
+      description: 'Traza completa de la vida del título, con etiquetas legibles por operación: emisión,
+        entrega, endoso, cesión y cierre.'
+      operationId: historicoPagare
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+        description: ID del asset en blockchain.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricoResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/pdf:
+    get:
+      tags:
+      - Pagarés
+      summary: Descargar el pagaré en PDF
+      description: >-
+        Documento de dos páginas: anverso con las menciones del art. 94 y reverso con la cadena de endosos
+        y las cesiones.
+
+
+        No es título ejecutivo: el juicio cambiario exige el documento original (STS, Sala 1ª, núm. 94/2014).
+      operationId: pdfPagare
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+        description: ID del asset en blockchain.
+      responses:
+        '200':
+          description: PDF del pagaré
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/propietario:
+    get:
+      tags:
+      - Pagarés
+      summary: Titular actual del pagaré
+      description: Quien ejerce hoy el control sobre el registro, que es el equivalente de la posesión.
+      operationId: propietarioPagare
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+        description: ID del asset en blockchain.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnersResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/public:
+    get:
+      tags:
+      - Pagarés - Consulta
       summary: Consulta pública y verificación de la firma
       description: >
-        Endpoint del servicio (servido bajo `/api/pagares/public`, no en BlockchainFUE).
-        No requiere autenticación: es la vía por la que un tercero comprueba un pagaré
-        a partir de su ID.
+        Endpoint del servicio (servido bajo `/api/pagares/public`, no en BlockchainFUE). No requiere autenticación:
+        es la vía por la que un tercero comprueba un pagaré a partir de su ID.
 
-        Reenvía el asset de BlockchainFUE y le añade el estado, el propietario actual y
-        el bloque `verificacion`, que comprueba la firma del emisor sobre el contenido
-        (véase el esquema `Verificacion`).
+        Reenvía el asset de BlockchainFUE y le añade el estado, el propietario actual y el bloque `verificacion`,
+        que comprueba la firma del emisor sobre el contenido (véase el esquema `Verificacion`).
       operationId: consultarPagarePublico
       security: []
       parameters:
-        - name: network
-          in: query
-          required: true
-          schema:
-            type: string
-            example: test
-        - name: id
-          in: query
-          required: true
-          schema:
-            type: string
-          description: ID del asset en blockchain.
+      - name: network
+        in: query
+        required: true
+        schema:
+          type: string
+          example: test
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+        description: ID del asset en blockchain.
       responses:
-        "200":
+        '200':
           description: Pagaré con su verificación
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PagarePublicoResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /did/sign:
-    post:
-      tags: [Criptografía]
-      summary: Firmar mensaje/pagaré
+                $ref: '#/components/schemas/PagarePublicoResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/alertas:
+    get:
+      tags:
+      - Pagarés - Consulta
+      summary: Alertas de vencimiento y prescripción
       description: >
-        Firma digitalmente el contenido de un pagaré antes de grabarlo.
-        La firma tiene valor probatorio y puede verificarse públicamente.
-      operationId: firmarMensaje
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SignRequest"
+        Endpoint del servicio (servido bajo `/api/pagares/alertas`, no en BlockchainFUE). Devuelve el
+        índice de pagarés que han sobrepasado un plazo legal, calculado por el chequeo periódico interno
+        (solo lectura, no muta la blockchain): - VENCIDO: superada la fecha fija de vencimiento. - CADUCADO_VISTA:
+        pagaré a la vista no presentado en 1 año desde la emisión (art. 39). - PRESCRITO: 3 años desde
+        la emisión (art. 88).
+      operationId: alertasPagares
       responses:
-        "200":
-          description: Mensaje firmado
+        '200':
+          description: Índice de alertas
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SignedMessageResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /did/verify:
+                $ref: '#/components/schemas/AlertasResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /admin/usuarios:
+    get:
+      tags:
+      - Administración
+      summary: Listado completo de usuarios
+      operationId: adminUsuarios
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectorioResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
     post:
-      tags: [Criptografía]
-      summary: Verificar firma
-      description: Verifica la autenticidad de una firma digital sobre un pagaré.
-      operationId: verificarFirma
+      tags:
+      - Administración
+      summary: Crear un usuario
+      operationId: adminCrearUsuario
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/VerifyRequest"
+              $ref: '#/components/schemas/UsuarioInput'
       responses:
-        "200":
-          description: Firma verificada
+        '200':
+          description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VerifiedMessageResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /did/encrypt:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /admin/usuarios/{id}/update:
     post:
-      tags: [Criptografía]
-      summary: Cifrar datos sensibles del pagaré
-      description: >
-        Cifra datos sensibles (NIF, dirección) antes de grabar en blockchain.
-        Solo el destinatario con su clave privada puede descifrar.
-      operationId: cifrarMensaje
+      tags:
+      - Administración
+      summary: Actualizar datos y rol
+      operationId: adminActualizarUsuario
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EncryptRequest"
-      responses:
-        "200":
-          description: Mensaje cifrado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EncryptedMessageResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
-  /did/decrypt:
+              $ref: '#/components/schemas/UsuarioInput'
+  /admin/usuarios/{id}/password:
     post:
-      tags: [Criptografía]
-      summary: Descifrar datos del pagaré
-      operationId: descifrarMensaje
+      tags:
+      - Administración
+      summary: Fijar la contraseña
+      operationId: adminCambiarPassword
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DecryptRequest"
+              $ref: '#/components/schemas/CambioPasswordRequest'
+  /admin/usuarios/{id}/delete:
+    post:
+      tags:
+      - Administración
+      summary: Eliminar el usuario
+      operationId: adminBorrarUsuario
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
-          description: Mensaje descifrado
+        '200':
+          description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DecryptedMessageResponse"
-        "4XX":
-          $ref: "#/components/responses/Error"
-
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /admin/usuarios/{id}/pubkeys:
+    post:
+      tags:
+      - Administración
+      summary: Asociar una clave pública
+      operationId: adminAnadirPubkey
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PubKeyRequest'
+  /admin/usuarios/{id}/pubkeys/remove:
+    post:
+      tags:
+      - Administración
+      summary: Desasociar una clave pública
+      operationId: adminQuitarPubkey
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PubKeyRequest'
+  /admin/keypair/application:
+    get:
+      tags:
+      - Administración
+      summary: Identidad blockchain de la aplicación
+      description: Credenciales propias de la plataforma en la red. Sólo administrador.
+      operationId: adminKeypairAplicacion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeypairResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
 components:
   securitySchemes:
-    AppAuth:
+    SesionCookie:
       type: apiKey
-      in: header
-      name: X-App-Id
-      description: >
-        Autenticación mediante cabeceras:
-        - `X-App-Id`: ID de la aplicación
-        - `X-App-Key`: Clave de la aplicación
-        - `Content-Type`: application/json
-        - `Accept`: application/json
-
+      in: cookie
+      name: session
+      description: Cookie de sesión firmada, obtenida en /api/auth/login.
   responses:
     Error:
       description: >
-        Error de la petición. El cuerpo incluye `{ ok: false, msg, errors? }`.
-        Códigos típicos: 400 (validación/parámetros), 404 (no encontrado),
-        502 (error de BlockchainFUE).
+        Error de la petición. El cuerpo incluye `{ ok: false, msg, errors? }`. Códigos típicos: 400 (validación/parámetros),
+        404 (no encontrado), 502 (error de BlockchainFUE).
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
-
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
-    # ============================================================
-    # MODELO DE PAGARÉ ELECTRÓNICO (basado en pagare.json + LCCH)
-    # ============================================================
-    PagareElectronico:
-      type: object
-      title: Pagaré Electrónico
-      description: >
-        Esquema completo de pagaré electrónico conforme a la LCCH (arts. 94-97,
-        y normas de la letra aplicables por el art. 96).
-        Los campos marcados como required son obligatorios por ley.
-      required:
-        - denominacion
-        - promesa_pago
-        - vencimiento
-        - localidad_pago
-        - beneficiario
-        - localidad_emision
-        - firmante
-        - importe
-        - moneda
-      properties:
-        id_pagare:
-          type: string
-          format: uri
-          description: "Identificador único del pagaré (URI o UUID). Lo asigna el servidor si se omite en la emisión."
-        denominacion:
-          type: string
-          enum: ["PAGARÉ"]
-          description: "La palabra 'PAGARÉ' inserta en el título. Art. 94.1 LCCH."
-        promesa_pago:
-          type: boolean
-          description: "Promesa pura y simple de pagar. Debe ser 'true' para validez jurídica. Art. 94 LCCH."
-        importe:
-          type: number
-          minimum: 0.01
-          description: "Cantidad determinada a pagar. Art. 94 LCCH."
-        moneda:
-          type: string
-          enum: ["EUR"]
-          default: "EUR"
-          description: "Moneda del importe. Por defecto euros."
-        vencimiento:
-          $ref: "#/components/schemas/Vencimiento"
-        localidad_pago:
-          type: string
-          description: "Localidad donde debe efectuarse el pago. Art. 94 LCCH."
-        beneficiario:
-          $ref: "#/components/schemas/Persona"
-        localidad_emision:
-          type: string
-          description: "Localidad en que se firma el pagaré. Art. 94 LCCH."
-        fecha_emision:
-          type: string
-          format: date
-          description: "Fecha de emisión del pagaré."
-        firmante:
-          $ref: "#/components/schemas/Firmante"
-        aval:
-          $ref: "#/components/schemas/Aval"
-        clausulas:
-          type: array
-          items:
-            type: string
-          description: "Cláusulas adicionales del pagaré."
-        no_a_la_orden:
-          type: boolean
-          description: >
-            Cláusula "no a la orden" puesta por el librador en la emisión (art. 14 LCCH).
-            Priva al pagaré de su condición de título endosable: solo podrá transmitirse
-            por cesión ordinaria, no por endoso.
-
-    Vencimiento:
-      type: object
-      description: >
-        Fecha de vencimiento del pagaré.
-        - "fecha_fija": fecha concreta (art. 94 LCCH)
-        - "a_la_vista": pagadero a la vista, plazo máx. 1 año (art. 39 LCCH)
-      required: [tipo]
-      properties:
-        tipo:
-          type: string
-          enum: [fecha_fija, a_la_vista]
-        fecha:
-          type: string
-          format: date
-          description: "Requerido si tipo = fecha_fija. Debe ser posterior a la fecha de emisión."
-
-    Representante:
-      type: object
-      description: >
-        Persona física que firma en nombre de una sociedad, y constancia del poder
-        en que se apoya.
-
-        El art. 9 LCCH exige que quien firma por otro se halle autorizado y lo exprese
-        claramente en la antefirma; quien firma sin poder **queda obligado
-        personalmente** por el título. De ahí que el cargo sea obligatorio y que la
-        falta de acreditación se advierta.
-
-        La acreditación es deliberadamente fina —tipo de documento, referencia y
-        fecha— porque está llamada a sustituirse por una credencial verificable de
-        fuente registral.
-      required: [nombre, nif, cargo]
-      properties:
-        nombre:
-          type: string
-        apellido:
-          type: string
-        nif:
-          type: string
-        cargo:
-          type: string
-          description: "Administrador único, apoderado, consejero delegado…"
-          example: "administrador único"
-        acreditacion:
-          type: string
-          description: "Copia autorizada, nota simple…"
-        referencia:
-          type: string
-          description: "Protocolo notarial o inscripción registral."
-        fecha:
-          type: string
-          format: date
-
-    Persona:
-      type: object
-      description: "Datos identificativos de una persona física o jurídica. Art. 94 LCCH."
-      required: [nombre, nif]
-      properties:
-        nombre:
-          type: string
-          description: "Nombre completo o razón social."
-        apellido:
-          type: string
-          description: "Apellidos (personas físicas)."
-        nif:
-          type: string
-          pattern: "^[0-9]{8}[A-Z]$|^[XYZ][0-9]{7}[A-Z]$|^[A-Z][0-9]{8}$"
-          description: "DNI (8 dígitos + letra), NIE (X/Y/Z + 7 dígitos + letra) o NIF (letra + 8 dígitos)."
-
-    Firmante:
-      description: >
-        Obligado cambiario. `nombre` y `nif` lo nombran siempre; cuando emite una
-        sociedad, son la razón social y el CIF, y `representante` recoge a la persona
-        física que firma por ella (art. 9 LCCH).
-      allOf:
-        - $ref: "#/components/schemas/Persona"
-        - type: object
-          required: [direccion_postal]
-          properties:
-            tipo:
-              type: string
-              enum: [fisica, juridica]
-              default: fisica
-            representante:
-              $ref: "#/components/schemas/Representante"
-            direccion_postal:
-              $ref: "#/components/schemas/DireccionPostal"
-            identidad_blockchain:
-              $ref: "#/components/schemas/IdentidadBlockchain"
-            firma_digital:
-              type: string
-              description: "Firma digital DID del firmante sobre el contenido del pagaré."
-
-    DireccionPostal:
-      type: object
-      required: [direccion, localidad, codigo_postal, pais]
-      properties:
-        direccion:
-          type: string
-          description: "Dirección postal completa."
-        localidad:
-          type: string
-          description: "Localidad."
-        codigo_postal:
-          type: string
-          description: "Código postal."
-        region:
-          type: string
-          description: "Provincia / región."
-        pais:
-          type: string
-          pattern: "^[A-Z]{2}$"
-          description: "Código ISO 3166-1 alpha-2 (ES, FR, DE...)."
-
-    Aval:
-      type: object
-      description: "Aval del pagaré. Arts. 35-37 LCCH (aplicables por el art. 96)."
-      required: [avalista, alcance]
-      properties:
-        avalista:
-          $ref: "#/components/schemas/Persona"
-        alcance:
-          type: string
-          enum: [total, parcial]
-          default: total
-          description: "Alcance del aval."
-        importe_parcial:
-          type: number
-          description: "Importe del aval si es parcial. No puede superar el importe del pagaré."
-        avalado:
-          type: string
-          description: >
-            Persona a quien se avala (art. 36 LCCH). A falta de indicación se
-            entiende avalado el firmante del pagaré.
-
     Alerta:
       type: object
-      description: "Pagaré que ha sobrepasado un plazo legal de validez."
+      description: Pagaré que ha sobrepasado un plazo legal de validez.
       properties:
         id:
           type: string
-          description: "ID del asset del pagaré en blockchain."
+          description: ID del asset del pagaré en blockchain.
         categoria:
           type: string
-          enum: [VENCIDO, CADUCADO_VISTA, PRESCRITO]
+          enum:
+          - VENCIDO
+          - CADUCADO_VISTA
+          - PRESCRITO
         mensaje:
           type: string
         articulo_lcch:
@@ -886,8 +842,7 @@ components:
           type: string
         fecha:
           type: string
-          description: "Fecha relevante (vencimiento o emisión según la categoría)."
-
+          description: Fecha relevante (vencimiento o emisión según la categoría).
     AlertasResponse:
       type: object
       properties:
@@ -899,288 +854,287 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: "Hora del último chequeo; null si aún no se ha ejecutado."
+          description: Hora del último chequeo; null si aún no se ha ejecutado.
         alertas:
           type: array
           items:
-            $ref: "#/components/schemas/Alerta"
-
-    # ============================================================
-    # IDENTIDADES BLOCKCHAIN
-    # ============================================================
-    IdentidadBlockchain:
+            $ref: '#/components/schemas/Alerta'
+    Aval:
       type: object
-      description: "Par de claves blockchain ed25519."
+      description: Aval del pagaré. Arts. 35-37 LCCH (aplicables por el art. 96).
+      required:
+      - avalista
+      - alcance
+      properties:
+        avalista:
+          $ref: '#/components/schemas/Persona'
+        alcance:
+          type: string
+          enum:
+          - total
+          - parcial
+          default: total
+          description: Alcance del aval.
+        importe_parcial:
+          type: number
+          description: Importe del aval si es parcial. No puede superar el importe del pagaré.
+        avalado:
+          type: string
+          description: >
+            Persona a quien se avala (art. 36 LCCH). A falta de indicación se entiende avalado el firmante
+            del pagaré.
+    CambioPasswordRequest:
+      type: object
+      required:
+      - password
+      properties:
+        password:
+          type: string
+          format: password
+    CederPagareRequest:
+      type: object
+      required:
+      - id
+      - to
+      properties:
+        id:
+          type: string
+          description: ID del asset del pagaré en blockchain.
+        to:
+          type: string
+          description: Clave pública del cesionario.
+        cesionario:
+          $ref: '#/components/schemas/Persona'
+        notificacion_fecha:
+          type: string
+          format: date
+          description: >
+            Fecha de la notificación de la cesión al deudor (art. 1527 CC). La notificación ocurre fuera
+            de la plataforma; aquí solo se deja constancia. Si no consta, la respuesta advierte de que
+            la cesión no es aún oponible al deudor.
+        notificacion_medio:
+          type: string
+          description: Medio de la notificación (burofax, acta notarial…).
+        motivo:
+          type: string
+          description: Causa de la cesión, si se quiere hacer constar.
+        from:
+          $ref: '#/components/schemas/IdentidadBlockchain'
+    ClaimChallengeResponse:
+      type: object
+      description: Reto que el titular de la clave debe firmar para probar que la posee.
+      properties:
+        ok:
+          type: boolean
+        challenge:
+          type: string
+    ClaimRequest:
+      type: object
+      required:
+      - pub
+      - firma
       properties:
         pub:
           type: string
-          description: "Clave pública."
-        pvt:
+          description: Clave pública que se reclama.
+        firma:
           type: string
-          description: "Clave privada (NO almacenar en blockchain)."
-
-    IdentidadDID:
+          description: Reto firmado con la clave privada correspondiente.
+    DireccionPostal:
       type: object
-      description: "Identidad digital Sovrin DID."
+      required:
+      - direccion
+      - localidad
+      - codigo_postal
+      - pais
       properties:
-        did:
+        direccion:
           type: string
-        verify_key:
+          description: Dirección postal completa.
+        localidad:
           type: string
-        encryption_public_key:
+          description: Localidad.
+        codigo_postal:
           type: string
-        secret:
-          type: object
-          description: "SECRETO - No compartir ni grabar en blockchain."
-          properties:
-            seed:
-              type: string
-            sign_key:
-              type: string
-            encryption_private_key:
-              type: string
-
-    # ============================================================
-    # REQUESTS
-    # ============================================================
+          description: Código postal.
+        region:
+          type: string
+          description: Provincia / región.
+        pais:
+          type: string
+          pattern: ^[A-Z]{2}$
+          description: Código ISO 3166-1 alpha-2 (ES, FR, DE...).
+    DirectorioResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        usuarios:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsuarioView'
     EmitirPagareRequest:
       type: object
-      required: [asset]
+      required:
+      - asset
       properties:
         asset:
           type: object
-          required: [data]
+          required:
+          - data
           properties:
             data:
               allOf:
-                - $ref: "#/components/schemas/PagareElectronico"
-                - type: object
-                  required: [type]
-                  properties:
-                    type:
-                      type: string
-                      default: "pagare_electronico"
-                      description: "Tipo de asset en BlockchainFUE."
+              - $ref: '#/components/schemas/PagareElectronico'
+              - type: object
+                required:
+                - type
+                properties:
+                  type:
+                    type: string
+                    default: pagare_electronico
+                    description: Tipo de asset en BlockchainFUE.
             metadata:
-              $ref: "#/components/schemas/MetadataEmision"
+              $ref: '#/components/schemas/MetadataEmision'
         from:
-          $ref: "#/components/schemas/IdentidadBlockchain"
+          $ref: '#/components/schemas/IdentidadBlockchain'
         to:
           type: string
           description: >
-            Clave pública del beneficiario a quien se entrega el pagaré. Si se
-            omite, el servicio la resuelve por el NIF del beneficiario; si el
-            beneficiario no está registrado, el pagaré queda emitido y pendiente
-            de entrega.
-
-    MetadataEmision:
-      type: object
-      description: "Metadatos de la emisión del pagaré."
-      properties:
-        action:
-          type: string
-          default: "CREATE"
-        firma_digital_pagare:
-          type: string
-          description: "Firma DID del firmante sobre el contenido completo del pagaré."
-        firma_digital_beneficiario:
-          type: string
-          description: "Firma DID del beneficiario aceptando el pagaré (opcional)."
-
+            Clave pública del beneficiario a quien se entrega el pagaré. Si se omite, el servicio la resuelve
+            por el NIF del beneficiario; si el beneficiario no está registrado, el pagaré queda emitido
+            y pendiente de entrega.
     EndosarPagareRequest:
       type: object
-      required: [id]
+      required:
+      - id
       properties:
         id:
           type: string
-          description: "ID del asset del pagaré en blockchain."
+          description: ID del asset del pagaré en blockchain.
         to:
           type: string
-          description: "Clave pública del nuevo beneficiario (endosatario)."
+          description: Clave pública del nuevo beneficiario (endosatario).
         metadata:
-          $ref: "#/components/schemas/MetadataEndoso"
+          $ref: '#/components/schemas/MetadataEndoso'
         from:
-          $ref: "#/components/schemas/IdentidadBlockchain"
-
-    MetadataEndoso:
+          $ref: '#/components/schemas/IdentidadBlockchain'
+    Entrega:
       type: object
-      required: [action, tipo_endoso]
-      properties:
-        action:
-          type: string
-          default: "ENDOSO"
-        tipo_endoso:
-          type: string
-          enum: [en_propiedad, en_procuracion, en_blanco, en_garantia]
-          description: >
-            - en_propiedad: transmite todos los derechos del pagaré (art. 17)
-            - en_procuracion: comisión de cobranza, solo autoriza el cobro (art. 21)
-            - en_blanco: sin designar endosatario; al portador equivale (arts. 15-17)
-            - en_garantia: en prenda, "valor en garantía/prenda", no transmite la propiedad (art. 22)
-        endosatario:
-          $ref: "#/components/schemas/Persona"
-        firma_digital_endoso:
-          type: string
-          description: "Firma DID del endosante sobre el endoso."
-        clausula:
-          type: string
-          enum: [sin_clausula, sin_responsabilidad, no_a_la_orden, sin_gastos]
-          description: >
-            - sin_clausula: endoso normal
-            - sin_responsabilidad: "sin mi responsabilidad" / "sin garantía" (art. 18)
-            - no_a_la_orden: prohibición de nuevo endoso por el endosante (art. 18)
-            - sin_gastos: dispensa de protesto, "sin gastos" / "sin protesto" (art. 56)
-        motivo:
-          type: string
+      description: >
+        Resultado de entregar el pagaré recién emitido a su beneficiario. La blockchain crea todo asset
+        a nombre de quien firmó la creación e ignora cualquier destinatario indicado en ese momento, así
+        que la entrega es una transferencia posterior.
 
-    KeypairQuery:
-      type: object
-      required: [seed, pin]
+        `entregado: false` no es un error: es un pagaré válidamente emitido que todavía no ha cambiado
+        de manos, el equivalente al título firmado y aún no entregado. Lo que sería incorrecto es darlo
+        por entregado, porque el control (y con él la legitimación para reclamar el pago) seguiría siendo
+        del emisor.
       properties:
-        seed:
-          type: string
-          minLength: 6
-          maxLength: 256
-          description: "Semilla para generar la identidad."
-        pin:
-          type: string
-          minLength: 4
-          maxLength: 16
-          pattern: "^[a-zA-Z0-9]{4,16}$"
-          description: "PIN alfanumérico."
-
-    AssetSearchQuery:
-      type: object
-      properties:
-        id:
-          type: string
-        token:
+        entregado:
           type: boolean
-        data:
-          type: object
-          description: "Búsqueda por campos data del asset."
-        date:
-          type: object
-          properties:
-            start:
-              type: integer
-              description: "UNIX Timestamp inicio."
-            end:
-              type: integer
-              description: "UNIX Timestamp fin."
-        page_num:
-          type: integer
-          default: 1
-        per_page:
-          type: integer
-          default: 25
-        inverse:
+          description: El control ha pasado al beneficiario.
+        a:
+          type: string
+          description: Clave pública del beneficiario que recibe el control.
+        msg:
+          type: string
+          description: Explicación legible del resultado.
+    ErrorResponse:
+      type: object
+      properties:
+        ok:
           type: boolean
-
-    BurnQuery:
+          default: false
+        msg:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              campo:
+                type: string
+              mensaje:
+                type: string
+              articulo_lcch:
+                type: string
+                description: Artículo de la LCCH que no se cumple.
+    Firmante:
+      description: >
+        Obligado cambiario. `nombre` y `nif` lo nombran siempre; cuando emite una sociedad, son la razón
+        social y el CIF, y `representante` recoge a la persona física que firma por ella (art. 9 LCCH).
+      allOf:
+      - $ref: '#/components/schemas/Persona'
+      - type: object
+        required:
+        - direccion_postal
+        properties:
+          tipo:
+            type: string
+            enum:
+            - fisica
+            - juridica
+            default: fisica
+          representante:
+            $ref: '#/components/schemas/Representante'
+          direccion_postal:
+            $ref: '#/components/schemas/DireccionPostal'
+          identidad_blockchain:
+            $ref: '#/components/schemas/IdentidadBlockchain'
+          firma_digital:
+            type: string
+            description: Firma digital DID del firmante sobre el contenido del pagaré.
+    HistoricoResponse:
       type: object
-      required: [id]
-      properties:
-        id:
-          type: string
-        from:
-          $ref: "#/components/schemas/IdentidadBlockchain"
-        metadata:
-          type: object
-          properties:
-            action:
-              type: string
-              enum: [PAGO, ANULACION, PRESCRIPCION]
-            fecha_pago:
-              type: string
-              format: date-time
-            referencia:
-              type: string
-            motivo:
-              type: string
-
-    DIDGenerateRequest:
-      type: object
-      properties:
-        seed:
-          type: string
-          description: "Semilla hexadecimal de 32 bytes (64 chars). Si se omite, se genera aleatoria."
-        snake_case:
-          type: boolean
-          default: true
-
-    SignRequest:
-      type: object
-      required: [message, sign_key, verify_key]
-      properties:
-        message:
-          type: string
-          description: "Contenido del pagaré a firmar (JSON serializado o hash)."
-        sign_key:
-          type: string
-          description: "Clave de firma (secret.sign_key)."
-        verify_key:
-          type: string
-          description: "Clave de verificación (identity.verify_key)."
-
-    VerifyRequest:
-      type: object
-      required: [message, verify_key]
-      properties:
-        message:
-          type: string
-          description: "Mensaje firmado."
-        verify_key:
-          type: string
-
-    EncryptRequest:
-      type: object
-      required: [message, from_private_key, to_public_key]
-      properties:
-        message:
-          type: string
-        from_private_key:
-          type: string
-          description: "encryption_private_key del remitente."
-        to_public_key:
-          type: string
-          description: "encryption_public_key del destinatario."
-
-    DecryptRequest:
-      type: object
-      required: [message, nonce, from_public_key, to_private_key]
-      properties:
-        message:
-          type: string
-        nonce:
-          type: string
-        from_public_key:
-          type: string
-        to_private_key:
-          type: string
-
-    # ============================================================
-    # RESPONSES
-    # ============================================================
-    HelloResponse:
-      type: object
+      description: >
+        Histórico completo del pagaré (libro mayor). Incluye la cadena de endosos con valor probatorio.
       properties:
         ok:
           type: boolean
         msg:
           type: string
-          example: "Hello World"
-
-    TimeResponse:
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              metadata:
+                type: object
+                properties:
+                  action:
+                    type: string
+                    enum:
+                    - CREATE
+                    - ENDOSO
+                    - UPDATE
+                    - PAGO
+                    - ANULACION
+                    - PRESCRIPCION
+                  updated_at:
+                    type: integer
+                  creator:
+                    type: string
+                  endosante:
+                    type: string
+                  endosatario:
+                    type: string
+                  tipo_endoso:
+                    type: string
+                  firma_digital:
+                    type: string
+    IdentidadBlockchain:
       type: object
+      description: Par de claves blockchain ed25519.
       properties:
-        ok:
-          type: boolean
-        msg:
+        pub:
           type: string
-        timestamp:
-          type: integer
-
+          description: Clave pública.
+        pvt:
+          type: string
+          description: Clave privada (NO almacenar en blockchain).
     KeypairResponse:
       type: object
       properties:
@@ -1192,17 +1146,153 @@ components:
           type: string
         pvt:
           type: string
-
-    DIDIdentityResponse:
+    LoginRequest:
+      type: object
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    MetadataEmision:
+      type: object
+      description: Metadatos de la emisión del pagaré.
+      properties:
+        action:
+          type: string
+          default: CREATE
+        firma_digital_pagare:
+          type: string
+          description: Firma DID del firmante sobre el contenido completo del pagaré.
+        firma_digital_beneficiario:
+          type: string
+          description: Firma DID del beneficiario aceptando el pagaré (opcional).
+    MetadataEndoso:
+      type: object
+      required:
+      - action
+      - tipo_endoso
+      properties:
+        action:
+          type: string
+          default: ENDOSO
+        tipo_endoso:
+          type: string
+          enum:
+          - en_propiedad
+          - en_procuracion
+          - en_blanco
+          - en_garantia
+          description: >
+            - en_propiedad: transmite todos los derechos del pagaré (art. 17) - en_procuracion: comisión
+            de cobranza, solo autoriza el cobro (art. 21) - en_blanco: sin designar endosatario; al portador
+            equivale (arts. 15-17) - en_garantia: en prenda, "valor en garantía/prenda", no transmite
+            la propiedad (art. 22)
+        endosatario:
+          $ref: '#/components/schemas/Persona'
+        firma_digital_endoso:
+          type: string
+          description: Firma DID del endosante sobre el endoso.
+        clausula:
+          type: string
+          enum:
+          - sin_clausula
+          - sin_responsabilidad
+          - no_a_la_orden
+          - sin_gastos
+          description: >
+            - sin_clausula: endoso normal - sin_responsabilidad: "sin mi responsabilidad" / "sin garantía"
+            (art. 18) - no_a_la_orden: prohibición de nuevo endoso por el endosante (art. 18) - sin_gastos:
+            dispensa de protesto, "sin gastos" / "sin protesto" (art. 56)
+        motivo:
+          type: string
+    OwnersResponse:
       type: object
       properties:
         ok:
           type: boolean
         msg:
           type: string
-        identity:
-          $ref: "#/components/schemas/IdentidadDID"
-
+        owners:
+          type: array
+          items:
+            type: object
+            properties:
+              pub:
+                type: string
+              amount:
+                type: integer
+    PagarAnularRequest:
+      type: object
+      required:
+      - id
+      - metadata
+      properties:
+        id:
+          type: string
+        metadata:
+          type: object
+          required:
+          - action
+          properties:
+            action:
+              type: string
+              enum:
+              - PAGO
+              - ANULACION
+              - PRESCRIPCION
+            referencia:
+              type: string
+            motivo:
+              type: string
+        from:
+          $ref: '#/components/schemas/IdentidadBlockchain'
+    PagareAsset:
+      type: object
+      description: Asset de pagaré almacenado en blockchain.
+      properties:
+        id:
+          type: string
+        data:
+          type: object
+          properties:
+            type:
+              type: string
+            denominacion:
+              type: string
+            promesa_pago:
+              type: boolean
+            importe:
+              type: number
+            moneda:
+              type: string
+            vencimiento:
+              $ref: '#/components/schemas/Vencimiento'
+            localidad_pago:
+              type: string
+            beneficiario:
+              $ref: '#/components/schemas/Persona'
+            localidad_emision:
+              type: string
+            fecha_emision:
+              type: string
+            firmante:
+              $ref: '#/components/schemas/Firmante'
+            aval:
+              $ref: '#/components/schemas/Aval'
+            app:
+              type: string
+            from:
+              type: string
+            token:
+              type: boolean
+            namespace:
+              type: string
+            created_at:
+              type: integer
     PagareCreatedResponse:
       type: object
       properties:
@@ -1210,69 +1300,85 @@ components:
           type: boolean
         msg:
           type: string
-          example: "Pagaré emitido correctamente"
+          example: Pagaré emitido correctamente
         id:
           type: string
-          description: "ID del asset en blockchain."
+          description: ID del asset en blockchain.
         cost:
           type: number
-          description: "Coste de la operación en la blockchain."
+          description: Coste de la operación en la blockchain.
         entrega:
-          $ref: "#/components/schemas/Entrega"
-
-    CederPagareRequest:
+          $ref: '#/components/schemas/Entrega'
+    PagareElectronico:
       type: object
-      required: [id, to]
+      title: Pagaré Electrónico
+      description: >
+        Esquema completo de pagaré electrónico conforme a la LCCH (arts. 94-97, y normas de la letra aplicables
+        por el art. 96). Los campos marcados como required son obligatorios por ley.
+      required:
+      - denominacion
+      - promesa_pago
+      - vencimiento
+      - localidad_pago
+      - beneficiario
+      - localidad_emision
+      - firmante
+      - importe
+      - moneda
       properties:
-        id:
+        id_pagare:
           type: string
-          description: "ID del asset del pagaré en blockchain."
-        to:
+          format: uri
+          description: Identificador único del pagaré (URI o UUID). Lo asigna el servidor si se omite
+            en la emisión.
+        denominacion:
           type: string
-          description: "Clave pública del cesionario."
-        cesionario:
-          $ref: "#/components/schemas/Persona"
-        notificacion_fecha:
+          enum:
+          - PAGARÉ
+          description: La palabra 'PAGARÉ' inserta en el título. Art. 94.1 LCCH.
+        promesa_pago:
+          type: boolean
+          description: Promesa pura y simple de pagar. Debe ser 'true' para validez jurídica. Art. 94
+            LCCH.
+        importe:
+          type: number
+          minimum: 0.01
+          description: Cantidad determinada a pagar. Art. 94 LCCH.
+        moneda:
+          type: string
+          enum:
+          - EUR
+          default: EUR
+          description: Moneda del importe. Por defecto euros.
+        vencimiento:
+          $ref: '#/components/schemas/Vencimiento'
+        localidad_pago:
+          type: string
+          description: Localidad donde debe efectuarse el pago. Art. 94 LCCH.
+        beneficiario:
+          $ref: '#/components/schemas/Persona'
+        localidad_emision:
+          type: string
+          description: Localidad en que se firma el pagaré. Art. 94 LCCH.
+        fecha_emision:
           type: string
           format: date
-          description: >
-            Fecha de la notificación de la cesión al deudor (art. 1527 CC). La
-            notificación ocurre fuera de la plataforma; aquí solo se deja constancia.
-            Si no consta, la respuesta advierte de que la cesión no es aún oponible
-            al deudor.
-        notificacion_medio:
-          type: string
-          description: "Medio de la notificación (burofax, acta notarial…)."
-        motivo:
-          type: string
-          description: "Causa de la cesión, si se quiere hacer constar."
-        from:
-          $ref: "#/components/schemas/IdentidadBlockchain"
-
-    Entrega:
-      type: object
-      description: >
-        Resultado de entregar el pagaré recién emitido a su beneficiario.
-        La blockchain crea todo asset a nombre de quien firmó la creación e
-        ignora cualquier destinatario indicado en ese momento, así que la
-        entrega es una transferencia posterior.
-
-        `entregado: false` no es un error: es un pagaré válidamente emitido que
-        todavía no ha cambiado de manos, el equivalente al título firmado y aún
-        no entregado. Lo que sería incorrecto es darlo por entregado, porque el
-        control (y con él la legitimación para reclamar el pago) seguiría siendo
-        del emisor.
-      properties:
-        entregado:
+          description: Fecha de emisión del pagaré.
+        firmante:
+          $ref: '#/components/schemas/Firmante'
+        aval:
+          $ref: '#/components/schemas/Aval'
+        clausulas:
+          type: array
+          items:
+            type: string
+          description: Cláusulas adicionales del pagaré.
+        no_a_la_orden:
           type: boolean
-          description: "El control ha pasado al beneficiario."
-        a:
-          type: string
-          description: "Clave pública del beneficiario que recibe el control."
-        msg:
-          type: string
-          description: "Explicación legible del resultado."
-
+          description: >
+            Cláusula "no a la orden" puesta por el librador en la emisión (art. 14 LCCH). Priva al pagaré
+            de su condición de título endosable: solo podrá transmitirse por cesión ordinaria, no por
+            endoso.
     PagareListResponse:
       type: object
       properties:
@@ -1297,121 +1403,13 @@ components:
         assets:
           type: array
           items:
-            $ref: "#/components/schemas/PagareAsset"
-
-    PagareAsset:
-      type: object
-      description: "Asset de pagaré almacenado en blockchain."
-      properties:
-        id:
-          type: string
-        data:
-          type: object
-          properties:
-            type:
-              type: string
-            denominacion:
-              type: string
-            promesa_pago:
-              type: boolean
-            importe:
-              type: number
-            moneda:
-              type: string
-            vencimiento:
-              $ref: "#/components/schemas/Vencimiento"
-            localidad_pago:
-              type: string
-            beneficiario:
-              $ref: "#/components/schemas/Persona"
-            localidad_emision:
-              type: string
-            fecha_emision:
-              type: string
-            firmante:
-              $ref: "#/components/schemas/Firmante"
-            aval:
-              $ref: "#/components/schemas/Aval"
-            app:
-              type: string
-            from:
-              type: string
-            token:
-              type: boolean
-            namespace:
-              type: string
-            created_at:
-              type: integer
-
-    HistoricoResponse:
-      type: object
-      description: >
-        Histórico completo del pagaré (libro mayor).
-        Incluye la cadena de endosos con valor probatorio.
-      properties:
-        ok:
-          type: boolean
-        msg:
-          type: string
-        history:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              metadata:
-                type: object
-                properties:
-                  action:
-                    type: string
-                    enum: [CREATE, ENDOSO, UPDATE, PAGO, ANULACION, PRESCRIPCION]
-                  updated_at:
-                    type: integer
-                  creator:
-                    type: string
-                  endosante:
-                    type: string
-                  endosatario:
-                    type: string
-                  tipo_endoso:
-                    type: string
-                  firma_digital:
-                    type: string
-
-    OwnersResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-        msg:
-          type: string
-        owners:
-          type: array
-          items:
-            type: object
-            properties:
-              pub:
-                type: string
-              amount:
-                type: integer
-
-    PublicAssetResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-        msg:
-          type: string
-        asset:
-          $ref: "#/components/schemas/PagareAsset"
-
+            $ref: '#/components/schemas/PagareAsset'
     PagarePublicoResponse:
       type: object
       description: >
-        Respuesta de `/api/pagares/public`, el endpoint del servicio. Reenvía el
-        asset de BlockchainFUE y le añade lo que la plataforma calcula: el estado
-        del pagaré, el propietario actual y la verificación de la firma.
+        Respuesta de `/api/pagares/public`, el endpoint del servicio. Reenvía el asset de BlockchainFUE
+        y le añade lo que la plataforma calcula: el estado del pagaré, el propietario actual y la verificación
+        de la firma.
       properties:
         ok:
           type: boolean
@@ -1419,34 +1417,126 @@ components:
           type: string
         asset:
           allOf:
-            - $ref: "#/components/schemas/PagareAsset"
-            - type: object
-              properties:
-                verificacion:
-                  $ref: "#/components/schemas/Verificacion"
-
-    Verificacion:
+          - $ref: '#/components/schemas/PagareAsset'
+          - type: object
+            properties:
+              verificacion:
+                $ref: '#/components/schemas/Verificacion'
+    PerfilInput:
+      type: object
+      properties:
+        nombre:
+          type: string
+        apellido:
+          type: string
+        nif:
+          type: string
+        email:
+          type: string
+        telefono:
+          type: string
+        direccion:
+          type: string
+        localidad:
+          type: string
+        codigo_postal:
+          type: string
+        pais:
+          type: string
+    PerfilResponse:
+      allOf:
+      - type: object
+        properties:
+          ok:
+            type: boolean
+      - $ref: '#/components/schemas/PerfilInput'
+    Persona:
+      type: object
+      description: Datos identificativos de una persona física o jurídica. Art. 94 LCCH.
+      required:
+      - nombre
+      - nif
+      properties:
+        nombre:
+          type: string
+          description: Nombre completo o razón social.
+        apellido:
+          type: string
+          description: Apellidos (personas físicas).
+        nif:
+          type: string
+          pattern: ^[0-9]{8}[A-Z]$|^[XYZ][0-9]{7}[A-Z]$|^[A-Z][0-9]{8}$
+          description: DNI (8 dígitos + letra), NIE (X/Y/Z + 7 dígitos + letra) o NIF (letra + 8 dígitos).
+    PubKeyRequest:
+      type: object
+      required:
+      - pub
+      properties:
+        pub:
+          type: string
+    RegistroRequest:
+      allOf:
+      - $ref: '#/components/schemas/LoginRequest'
+      - type: object
+        properties:
+          nombre:
+            type: string
+          apellido:
+            type: string
+          nif:
+            type: string
+          email:
+            type: string
+            format: email
+          telefono:
+            type: string
+    Representante:
       type: object
       description: >
-        Resultado de comprobar la firma del emisor sobre el contenido del
-        pagaré. Responde a dos preguntas distintas: si el contenido lo firmó la
-        clave que creó el asset (`firmado`) y si el contenido almacenado hoy es
-        el que se firmó (`integro`). Un pagaré puede estar firmado y no ser
-        íntegro, que es justo el caso del que hay que advertir al tenedor.
-      properties:
-        firmado:
-          type: boolean
-          description: "La firma es válida para la clave que emitió el pagaré."
-        integro:
-          type: boolean
-          description: "El contenido coincide con el que se firmó al emitir."
-        clave:
-          type: string
-          description: "Clave pública del emisor con la que se ha verificado."
-        msg:
-          type: string
-          description: "Explicación legible del resultado."
+        Persona física que firma en nombre de una sociedad, y constancia del poder en que se apoya.
 
+        El art. 9 LCCH exige que quien firma por otro se halle autorizado y lo exprese claramente en la
+        antefirma; quien firma sin poder **queda obligado personalmente** por el título. De ahí que el
+        cargo sea obligatorio y que la falta de acreditación se advierta.
+
+        La acreditación es deliberadamente fina —tipo de documento, referencia y fecha— porque está llamada
+        a sustituirse por una credencial verificable de fuente registral.
+      required:
+      - nombre
+      - nif
+      - cargo
+      properties:
+        nombre:
+          type: string
+        apellido:
+          type: string
+        nif:
+          type: string
+        cargo:
+          type: string
+          description: Administrador único, apoderado, consejero delegado…
+          example: administrador único
+        acreditacion:
+          type: string
+          description: Copia autorizada, nota simple…
+        referencia:
+          type: string
+          description: Protocolo notarial o inscripción registral.
+        fecha:
+          type: string
+          format: date
+    SesionResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        username:
+          type: string
+        role:
+          type: string
+          enum:
+          - admin
+          - user
     SimpleOkResponse:
       type: object
       properties:
@@ -1454,71 +1544,83 @@ components:
           type: boolean
         msg:
           type: string
-
-    SignedMessageResponse:
+    UsuarioInput:
+      allOf:
+      - $ref: '#/components/schemas/PerfilInput'
+      - type: object
+        properties:
+          username:
+            type: string
+          password:
+            type: string
+            format: password
+          role:
+            type: string
+            enum:
+            - admin
+            - user
+    UsuarioView:
       type: object
+      description: Vista de usuario del directorio. Nunca incluye la clave privada.
       properties:
-        ok:
-          type: boolean
-        msg:
+        id:
           type: string
-        message:
+        username:
           type: string
-          description: "Mensaje firmado (contiene firma + original)."
-
-    VerifiedMessageResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-        msg:
+        display_name:
           type: string
-        message:
+        nombre:
           type: string
-          description: "Mensaje original verificado."
-
-    EncryptedMessageResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-        msg:
+        apellido:
           type: string
-        message:
+        nif:
           type: string
-          description: "Mensaje cifrado."
-        nonce:
+        direccion:
           type: string
-          description: "Nonce necesario para descifrar."
-
-    DecryptedMessageResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-        msg:
+        localidad:
           type: string
-        message:
+        codigo_postal:
           type: string
-          description: "Mensaje descifrado."
-
-    ErrorResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-          default: false
-        msg:
+        pais:
           type: string
-        errors:
+        pub_keys:
           type: array
           items:
-            type: object
-            properties:
-              campo:
-                type: string
-              mensaje:
-                type: string
-              articulo_lcch:
-                type: string
-                description: "Artículo de la LCCH que no se cumple."
+            type: string
+    Vencimiento:
+      type: object
+      description: >
+        Fecha de vencimiento del pagaré. - "fecha_fija": fecha concreta (art. 94 LCCH) - "a_la_vista":
+        pagadero a la vista, plazo máx. 1 año (art. 39 LCCH)
+      required:
+      - tipo
+      properties:
+        tipo:
+          type: string
+          enum:
+          - fecha_fija
+          - a_la_vista
+        fecha:
+          type: string
+          format: date
+          description: Requerido si tipo = fecha_fija. Debe ser posterior a la fecha de emisión.
+    Verificacion:
+      type: object
+      description: >
+        Resultado de comprobar la firma del emisor sobre el contenido del pagaré. Responde a dos preguntas
+        distintas: si el contenido lo firmó la clave que creó el asset (`firmado`) y si el contenido almacenado
+        hoy es el que se firmó (`integro`). Un pagaré puede estar firmado y no ser íntegro, que es justo
+        el caso del que hay que advertir al tenedor.
+      properties:
+        firmado:
+          type: boolean
+          description: La firma es válida para la clave que emitió el pagaré.
+        integro:
+          type: boolean
+          description: El contenido coincide con el que se firmó al emitir.
+        clave:
+          type: string
+          description: Clave pública del emisor con la que se ha verificado.
+        msg:
+          type: string
+          description: Explicación legible del resultado.

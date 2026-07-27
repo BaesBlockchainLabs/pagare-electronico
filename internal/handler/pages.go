@@ -3,16 +3,23 @@ package handler
 import (
 	"net/http"
 
+	"pagare/internal/apidocs"
 	"pagare/internal/auth"
 	"pagare/internal/templates"
 )
 
 type PageHandler struct {
 	isDev bool
+	// specs: rutas de las especificaciones OpenAPI que sirve /docs. Relativas al
+	// directorio de trabajo; configurables para no atar el handler a él.
+	specs []string
 }
 
+// SetSpecs overrides which OpenAPI files /docs reads.
+func (p *PageHandler) SetSpecs(rutas ...string) { p.specs = rutas }
+
 func NewPageHandler(isDev bool) *PageHandler {
-	return &PageHandler{isDev: isDev}
+	return &PageHandler{isDev: isDev, specs: []string{"openapi.yaml", "openapi-bcf.yaml"}}
 }
 
 // requirePrincipal redirects to /login if there is no authenticated user.
@@ -149,4 +156,28 @@ func (p *PageHandler) Ceder(w http.ResponseWriter, r *http.Request) {
 	user := &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
 	w.Header().Set("Content-Type", "text/html")
 	templates.Ceder(user).Render(r.Context(), w)
+}
+
+// ApiDocs renders the endpoint index built from the OpenAPI specs, and is the
+// URL to point an integrator at. Public: the specs describe the interface, not
+// anyone's data.
+func (p *PageHandler) ApiDocs(w http.ResponseWriter, r *http.Request) {
+	var user *templates.CurrentUser
+	if principal := auth.GetPrincipal(r); principal != nil {
+		user = &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
+	}
+
+	var specs []*apidocs.Spec
+	var problemas string
+	for _, ruta := range p.specs {
+		spec, err := apidocs.Cargar(ruta)
+		if err != nil {
+			problemas += err.Error() + ". "
+			continue
+		}
+		specs = append(specs, spec)
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	templates.ApiDocs(user, specs, problemas).Render(r.Context(), w)
 }

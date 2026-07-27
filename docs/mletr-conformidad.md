@@ -13,6 +13,10 @@ Marco doctrinal de referencia: [`pagare-tokenizado.md`](pagare-tokenizado.md)
 > cubre **hoy** y lo que no; no es asesoramiento jurídico ni declaración de
 > conformidad frente a un organismo de supervisión.
 
+La interfaz de la plataforma está descrita en [`openapi.yaml`](../openapi.yaml) y
+la de la red que consume en [`openapi-bcf.yaml`](../openapi-bcf.yaml); el propio
+servicio las sirve en `/docs`.
+
 ## 1. Los cinco requisitos del método fiable
 
 La formulación abstracta de los cinco requisitos procede del análisis comparado
