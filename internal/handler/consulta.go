@@ -414,8 +414,17 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 		data["estado"] = estado
 	}
 
+	// La verificación se calcula sobre el contenido completo: es lo que se
+	// firmó. Sólo después se recorta lo que se devuelve.
+	verificacion := h.verificarContenido(data)
+
+	interesado := h.esInteresado(id, auth.GetPrincipal(r))
+	if !interesado {
+		data = vistaPublica(data)
+	}
+
 	ownerBody, ownerStatus, _ := h.client.GetAssetOwners(id)
-	if ownerStatus == 200 {
+	if interesado && ownerStatus == 200 {
 		var ownerRaw map[string]interface{}
 		if json.Unmarshal(ownerBody, &ownerRaw) == nil {
 			if owners, ok := ownerRaw["owners"].([]interface{}); ok && len(owners) > 0 {
@@ -429,7 +438,12 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 	}
 
 	asset["data"] = data
-	asset["verificacion"] = h.verificarContenido(data)
+	asset["verificacion"] = verificacion
+	// Que la vista esté recortada debe verse, no adivinarse.
+	asset["vista"] = "publica"
+	if interesado {
+		asset["vista"] = "completa"
+	}
 
 	WriteJSON(w, status, raw)
 }

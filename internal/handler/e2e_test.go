@@ -583,3 +583,61 @@ func TestE2E_PagaresAnterioresSiguenVerificando(t *testing.T) {
 			"el pagaré %s dejó de verificar: %s", id[:12], publico.Asset.Verificacion.Msg)
 	}
 }
+
+// Contra la red real: el pagaré de sociedad emitido en las pruebas exponía el
+// NIF y la dirección del firmante, y la identidad de su representante, a
+// cualquiera con el ID. La vista pública ya no debe hacerlo.
+func TestE2E_LaVistaPublicaNoExponeALasPartes(t *testing.T) {
+	appID, appKey := os.Getenv("BCF_APP_ID"), os.Getenv("BCF_APP_KEY")
+	if appID == "" || appKey == "" {
+		t.Skip("sin BCF_APP_ID/BCF_APP_KEY: carga el .env antes de ejecutar")
+	}
+	network := os.Getenv("BCF_NETWORK")
+	if network == "" {
+		network = "test"
+	}
+	baseURL := os.Getenv("BCF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.blockchainfue.com/api"
+	}
+
+	client := bcfclient.New(config.BlockchainConfig{
+		BaseURL: baseURL, AppID: appID, AppKey: appKey, Network: network,
+	})
+	ch := NewConsultaHandler(client)
+	ch.SetCrypto(crypto.NewService(client))
+
+	const idSociedad = "eeee8519b35b27fb54bd8092f443da4ce078dcdae19490659f458d91ef5c393c"
+
+	req := httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/public?network=%s&id=%s", network, idSociedad), nil)
+	w := httptest.NewRecorder()
+	ch.GetPublicAsset(w, req) // sin principal: un desconocido
+	require.Equal(t, http.StatusOK, w.Code)
+
+	cuerpo := w.Body.String()
+	for _, dato := range []string{
+		"B12345678",             // CIF de la sociedad
+		"Polígono Las Atalayas", // dirección del firmante
+		"87654321X",             // NIF del representante
+		"Server",                // apellido del representante
+		"12345678Z",             // NIF del beneficiario
+	} {
+		assert.NotContains(t, cuerpo, dato, "un desconocido no debe ver %q", dato)
+	}
+
+	// Pero sigue pudiendo comprobar lo que la verificación existe para probar.
+	var resp struct {
+		Asset struct {
+			Vista        string                 `json:"vista"`
+			Data         map[string]interface{} `json:"data"`
+			Verificacion Verificacion           `json:"verificacion"`
+		} `json:"asset"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "publica", resp.Asset.Vista)
+	assert.True(t, resp.Asset.Verificacion.Integro, "la verificación debe seguir funcionando")
+	assert.Equal(t, 3200.0, resp.Asset.Data["importe"])
+	t.Logf("vista=%s · importe=%v · verificación: %s",
+		resp.Asset.Vista, resp.Asset.Data["importe"], resp.Asset.Verificacion.Msg)
+}

@@ -220,6 +220,26 @@ justamente el caso del que hay que advertir al tenedor.
 El resultado se expone en el endpoint público y en `/pagares/verificar`, de modo
 que **un tercero sin cuenta puede comprobarlo**.
 
+**Pero sin identificar a las partes.** La consulta pública devuelve lo que
+acredita el título —denominación, importe, vencimiento, cláusulas, estado y el
+resultado de la verificación— y omite lo que identifica a quienes están detrás:
+nombres, dirección postal y, por entero, la identidad del representante, que no
+es parte del crédito. Los NIF salen enmascarados, de modo que quien tiene el
+título en la mano puede cotejarlos sin que un desconocido derive de ellos una
+identidad.
+
+La razón es que un título valor está hecho para mostrarse, pero en papel leerlo
+exige **tenerlo**, mientras que aquí basta con conocer una cadena que viaja en
+códigos QR impresos, en URLs y en correos reenviados. Haber visto pasar un
+identificador no es poseer el título. Es la misma dirección que el marco
+doctrinal apunta al hablar de mover identidad verificable en lugar de datos
+identificables (nota 1).
+
+La verificación se calcula sobre el contenido **completo**, que es lo que se
+firmó, y sólo después se recorta lo que se devuelve: de otro modo el recorte la
+rompería y el desconocido perdería justamente lo único que la vista pública
+existe para darle.
+
 **La firma es obligatoria para emitir.** El artículo 94.7 cuenta la firma del
 que emite entre las menciones esenciales, y el artículo 95, párrafo 1, priva de
 validez como pagaré al documento al que le falte una: un pagaré sin firma no es
