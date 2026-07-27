@@ -4,6 +4,14 @@
 *.db
 .beads-credential-key
 
+# Estado en tiempo de ejecución: almacén de usuarios (hashes de contraseña,
+# NIF, direcciones). El *.db de abajo cubría la base de datos, pero no el
+# volcado JSON que dejó la migración.
+data/
+
+# macOS
+.DS_Store
+
 # Go
 .env
 bin/
