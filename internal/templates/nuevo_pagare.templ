@@ -349,6 +349,8 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			document.getElementById('beneficiario_nombre').value = u.nombre || '';
 			document.getElementById('beneficiario_apellido').value = u.apellido || '';
 			document.getElementById('beneficiario_nif').value = u.nif || '';
+			// El pago se realiza en la localidad del beneficiario (editable).
+			if (u.localidad) document.getElementById('localidad_pago').value = u.localidad;
 		}
 
 		// Cargar al inicio
