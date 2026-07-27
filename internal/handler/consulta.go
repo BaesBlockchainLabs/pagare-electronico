@@ -154,7 +154,9 @@ func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]str
 			}
 		}
 		action, _ := metadata["action"].(string)
-		if action == "TRANSFER" && transfer == "" {
+		// La entrega al beneficiario se registra como TRANSFER, igual que un
+		// endoso, pero no lo es: un pagaré recién emitido no está endosado.
+		if action == "TRANSFER" && transfer == "" && !esEntrega(metadata) {
 			transfer = "ENDOSADO"
 		}
 		if action == "ENDOSO" && update == "" {
@@ -263,10 +265,15 @@ func (h *ConsultaHandler) GetHistorico(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		action, _ := metadata["action"].(string)
-		if label, found := actionLabels[action]; found {
-			metadata["action_label"] = label
-		} else {
-			metadata["action_label"] = action
+		switch {
+		case esEntrega(metadata):
+			metadata["action_label"] = "Entrega al beneficiario"
+		default:
+			if label, found := actionLabels[action]; found {
+				metadata["action_label"] = label
+			} else {
+				metadata["action_label"] = action
+			}
 		}
 		if tipo, ok := metadata["tipo_cierre"].(string); ok {
 			if label, found := actionLabels[tipo]; found {
@@ -550,6 +557,9 @@ func (h *ConsultaHandler) parseHistory(body []byte) (endosos []pdf.Endoso, firma
 		if action == "CREATE" {
 			firmantePub = strVal(meta["from"]) // la clave que firmó la emisión
 			continue
+		}
+		if esEntrega(meta) {
+			continue // la entrega al beneficiario no abre la cadena de endosos
 		}
 		if action != "TRANSFER" && action != "ENDOSO" && tipo == "" {
 			continue // UPDATE/BURN u otros: no son endosos

@@ -69,6 +69,7 @@ func main() {
 	// Pagaré handler signs on behalf of the logged-in user using their sealed
 	// private key resolved from the store (no private key handled client-side).
 	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc, authStore)
+	pagareHandler.SetBeneficiarios(authStore)
 
 	// Development seed: provision N users with keypairs, then exit. Never in prod.
 	if *seedUsers > 0 {

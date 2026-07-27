@@ -226,6 +226,10 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			// No blockchain identity is sent: the server signs on our behalf with
 			// the logged-in user's stored key.
 
+			// Destino de la entrega. Si el beneficiario se tecleó a mano no hay
+			// clave, y el servidor intentará resolverla por su NIF.
+			if (BENEF_PUB) payload.to = BENEF_PUB;
+
 			if (document.getElementById('aval_enabled').checked) {
 				var alcance = f.aval_alcance.value;
 				payload.asset.data.aval = {
@@ -251,7 +255,14 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 				btn.disabled = false;
 				btn.textContent = "Emitir y grabar en blockchain";
 				if (data.ok) {
-					okEl.textContent = "Pagaré emitido correctamente. ID: " + data.id + " (coste: " + data.cost + ")";
+					var ent = data.entrega || {};
+					var pendiente = ent.entregado === false;
+					okEl.textContent = (data.msg || "Pagaré emitido") + ". ID: " + data.id + " (coste: " + data.cost + ")";
+					// Un pagaré sin entregar sigue bajo el control del emisor: el
+					// beneficiario todavía no tiene nada, y hay que decirlo.
+					if (pendiente && ent.msg) okEl.textContent += " — " + ent.msg;
+					okEl.classList.toggle('alert-success', !pendiente);
+					okEl.classList.toggle('alert-info', pendiente);
 					okEl.classList.remove('hidden');
 
 					f.reset();
@@ -284,6 +295,8 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 
 		// Autocompletar el emisor (firmante) con los datos del usuario logueado.
 		var BENEF_IDS = ['beneficiario_nombre','beneficiario_apellido','beneficiario_nif'];
+		// Clave pública del beneficiario seleccionado, destino de la entrega.
+		var BENEF_PUB = '';
 		var EMISOR_IDS = ['firmante_nombre','firmante_apellido','firmante_nif','firmante_direccion','firmante_localidad','firmante_cp','firmante_pais'];
 
 		function fetchAndFillEmisor() {
@@ -315,7 +328,7 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			var manual = document.getElementById('beneficiario-manual').checked;
 			var sel = document.getElementById('beneficiario-select');
 			sel.disabled = manual;
-			if (manual) { sel.value = ''; }
+			if (manual) { sel.value = ''; BENEF_PUB = ''; }
 			BENEF_IDS.forEach(function(id){
 				var el = document.getElementById(id);
 				el.readOnly = !manual;
@@ -351,6 +364,9 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			document.getElementById('beneficiario_nif').value = u.nif || '';
 			// El pago se realiza en la localidad del beneficiario (editable).
 			if (u.localidad) document.getElementById('localidad_pago').value = u.localidad;
+			// Clave a la que se entregará el pagaré: sin ella el control se
+			// quedaría en el emisor y el beneficiario no tendría nada.
+			BENEF_PUB = (u.pub_keys && u.pub_keys[0]) || '';
 		}
 
 		// Cargar al inicio

@@ -25,7 +25,7 @@ la sección 2(2) de la *Electronic Trade Documents Act 2023* británica.
 |---|-----------|----------------|--------|
 | i | **Unicidad** del registro | Un asset por pagaré en BlockchainFUE; el consenso de la red impide la doble transmisión. Emisión con `CreateAsset`, extinción con `BurnAsset` (`internal/bcfclient/client.go`) | **Cubierto** (unicidad técnica, no presunción legal — §3) |
 | ii | **Identificación** del titular del control | Par de claves ed25519 por usuario (`internal/crypto`), asociación usuario↔pubkey en `internal/auth`, consulta de titularidad vía `GetAssetOwners` | **Parcial** — identidad de plataforma, no eIDAS (§4) |
-| iii | **Exclusividad** del control | Propiedad del asset en la red; solo el poseedor de la clave privada puede transferirlo. La red rechaza la operación si `from` no es el titular | **Parcial** — control ejercido por tercero (§5) y no transferido en la emisión (§6) |
+| iii | **Exclusividad** del control | Propiedad del asset en la red, transferida al beneficiario en la emisión (§6); solo el poseedor de la clave privada puede transferirla, y la red rechaza la operación si `from` no es el titular | **Parcial** — resuelto salvo por la custodia de claves (§5) |
 | iv | **Trazabilidad** de la cadena de portadores | `GetAssetHistory` → `parseHistory` (`internal/handler/consulta.go`) → cadena de endosos en el reverso del PDF (`internal/pdf/pagare.go`). Orden cronológico garantizado por la red | **Cubierto** |
 | v | **Integridad** de la información incorporada | Inmutabilidad del registro, más firma del emisor sobre la forma canónica del contenido, verificable públicamente (§7) | **Cubierto** |
 
@@ -108,18 +108,38 @@ Es la objeción que el §3.3 del documento doctrinal dirige a las soluciones de
 tercero de confianza. Se documenta aquí, no se oculta: el modo no custodial
 existe, y la migración a claves en cartera de identidad es el horizonte natural.
 
-## 6. La entrega: control no transferido en la emisión
+## 6. La entrega del control al beneficiario
 
-**Divergencia conocida.** En la emisión, el asset se crea con `from` = firmante
-y sin destinatario, de modo que el emisor **conserva el control** del registro.
-El beneficiario no lo adquiere hasta que se produce una transferencia posterior.
+En el título en papel la posesión pasa al tenedor por la **entrega**. Su
+equivalente electrónico es la transferencia del control, y sin ella el requisito
+(iii) del método fiable —control exclusivo del portador— no quedaría satisfecho:
+el emisor conservaría el registro y el beneficiario no tendría nada.
 
-En el título en papel, la posesión pasa al tenedor por la **entrega**. Sin un
-equivalente electrónico de la entrega, el requisito (iii) del método fiable
-—control exclusivo del portador— no queda satisfecho en el momento de la emisión.
+La emisión, por tanto, son **dos operaciones**. Se comprobó contra la red que
+`POST /asset` crea todo asset a nombre de quien firmó la creación e **ignora
+cualquier destinatario** indicado en ese momento, tanto dentro de `asset` como en
+la raíz de la petición. La entrega es un `PUT /asset` posterior con `to` = clave
+del beneficiario (`internal/handler/entrega.go`).
 
-Pendiente de resolver: transferencia del control al beneficiario como parte
-atómica de la operación de emisión.
+**La entrega debe distinguirse del endoso**, y esto no es cosmético. La red
+sobrescribe el `action` que enviamos y registra toda transferencia como
+`TRANSFER`, igual que un endoso, aunque **conserva los campos propios** que
+añadamos. Sin una marca, el sistema leería la entrega como el primer endoso de la
+cadena: el pagaré aparecería como ENDOSADO desde el momento de emitirse y la
+entrega se imprimiría en el reverso del PDF como si lo fuera. De ahí el campo
+`tipo_operacion: ENTREGA`, que el cálculo del estado y la cadena de endosos
+filtran.
+
+**Cuando la entrega no puede completarse** —el beneficiario no está registrado y
+no tiene clave, o la red rechaza la transferencia— el pagaré queda *emitido y
+pendiente de entrega*. No es un fallo: es el título firmado que aún no ha
+cambiado de manos, un estado real también en papel. Lo que sería incorrecto es
+darlo por entregado, porque el control seguiría siendo del emisor. La respuesta
+de la emisión lo dice expresamente en el bloque `entrega`, y la interfaz lo
+advierte.
+
+El destinatario se toma de `to` si el cliente lo aporta y, si no, se resuelve por
+el NIF del beneficiario, que es la mención que el artículo 94 exige en el título.
 
 ## 7. Integridad: firma del contenido
 
@@ -191,8 +211,8 @@ electrónica.
 
 | Plano | Pendiente | Depende de |
 |---|---|---|
-| Técnico | Entrega del control al beneficiario en la emisión (§6) | Nosotros |
 | Técnico | Bloqueo del endoso en pagarés «no a la orden» (§8) | Nosotros |
+| Técnico | Reintento de la entrega en pagarés pendientes (§6) | Nosotros |
 | Modelo | Persona jurídica y poder de representación (§4) | Nosotros, con horizonte EBW |
 | Institucional | Presunción legal de unicidad (§3) | Cualificación del prestador |
 | Institucional | Firma cualificada eIDAS y cartera de identidad (§4) | Despliegue EUDI Wallet |

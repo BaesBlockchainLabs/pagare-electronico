@@ -21,11 +21,16 @@ type SigningKeys interface {
 }
 
 type PagareHandler struct {
-	client    *bcfclient.Client
-	validator *validator.LCCHValidator
-	crypto    *crypto.Service
-	keys      SigningKeys
+	client        *bcfclient.Client
+	validator     *validator.LCCHValidator
+	crypto        *crypto.Service
+	keys          SigningKeys
+	beneficiarios BeneficiaryResolver
 }
+
+// SetBeneficiarios wires the resolver that turns the beneficiario's NIF into
+// the key the pagaré is handed to at emission.
+func (h *PagareHandler) SetBeneficiarios(b BeneficiaryResolver) { h.beneficiarios = b }
 
 func NewPagareHandler(client *bcfclient.Client, cryptoSvc *crypto.Service, keys SigningKeys) *PagareHandler {
 	return &PagareHandler{
@@ -90,6 +95,9 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 			Metadata *models.MetadataEmision  `json:"metadata,omitempty"`
 		} `json:"asset"`
 		From *models.IdentidadBC `json:"from,omitempty"`
+		// To: clave pública del beneficiario a quien se entrega el pagaré. Si no
+		// se indica, se resuelve por el NIF del beneficiario.
+		To string `json:"to,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -161,11 +169,22 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The ledger created the asset owned by the firmante. Hand it to the
+	// beneficiario, which is what gives them control — the electronic
+	// equivalent of handing over the paper title.
+	entrega := h.entregar(resp.ID, &req.Asset.Data, req.To, from)
+
+	msg := "Pagaré emitido y entregado al beneficiario"
+	if !entrega.Entregado {
+		msg = "Pagaré emitido, pendiente de entrega al beneficiario"
+	}
+
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":   true,
-		"msg":  "Pagaré emitido correctamente",
-		"id":   resp.ID,
-		"cost": resp.Cost,
+		"ok":      true,
+		"msg":     msg,
+		"id":      resp.ID,
+		"cost":    resp.Cost,
+		"entrega": entrega,
 	})
 }
 

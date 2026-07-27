@@ -152,6 +152,25 @@ func (s *Store) GetUserByPubKey(pub string) (*User, error) {
 	return s.GetByID(id)
 }
 
+// GetUserByNIF returns the registered user holding a fiscal number, or
+// ErrUserNotFound. Used to hand a pagaré to a beneficiario the issuer
+// identified only by NIF, which is what the art. 94 mención carries.
+func (s *Store) GetUserByNIF(nif string) (*User, error) {
+	if nif == "" {
+		return nil, ErrUserNotFound
+	}
+	var id string
+	err := s.db.QueryRow(
+		`SELECT id FROM users WHERE UPPER(nif) = UPPER(?) LIMIT 1`, nif).Scan(&id)
+	if err == sql.ErrNoRows {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.GetByID(id)
+}
+
 // HasPrivateKey reports whether a sealed private key exists for (userID, pub),
 // without decrypting it.
 func (s *Store) HasPrivateKey(userID, pub string) (bool, error) {

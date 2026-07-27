@@ -181,6 +181,10 @@ paths:
         - Si vencimiento es "a_la_vista", la fecha no puede exceder 1 año (art. 39)
         - NIF/NIE/NIF válido del firmante y beneficiario
         - El contenido se firma digitalmente antes de grabar
+
+        **Entrega.** La blockchain crea el asset a nombre de quien firma la creación,
+        de modo que el servicio encadena una transferencia al beneficiario (`to`) para
+        que el control pase a él. El resultado se informa en `entrega`.
       operationId: emitirPagare
       requestBody:
         required: true
@@ -830,6 +834,13 @@ components:
               $ref: "#/components/schemas/MetadataEmision"
         from:
           $ref: "#/components/schemas/IdentidadBlockchain"
+        to:
+          type: string
+          description: >
+            Clave pública del beneficiario a quien se entrega el pagaré. Si se
+            omite, el servicio la resuelve por el NIF del beneficiario; si el
+            beneficiario no está registrado, el pagaré queda emitido y pendiente
+            de entrega.
 
     MetadataEmision:
       type: object
@@ -1075,9 +1086,32 @@ components:
         cost:
           type: number
           description: "Coste de la operación en la blockchain."
-        firma_digital:
+        entrega:
+          $ref: "#/components/schemas/Entrega"
+
+    Entrega:
+      type: object
+      description: >
+        Resultado de entregar el pagaré recién emitido a su beneficiario.
+        La blockchain crea todo asset a nombre de quien firmó la creación e
+        ignora cualquier destinatario indicado en ese momento, así que la
+        entrega es una transferencia posterior.
+
+        `entregado: false` no es un error: es un pagaré válidamente emitido que
+        todavía no ha cambiado de manos, el equivalente al título firmado y aún
+        no entregado. Lo que sería incorrecto es darlo por entregado, porque el
+        control (y con él la legitimación para reclamar el pago) seguiría siendo
+        del emisor.
+      properties:
+        entregado:
+          type: boolean
+          description: "El control ha pasado al beneficiario."
+        a:
           type: string
-          description: "Firma digital del contenido grabado."
+          description: "Clave pública del beneficiario que recibe el control."
+        msg:
+          type: string
+          description: "Explicación legible del resultado."
 
     PagareListResponse:
       type: object
