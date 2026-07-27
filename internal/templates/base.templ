@@ -639,6 +639,28 @@ templ Base(title string, user *CurrentUser) {
 				'<div class="key-row"><div class="key-display">' + safe + '</div>' +
 				'<button type="button" class="btn btn-outline btn-sm copy-btn" onclick="copyText(this)">Copiar</button></div></div>';
 		};
+
+		// ---------- formato de fechas (unificado: DD/MM/YYYY) ----------
+		// Fechas puras 'YYYY-MM-DD' se formatean sin conversión de zona horaria
+		// (evita el desfase de un día). Las que llevan hora se localizan.
+		window.fmtFecha = function(v) {
+			if (v == null || v === '') return '—';
+			var s = String(v).trim();
+			var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+			if (m) return m[3] + '/' + m[2] + '/' + m[1];
+			var d = new Date(s);
+			if (isNaN(d.getTime())) return s;
+			return String(d.getDate()).padStart(2, '0') + '/' +
+				String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+		};
+		window.fmtFechaHora = function(v) {
+			if (v == null || v === '') return '—';
+			var d = new Date(v);
+			if (isNaN(d.getTime())) return window.fmtFecha(v);
+			return window.fmtFecha(d) + ', ' +
+				String(d.getHours()).padStart(2, '0') + ':' +
+				String(d.getMinutes()).padStart(2, '0');
+		};
 		</script>
 	</body>
 	</html>

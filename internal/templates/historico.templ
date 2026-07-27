@@ -50,7 +50,7 @@ templ Historico(id string, user *CurrentUser) {
 						html += '<div class="timeline-dot ' + dotClass + '">' + (DOT_ICONS[dotClass] || DOT_ICONS.default) + '</div>';
 						html += '<div class="timeline-body">';
 						html += '<div class="t-title">' + label + '</div>';
-						if (meta.fecha) html += '<div class="t-date">' + meta.fecha + '</div>';
+						if (meta.fecha) html += '<div class="t-date">' + fmtFechaHora(meta.fecha) + '</div>';
 						if (meta.from) html += '<div class="t-row"><strong>Origen:</strong> <code>' + meta.from + '</code></div>';
 						if (meta.to) html += '<div class="t-row"><strong>Destino:</strong> <code>' + meta.to + '</code></div>';
 						if (meta.tipo_cierre_label) html += '<div class="t-row"><strong>Tipo:</strong> <span class="tag">' + meta.tipo_cierre_label + '</span></div>';

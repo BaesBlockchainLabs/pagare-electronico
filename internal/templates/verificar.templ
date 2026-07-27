@@ -62,7 +62,7 @@ templ Verificar(id string, network string, user *CurrentUser) {
 						estado = 'VENCIDO';
 					}
 					var impStr = (d.importe != null ? Number(d.importe).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '') + ' ' + (d.moneda || 'EUR');
-					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha || '');
+					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha ? fmtFecha(ven.fecha) : '');
 
 					var h = '<div class="verify-banner">' +
 						'<svg class="seal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"></circle><path d="M9.2 9.3 11.1 11.2 14.8 7.3"></path><path d="M8.4 14.1 7 21 l5-2.6 5 2.6 -1.4-6.9"></path></svg>' +
@@ -83,7 +83,7 @@ templ Verificar(id string, network string, user *CurrentUser) {
 					h += '<div class="detail-item"><div class="dl">Beneficiario</div><div class="dv">' + (ben.nombre||'') + ' ' + (ben.apellido||'') + ' (' + (ben.nif||'') + ')</div></div>';
 					h += '<div class="detail-item"><div class="dl">Firmante</div><div class="dv">' + (fir.nombre||'') + ' (' + (fir.nif||'') + ')</div></div>';
 					h += '<div class="detail-item"><div class="dl">Localidad de emisión</div><div class="dv">' + (d.localidad_emision||'') + '</div></div>';
-					h += '<div class="detail-item"><div class="dl">Fecha de emisión</div><div class="dv">' + (d.fecha_emision||'') + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Fecha de emisión</div><div class="dv">' + (d.fecha_emision ? fmtFecha(d.fecha_emision) : '') + '</div></div>';
 					h += '</div>';
 					if (dp.direccion) {
 						h += '<div class="field mt-6"><label class="form-label">Dirección del firmante</label><div class="dv">' + dp.direccion + ', ' + dp.localidad + ' ' + dp.codigo_postal + ' (' + dp.pais + ')</div></div>';
@@ -104,7 +104,7 @@ templ Verificar(id string, network string, user *CurrentUser) {
 					}
 					h += '<div class="pc-rule"></div>';
 					h += '<div class="detail-grid">';
-					h += '<div class="detail-item"><div class="dl">Creación en blockchain</div><div class="dv">' + (d.created_at ? new Date(d.created_at).toLocaleString('es-ES') : '') + '</div></div>';
+					h += '<div class="detail-item"><div class="dl">Creación en blockchain</div><div class="dv">' + (d.created_at ? fmtFechaHora(d.created_at) : '') + '</div></div>';
 					h += '<div class="detail-item"><div class="dl">Propietario actual</div><div class="key-display">' + (d.propietario_actual || d.from || '') + '</div></div>';
 					h += '</div>';
 					h += '</div>';

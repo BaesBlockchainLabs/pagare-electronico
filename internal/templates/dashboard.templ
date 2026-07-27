@@ -72,8 +72,8 @@ templ Dashboard(user *CurrentUser) {
 					var ven = d.vencimiento || {};
 					var benStr = ((ben.nombre || '') + ' ' + (ben.apellido || '')).trim() || '—';
 					var impStr = (d.importe != null ? Number(d.importe).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '') + ' ' + (d.moneda || 'EUR');
-					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : (ven.fecha || '—');
-					var fechaStr = d.created_at ? new Date(d.created_at).toLocaleDateString('es-ES') : '—';
+					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : fmtFecha(ven.fecha);
+					var fechaStr = fmtFecha(d.created_at);
 					var idShort = a.id ? a.id.substring(0, 10) + '…' : '';
 					var estado = d.estado || '';
 					var sinAcciones = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO' || estado === 'ENDOSADO';
