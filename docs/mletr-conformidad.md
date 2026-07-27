@@ -256,6 +256,20 @@ responsabilidad que nunca asumió. La constancia de la notificación se registra
 —fecha y medio—, aunque la notificación misma ocurra fuera del sistema; cuando
 no consta, la respuesta lo advierte expresamente.
 
+**La cesión se ofrece en todo pagaré**, no solo en el «no a la orden». En éste es
+la única vía; en los demás es una alternativa al endoso, y no una figura ajena al
+Derecho cambiario: el propio artículo 24 LCCH dispone que el endoso posterior al
+protesto, o al plazo para levantarlo, produce «sólo los efectos de una cesión
+ordinaria».
+
+Ahora bien, elegir la cesión sobre un pagaré endosable tiene una **asimetría**
+que la interfaz hace explícita, porque no la soporta quien decide: el cedente se
+libera de la responsabilidad del artículo 18 LCCH, mientras que es el adquirente
+quien pierde —la inoponibilidad de excepciones y la acción de regreso contra
+quien le transmitió—. Quien pulsa el botón se beneficia y el perjuicio recae en
+la otra parte, de modo que el sistema advierte de lo que el adquirente deja de
+recibir y ofrece endosar en su lugar.
+
 ## 9. Resumen de lo pendiente
 
 | Plano | Pendiente | Depende de |

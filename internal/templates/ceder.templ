@@ -13,6 +13,17 @@ templ Ceder(user *CurrentUser) {
 					frente al cesionario las excepciones que tuviera contra el cedente.
 				</span>
 			</div>
+			<div id="ces-endosable" class="alert alert-info hidden">
+				@Icon("info")
+				<span>
+					<strong>Este pagaré sí es endosable.</strong> Puedes cederlo, pero el
+					adquirente recibirá menos de lo que recibiría por endoso: el deudor podrá
+					oponerle las excepciones que tuviera contra ti, y no podrá reclamarte a ti
+					si el deudor no paga. A ti la cesión te libera de esa responsabilidad; a él
+					se la quita. Conviene que lo sepa y esté de acuerdo.
+					<a id="ces-ir-endoso" href="#">Endosarlo en su lugar</a>.
+				</span>
+			</div>
 			<form id="cesion-form" onsubmit="return cederPagare(event)">
 				<div class="field">
 					<label class="form-label">ID del pagaré *</label>
@@ -59,6 +70,27 @@ templ Ceder(user *CurrentUser) {
 		<script>
 		var urlId = new URLSearchParams(window.location.search).get('id');
 		if (urlId) document.getElementById('ces-id').value = urlId;
+
+		// La cesión cabe en cualquier pagaré, pero en uno endosable supone
+		// renunciar al régimen fuerte, y quien lo pierde es el adquirente, no
+		// quien pulsa el botón. Merece decirse antes de firmar.
+		function comprobarSiEsEndosable() {
+			var id = document.getElementById('ces-id').value.trim();
+			var aviso = document.getElementById('ces-endosable');
+			if (!id) { aviso.classList.add('hidden'); return; }
+			fetch('/api/pagares/buscar?id=' + encodeURIComponent(id))
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					var d = (data.asset && data.asset.data) || {};
+					var endosable = !d.no_a_la_orden;
+					aviso.classList.toggle('hidden', !endosable);
+					document.getElementById('ces-ir-endoso').href =
+						'/pagares/endosar?id=' + encodeURIComponent(id);
+				})
+				.catch(function(){});
+		}
+		document.getElementById('ces-id').addEventListener('change', comprobarSiEsEndosable);
+		if (urlId) comprobarSiEsEndosable();
 
 		function onCesionarioSelect(jsonStr) {
 			if (!jsonStr) { document.getElementById('ces-to').value = ''; return; }

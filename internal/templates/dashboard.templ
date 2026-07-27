@@ -86,9 +86,11 @@ templ Dashboard(user *CurrentUser) {
 						if (estado !== 'VENCIDO' && !d.no_a_la_orden) {
 							acc += '<a href="/pagares/endosar?id=' + encodeURIComponent(a.id) + '" class="btn btn-outline btn-sm">Endosar</a>';
 						}
-						// Al pagaré "no a la orden" le queda la cesión ordinaria
-						// (arts. 347-348 CCom), que no es un endoso.
-						if (estado !== 'VENCIDO' && d.no_a_la_orden) {
+						// La cesión ordinaria (arts. 347-348 CCom) cabe siempre: es la
+						// única vía del pagaré "no a la orden", y en los demás una
+						// alternativa al endoso con otros efectos, que la propia LCCH
+						// reconoce en el art. 24.
+						if (estado !== 'VENCIDO') {
 							acc += '<a href="/pagares/ceder?id=' + encodeURIComponent(a.id) + '" class="btn btn-outline btn-sm">Ceder</a>';
 						}
 						acc += '<a href="/pagares/pagar?id=' + encodeURIComponent(a.id) + '" class="btn btn-danger btn-sm">Pagar</a>';
