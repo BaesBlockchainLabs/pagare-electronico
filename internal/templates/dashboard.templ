@@ -75,7 +75,10 @@ templ Dashboard(user *CurrentUser) {
 					var benStr = ((ben.nombre || '') + ' ' + (ben.apellido || '')).trim() || '—';
 					var impStr = (d.importe != null ? Number(d.importe).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '') + ' ' + (d.moneda || 'EUR');
 					var venStr = ven.tipo === 'a_la_vista' ? 'A la vista' : fmtFecha(ven.fecha);
-					var fechaStr = fmtFecha(d.created_at);
+					// «Emitido» es la fecha de emisión del título (art. 94.6 LCCH),
+					// no cuándo se grabó en la red. Suelen coincidir, pero son cosas
+					// distintas: la primera es una mención del pagaré.
+					var fechaStr = fmtFecha(d.fecha_emision || d.created_at);
 					var idShort = a.id ? a.id.substring(0, 10) + '…' : '';
 					var estado = d.estado || '';
 					var sinAcciones = estado === 'PAGADO' || estado === 'ANULADO' || estado === 'PRESCRITO' || estado === 'ENDOSADO';

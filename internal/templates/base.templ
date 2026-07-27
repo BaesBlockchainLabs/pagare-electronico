@@ -645,11 +645,26 @@ templ Base(title string, user *CurrentUser) {
 		// (evita el desfase de un día). Las que llevan hora se localizan.
 		window.fmtFecha = function(v) {
 			if (v == null || v === '') return '—';
+			if (v instanceof Date) return window.fmtDMY(v);
+			// La red devuelve los sellos de tiempo como epoch en milisegundos.
+			// Hay que reconocerlos antes de pasar por String(v): new Date() no
+			// acepta una cadena de dígitos y devolvería fecha inválida, con lo que
+			// el número acababa impreso tal cual.
+			if (typeof v === 'number' || /^\d{10,}$/.test(String(v).trim())) {
+				var ms = Number(v);
+				// Diez dígitos son segundos; trece, milisegundos.
+				if (String(Math.trunc(ms)).length <= 10) ms *= 1000;
+				var e = new Date(ms);
+				return isNaN(e.getTime()) ? String(v) : window.fmtDMY(e);
+			}
 			var s = String(v).trim();
 			var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
 			if (m) return m[3] + '/' + m[2] + '/' + m[1];
 			var d = new Date(s);
 			if (isNaN(d.getTime())) return s;
+			return window.fmtDMY(d);
+		};
+		window.fmtDMY = function(d) {
 			return String(d.getDate()).padStart(2, '0') + '/' +
 				String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
 		};
