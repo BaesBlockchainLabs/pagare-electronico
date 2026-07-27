@@ -111,7 +111,19 @@ templ Verificar(id string, network string, user *CurrentUser) {
 					h += '<div class="detail-item"><div class="dl">Denominación</div><div class="dv">' + (d.denominacion||'') + '</div></div>';
 					h += '<div class="detail-item"><div class="dl">Localidad de pago</div><div class="dv">' + (d.localidad_pago||'') + '</div></div>';
 					h += '<div class="detail-item"><div class="dl">Beneficiario</div><div class="dv">' + (ben.nombre||'') + ' ' + (ben.apellido||'') + ' (' + (ben.nif||'') + ')</div></div>';
-					h += '<div class="detail-item"><div class="dl">Firmante</div><div class="dv">' + (fir.nombre||'') + ' (' + (fir.nif||'') + ')</div></div>';
+					var rotFirmante = fir.tipo === 'juridica' ? 'Firmante (sociedad)' : 'Firmante';
+					h += '<div class="detail-item"><div class="dl">' + rotFirmante + '</div><div class="dv">' + (fir.nombre||'') + ' (' + (fir.nif||'') + ')</div></div>';
+					// Quién firmó por la sociedad y con qué cargo: de ello depende que
+					// quede obligada ella y no personalmente quien firmó (art. 9 LCCH).
+					if (fir.representante) {
+						var rp = fir.representante;
+						var repStr = ((rp.nombre||'') + ' ' + (rp.apellido||'')).trim() + ', ' + (rp.cargo||'') + ' (' + (rp.nif||'') + ')';
+						h += '<div class="detail-item"><div class="dl">Firmado por poder</div><div class="dv">' + repStr + '</div></div>';
+						var poder = [rp.acreditacion, rp.referencia].filter(Boolean).join(' ');
+						if (rp.fecha) poder = (poder + ' de ' + fmtFecha(rp.fecha)).trim();
+						h += '<div class="detail-item"><div class="dl">Poder acreditado</div><div class="dv">' +
+							(poder || 'No consta') + '</div></div>';
+					}
 					h += '<div class="detail-item"><div class="dl">Localidad de emisión</div><div class="dv">' + (d.localidad_emision||'') + '</div></div>';
 					h += '<div class="detail-item"><div class="dl">Fecha de emisión</div><div class="dv">' + (d.fecha_emision ? fmtFecha(d.fecha_emision) : '') + '</div></div>';
 					h += '</div>';

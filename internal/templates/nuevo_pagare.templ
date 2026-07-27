@@ -118,6 +118,56 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 						<input type="text" id="firmante_pais" name="firmante_pais" required value="ES" maxlength="2" readonly/>
 					</div>
 				</div>
+				<label class="check-row" for="firmante_juridica">
+					<input type="checkbox" id="firmante_juridica" name="firmante_juridica" onchange="toggleJuridica()"/>
+					<span>
+						<b>Emite una sociedad</b> (art. 9 LCCH)
+						<small>Los datos de arriba pasan a ser la razón social y el CIF; abajo, quién firma en su nombre.</small>
+					</span>
+				</label>
+				<div id="juridica-fields" class="hidden mt-4">
+					<div class="alert alert-info">
+						@Icon("info")
+						<span>
+							Una sociedad no firma: firma por ella una persona con poder. El art. 9 LCCH
+							exige expresar el cargo claramente en la antefirma, y
+							<strong>quien firma en nombre de otro sin poder queda obligado personalmente</strong>
+							por el título.
+						</span>
+					</div>
+					<div class="form-grid-3">
+						<div class="field">
+							<label class="form-label" for="rep_nombre">Nombre del representante *</label>
+							<input type="text" id="rep_nombre" name="rep_nombre"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="rep_apellido">Apellidos</label>
+							<input type="text" id="rep_apellido" name="rep_apellido"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="rep_nif">NIF del representante *</label>
+							<input type="text" id="rep_nif" name="rep_nif" placeholder="12345678Z"/>
+						</div>
+					</div>
+					<div class="form-grid-3">
+						<div class="field">
+							<label class="form-label" for="rep_cargo">Cargo *</label>
+							<input type="text" id="rep_cargo" name="rep_cargo" placeholder="administrador único, apoderado…"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="rep_acreditacion">Acreditación del poder</label>
+							<input type="text" id="rep_acreditacion" name="rep_acreditacion" placeholder="copia autorizada, nota simple…"/>
+						</div>
+						<div class="field">
+							<label class="form-label" for="rep_referencia">Referencia</label>
+							<input type="text" id="rep_referencia" name="rep_referencia" placeholder="protocolo / inscripción"/>
+						</div>
+					</div>
+					<div class="field">
+						<label class="form-label" for="rep_fecha">Fecha del poder</label>
+						<input type="date" id="rep_fecha" name="rep_fecha"/>
+					</div>
+				</div>
 			</fieldset>
 
 			<fieldset>
@@ -176,6 +226,20 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 		</form>
 
 		<script>
+		function toggleJuridica() {
+			var on = document.getElementById('firmante_juridica').checked;
+			document.getElementById('juridica-fields').classList.toggle('hidden', !on);
+			// Al emitir una sociedad, los datos del firmante son los de ella, no
+			// los del usuario logueado: hay que poder teclearlos.
+			['firmante_nombre','firmante_apellido','firmante_nif'].forEach(function(id){
+				document.getElementById(id).readOnly = !on ? !document.getElementById('firmante-editar').checked : false;
+			});
+			document.getElementById('firmante_nombre').previousElementSibling.textContent =
+				on ? 'Razón social *' : 'Nombre *';
+			document.getElementById('firmante_nif').previousElementSibling.textContent =
+				on ? 'CIF *' : 'NIF / NIE / CIF *';
+		}
+
 		function toggleAval() {
 			var on = document.getElementById('aval_enabled').checked;
 			document.getElementById('aval-fields').classList.toggle('hidden', !on);
@@ -230,6 +294,19 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			// clave, y el servidor intentará resolverla por su NIF.
 			if (BENEF_PUB) payload.to = BENEF_PUB;
 
+			if (document.getElementById('firmante_juridica').checked) {
+				payload.asset.data.firmante.tipo = 'juridica';
+				payload.asset.data.firmante.representante = {
+					nombre: f.rep_nombre.value,
+					apellido: f.rep_apellido.value,
+					nif: f.rep_nif.value,
+					cargo: f.rep_cargo.value,
+					acreditacion: f.rep_acreditacion.value || undefined,
+					referencia: f.rep_referencia.value || undefined,
+					fecha: f.rep_fecha.value || undefined
+				};
+			}
+
 			if (document.getElementById('aval_enabled').checked) {
 				var alcance = f.aval_alcance.value;
 				payload.asset.data.aval = {
@@ -271,6 +348,8 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 					document.getElementById('beneficiario-manual').checked = false;
 					toggleManual('beneficiario');
 					document.getElementById('firmante-editar').checked = false;
+					document.getElementById('firmante_juridica').checked = false;
+					toggleJuridica();
 					fetchAndFillEmisor();
 					toggleAval();
 					toggleAvalParcial();

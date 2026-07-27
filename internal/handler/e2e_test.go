@@ -437,3 +437,149 @@ func TestE2E_EntregaPendienteSeCompletaDespues(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, ew2.Code)
 	t.Logf("segundo intento rechazado, estado final: %q", estado)
 }
+
+// Pagaré emitido por una sociedad: la representación entra en el contenido
+// firmado, y los pagarés ya emitidos antes de que existiera siguen validando.
+func TestE2E_PagareDeSociedad(t *testing.T) {
+	appID, appKey := os.Getenv("BCF_APP_ID"), os.Getenv("BCF_APP_KEY")
+	if appID == "" || appKey == "" {
+		t.Skip("sin BCF_APP_ID/BCF_APP_KEY: carga el .env antes de ejecutar")
+	}
+	network := os.Getenv("BCF_NETWORK")
+	if network == "" {
+		network = "test"
+	}
+	baseURL := os.Getenv("BCF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.blockchainfue.com/api"
+	}
+
+	client := bcfclient.New(config.BlockchainConfig{
+		BaseURL: baseURL, AppID: appID, AppKey: appKey, Network: network,
+	})
+	cryptoSvc := crypto.NewService(client)
+
+	emisorPub, emisorPvt, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+	beneficiarioPub, _, err := cryptoSvc.GenerateKeypair()
+	require.NoError(t, err)
+
+	ph := NewPagareHandler(client, cryptoSvc, nil)
+	ch := NewConsultaHandler(client)
+	ch.SetCrypto(cryptoSvc)
+
+	payload := map[string]interface{}{
+		"asset": map[string]interface{}{
+			"data": map[string]interface{}{
+				"denominacion": "PAGARÉ", "promesa_pago": true,
+				"importe": 3200.0, "moneda": "EUR",
+				"vencimiento":       map[string]interface{}{"tipo": "fecha_fija", "fecha": time.Now().AddDate(1, 0, 0).Format("2006-01-02")},
+				"localidad_pago":    "Alicante",
+				"beneficiario":      map[string]interface{}{"nombre": "Ana", "apellido": "López", "nif": "12345678Z"},
+				"localidad_emision": "Alicante", "fecha_emision": time.Now().Format("2006-01-02"),
+				"firmante": map[string]interface{}{
+					"tipo":   "juridica",
+					"nombre": "Ferretería Levante, S.L.",
+					"nif":    "B12345678",
+					"direccion_postal": map[string]interface{}{
+						"direccion": "Polígono Las Atalayas 12", "localidad": "Alicante",
+						"codigo_postal": "03114", "pais": "ES",
+					},
+					"representante": map[string]interface{}{
+						"nombre": "Luis", "apellido": "Server", "nif": "87654321X",
+						"cargo": "administrador único", "acreditacion": "copia autorizada de escritura",
+						"referencia": "protocolo 1234", "fecha": "2025-03-10",
+					},
+				},
+			},
+		},
+		"from": map[string]string{"pub": emisorPub, "pvt": emisorPvt},
+		"to":   beneficiarioPub,
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/pagares", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	ph.Emitir(w, withPrincipal(req))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var emision struct {
+		ID      string  `json:"id"`
+		Entrega Entrega `json:"entrega"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &emision))
+	require.True(t, emision.Entrega.Entregado)
+	t.Logf("emitido por sociedad %s", emision.ID)
+
+	// La firma cubre la representación: verificar debe salir íntegro.
+	vreq := httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/public?network=%s&id=%s", network, emision.ID), nil)
+	vw := httptest.NewRecorder()
+	ch.GetPublicAsset(vw, vreq)
+	require.Equal(t, http.StatusOK, vw.Code)
+
+	var publico struct {
+		Asset struct {
+			Data         map[string]interface{} `json:"data"`
+			Verificacion Verificacion           `json:"verificacion"`
+		} `json:"asset"`
+	}
+	require.NoError(t, json.Unmarshal(vw.Body.Bytes(), &publico))
+	assert.True(t, publico.Asset.Verificacion.Firmado)
+	assert.True(t, publico.Asset.Verificacion.Integro)
+
+	firmante, _ := publico.Asset.Data["firmante"].(map[string]interface{})
+	require.NotNil(t, firmante)
+	assert.Equal(t, "juridica", firmante["tipo"])
+	rep, _ := firmante["representante"].(map[string]interface{})
+	require.NotNil(t, rep, "la representación debe constar en el título")
+	assert.Equal(t, "administrador único", rep["cargo"])
+	t.Logf("verificación: firmado=%v integro=%v · firma por %s (%s)",
+		publico.Asset.Verificacion.Firmado, publico.Asset.Verificacion.Integro,
+		rep["nombre"], rep["cargo"])
+}
+
+// Los pagarés firmados antes de existir la representación deben seguir
+// verificando: añadir campos no puede invalidar firmas ya emitidas.
+func TestE2E_PagaresAnterioresSiguenVerificando(t *testing.T) {
+	appID, appKey := os.Getenv("BCF_APP_ID"), os.Getenv("BCF_APP_KEY")
+	if appID == "" || appKey == "" {
+		t.Skip("sin BCF_APP_ID/BCF_APP_KEY: carga el .env antes de ejecutar")
+	}
+	network := os.Getenv("BCF_NETWORK")
+	if network == "" {
+		network = "test"
+	}
+	baseURL := os.Getenv("BCF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.blockchainfue.com/api"
+	}
+
+	client := bcfclient.New(config.BlockchainConfig{
+		BaseURL: baseURL, AppID: appID, AppKey: appKey, Network: network,
+	})
+	ch := NewConsultaHandler(client)
+	ch.SetCrypto(crypto.NewService(client))
+
+	// Emitidos en fases anteriores de este mismo trabajo.
+	anteriores := []string{
+		"798bdc87b98af78e33bd279e5c7b12ea302082e463ca3dbf28722e45d4900be1",
+		"11ff30119afc6b9d39ab4ccdb99dd0e838ee20df0f0d26948612dd526450c947",
+		"c90bf3b47473045f2085b6f4cab5c86cb3921a087faa4ea279023f8695d9be9e",
+	}
+	for _, id := range anteriores {
+		req := httptest.NewRequest(http.MethodGet,
+			fmt.Sprintf("/public?network=%s&id=%s", network, id), nil)
+		w := httptest.NewRecorder()
+		ch.GetPublicAsset(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var publico struct {
+			Asset struct {
+				Verificacion Verificacion `json:"verificacion"`
+			} `json:"asset"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &publico))
+		assert.True(t, publico.Asset.Verificacion.Integro,
+			"el pagaré %s dejó de verificar: %s", id[:12], publico.Asset.Verificacion.Msg)
+	}
+}

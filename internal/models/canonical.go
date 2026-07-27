@@ -47,6 +47,28 @@ func CanonicalContent(p *PagareElectronico) map[string]interface{} {
 		"no_a_la_orden": p.NoALaOrden,
 	}
 
+	// El tipo y el representante se incluyen sólo cuando constan, como el aval y
+	// las cláusulas. No es una comodidad: añadirlos siempre cambiaría la forma
+	// canónica de los pagarés ya firmados y sus firmas dejarían de validar. Un
+	// pagaré sin estos campos produce exactamente los mismos bytes que antes de
+	// que existieran.
+	if p.Firmante.Tipo != "" {
+		firmante, _ := c["firmante"].(map[string]interface{})
+		firmante["tipo"] = p.Firmante.Tipo
+	}
+	if r := p.Firmante.Representante; r != nil {
+		firmante, _ := c["firmante"].(map[string]interface{})
+		firmante["representante"] = map[string]interface{}{
+			"nombre":       r.Nombre,
+			"apellido":     r.Apellido,
+			"nif":          r.NIF,
+			"cargo":        r.Cargo,
+			"acreditacion": r.Acreditacion,
+			"referencia":   r.Referencia,
+			"fecha":        r.Fecha,
+		}
+	}
+
 	if p.Aval != nil {
 		c["aval"] = map[string]interface{}{
 			"avalista": map[string]interface{}{

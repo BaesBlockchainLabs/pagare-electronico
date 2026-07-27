@@ -123,8 +123,64 @@ func (lv *LCCHValidator) validateLCCHRules(p *models.PagareElectronico, result *
 		})
 	}
 
+	lv.validateFirmante(&p.Firmante, result)
+
 	if p.Aval != nil {
 		lv.validateAval(p.Aval, p.Importe, result)
+	}
+}
+
+// validateFirmante checks the representation of a company issuer (art. 9 LCCH).
+//
+// A company cannot sign; a natural person signs for it. That person must hold a
+// poder and must state it clearly in the antefirma, and whoever signs for
+// another without one is bound personally by the title — so the cargo is
+// required, and a missing acreditación is reported as a warning rather than
+// silently accepted.
+func (lv *LCCHValidator) validateFirmante(f *models.Firmante, result *ValidationResult) {
+	if !f.EsPersonaJuridica() {
+		if f.Representante != nil {
+			result.Errors = append(result.Errors, ValidationError{
+				Campo:        "Representante",
+				Mensaje:      "Solo el pagaré emitido por persona jurídica lleva representante",
+				ArticuloLCCH: "art. 9 LCCH",
+			})
+		}
+		return
+	}
+
+	if f.Representante == nil {
+		result.Valid = false
+		result.Errors = append(result.Errors, ValidationError{
+			Campo:        "Representante",
+			Mensaje:      "El pagaré de persona jurídica requiere el representante que firma en su nombre",
+			ArticuloLCCH: "art. 9 LCCH",
+		})
+		return
+	}
+
+	r := f.Representante
+	if r.Nombre == "" || r.NIF == "" {
+		result.Valid = false
+		result.Errors = append(result.Errors, ValidationError{
+			Campo: "Representante", Mensaje: "El nombre y NIF del representante son obligatorios", ArticuloLCCH: "art. 9 LCCH",
+		})
+	}
+	if r.Cargo == "" {
+		result.Valid = false
+		result.Errors = append(result.Errors, ValidationError{
+			Campo:        "Representante.Cargo",
+			Mensaje:      "El cargo debe expresarse claramente en la antefirma",
+			ArticuloLCCH: "art. 9 LCCH",
+		})
+	}
+	if r.Acreditacion == "" && r.Referencia == "" {
+		result.Errors = append(result.Errors, ValidationError{
+			Campo: "Representante.Acreditacion",
+			Mensaje: "No consta la acreditación del poder: quien firma en nombre de otro sin " +
+				"poder queda obligado personalmente por el título",
+			ArticuloLCCH: "art. 9 LCCH",
+		})
 	}
 }
 

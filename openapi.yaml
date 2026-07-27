@@ -748,6 +748,42 @@ components:
           format: date
           description: "Requerido si tipo = fecha_fija. Debe ser posterior a la fecha de emisión."
 
+    Representante:
+      type: object
+      description: >
+        Persona física que firma en nombre de una sociedad, y constancia del poder
+        en que se apoya.
+
+        El art. 9 LCCH exige que quien firma por otro se halle autorizado y lo exprese
+        claramente en la antefirma; quien firma sin poder **queda obligado
+        personalmente** por el título. De ahí que el cargo sea obligatorio y que la
+        falta de acreditación se advierta.
+
+        La acreditación es deliberadamente fina —tipo de documento, referencia y
+        fecha— porque está llamada a sustituirse por una credencial verificable de
+        fuente registral.
+      required: [nombre, nif, cargo]
+      properties:
+        nombre:
+          type: string
+        apellido:
+          type: string
+        nif:
+          type: string
+        cargo:
+          type: string
+          description: "Administrador único, apoderado, consejero delegado…"
+          example: "administrador único"
+        acreditacion:
+          type: string
+          description: "Copia autorizada, nota simple…"
+        referencia:
+          type: string
+          description: "Protocolo notarial o inscripción registral."
+        fecha:
+          type: string
+          format: date
+
     Persona:
       type: object
       description: "Datos identificativos de una persona física o jurídica. Art. 94 LCCH."
@@ -765,11 +801,21 @@ components:
           description: "DNI (8 dígitos + letra), NIE (X/Y/Z + 7 dígitos + letra) o NIF (letra + 8 dígitos)."
 
     Firmante:
+      description: >
+        Obligado cambiario. `nombre` y `nif` lo nombran siempre; cuando emite una
+        sociedad, son la razón social y el CIF, y `representante` recoge a la persona
+        física que firma por ella (art. 9 LCCH).
       allOf:
         - $ref: "#/components/schemas/Persona"
         - type: object
           required: [direccion_postal]
           properties:
+            tipo:
+              type: string
+              enum: [fisica, juridica]
+              default: fisica
+            representante:
+              $ref: "#/components/schemas/Representante"
             direccion_postal:
               $ref: "#/components/schemas/DireccionPostal"
             identidad_blockchain:

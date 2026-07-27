@@ -192,12 +192,28 @@ func renderAnverso(p *fpdf.Fpdf, in Input) {
 	setText(p, colInkSoft)
 	p.SetFont(fontFamily, "", 8.5)
 	p.SetXY(mx, baseY)
-	p.CellFormat(0, 5, "FIRMANTE (SUSCRIPTOR)", "", 1, "L", false, 0, "")
+	rotulo := "FIRMANTE (SUSCRIPTOR)"
+	if pg.Firmante.EsPersonaJuridica() {
+		rotulo = "FIRMANTE (SUSCRIPTOR) · PERSONA JURÍDICA"
+	}
+	p.CellFormat(0, 5, rotulo, "", 1, "L", false, 0, "")
 	setText(p, colInk)
 	p.SetFont(fontFamily, "B", 12)
 	p.SetX(mx)
 	firm := strings.TrimSpace(pg.Firmante.Nombre + " " + pg.Firmante.Apellido)
 	p.CellFormat(0, 6, firm+"  ·  NIF "+pg.Firmante.NIF, "", 1, "L", false, 0, "")
+
+	// Antefirma: quien firma por la sociedad y con qué cargo. El art. 9 LCCH
+	// exige expresarlo claramente, porque de ello depende que quede obligada la
+	// sociedad y no personalmente quien estampa la firma.
+	if r := pg.Firmante.Representante; r != nil {
+		setText(p, colGoldDeep)
+		p.SetFont(fontFamily, "I", 10)
+		p.SetX(mx)
+		rep := strings.TrimSpace(r.Nombre + " " + r.Apellido)
+		p.CellFormat(0, 5.5, fmt.Sprintf("P.p. %s, %s  ·  NIF %s", rep, r.Cargo, r.NIF), "", 1, "L", false, 0, "")
+	}
+
 	setText(p, colInkSoft)
 	p.SetFont(fontFamily, "", 10)
 	p.SetX(mx)
@@ -323,6 +339,13 @@ func renderReverso(p *fpdf.Fpdf, in Input) {
 	p.SetFont(fontFamily, "I", 8)
 	p.SetXY(mx, h-18)
 	nota := "El endoso debe ser firmado por el endosante (arts. 16-17 y 96 LCCH). La legitimación del tenedor resulta de una serie no interrumpida de endosos (art. 19). El endoso en blanco se perfecciona con la sola firma."
+	if r := in.P.Firmante.Representante; r != nil && (r.Acreditacion != "" || r.Referencia != "") {
+		poder := strings.TrimSpace(r.Acreditacion + " " + r.Referencia)
+		if r.Fecha != "" {
+			poder += " de " + formatFechaLarga(r.Fecha)
+		}
+		nota += " Poder de representación acreditado mediante " + strings.TrimSpace(poder) + " (art. 9 LCCH)."
+	}
 	if len(in.Cesiones) > 0 {
 		nota += " La cesión ordinaria no es endoso: el cedente responde de la existencia del crédito pero no de la solvencia del deudor (art. 1529 CC), y ha de notificarse al deudor para serle oponible (art. 1527 CC)."
 	}

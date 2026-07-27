@@ -31,13 +31,52 @@ type Persona struct {
 	NIF      string `json:"nif" validate:"required,nif"`
 }
 
+// Firmante is whoever undertakes to pay: the obligado cambiario.
+//
+// Nombre and NIF always name that obligado, which keeps the persona física case
+// unchanged. When the pagaré is issued by a company, Nombre carries the razón
+// social and NIF the CIF, and Representante names the natural person who signs
+// for it — because a company cannot sign, only its representative can.
 type Firmante struct {
+	// Tipo: fisica (por defecto) | juridica.
+	Tipo                string          `json:"tipo,omitempty" validate:"omitempty,oneof=fisica juridica"`
 	Nombre              string          `json:"nombre" validate:"required"`
 	Apellido            string          `json:"apellido,omitempty"`
 	NIF                 string          `json:"nif" validate:"required,nif"`
 	DireccionPostal     DireccionPostal `json:"direccion_postal" validate:"required"`
+	Representante       *Representante  `json:"representante,omitempty"`
 	IdentidadBlockchain *IdentidadBC    `json:"identidad_blockchain,omitempty"`
 	FirmaDigital        string          `json:"firma_digital,omitempty"`
+}
+
+// EsPersonaJuridica reports whether the pagaré is issued by a company.
+func (f *Firmante) EsPersonaJuridica() bool { return f.Tipo == "juridica" }
+
+// Representante is the natural person signing on behalf of a company, and the
+// record of the power they rely on.
+//
+// The art. 9 LCCH requirement is not paperwork: whoever signs for another must
+// hold a poder and must say so clearly in the antefirma, and whoever signs
+// without one is bound personally by the title. So the cargo has to appear on
+// the document, and the absence of an acreditación is worth warning about.
+//
+// The acreditación is deliberately thin — a free-text kind, a reference and a
+// date — because it stands in for a verifiable credential of registral origin
+// that the European ecosystem is still building, and no structure invented here
+// is likely to match the one that eventually arrives, if it does.
+type Representante struct {
+	Nombre   string `json:"nombre" validate:"required"`
+	Apellido string `json:"apellido,omitempty"`
+	NIF      string `json:"nif" validate:"required,nif"`
+	// Cargo: administrador único, apoderado, consejero delegado… Debe constar
+	// en la antefirma (art. 9 LCCH).
+	Cargo string `json:"cargo" validate:"required"`
+	// Acreditacion, Referencia y Fecha: constancia del poder por medios
+	// convencionales (nota simple, copia autorizada de escritura…). La
+	// comprobación ocurre fuera de la plataforma; aquí solo se registra.
+	Acreditacion string `json:"acreditacion,omitempty"`
+	Referencia   string `json:"referencia,omitempty"`
+	Fecha        string `json:"fecha,omitempty"`
 }
 
 type DireccionPostal struct {

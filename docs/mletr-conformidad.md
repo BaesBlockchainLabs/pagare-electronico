@@ -78,15 +78,35 @@ Distinción del §3.4 del documento doctrinal, que la implementación debe respe
 
 - **Identidad del firmante** — quién firma. Hoy: credenciales de plataforma.
   Horizonte: Cartera Europea de Identidad Digital y firma cualificada eIDAS2.
-- **Poder de representación** — si quien firma puede obligar a la sociedad. Hoy:
-  **no se acredita**; el modelo `Firmante` solo admite persona física. Horizonte:
-  credencial verificable de fuente registral vía European Business Wallet
-  (propuesta COM(2025) 838, aún en tramitación) y poder de representación digital
-  de la Directiva (UE) 2025/25, no aplicable hasta el 1 de agosto de 2028.
+- **Poder de representación** — si quien firma puede obligar a la sociedad. Hoy
+  se hace constar en el título por medios convencionales; su comprobación sigue
+  ocurriendo fuera de la plataforma. Horizonte: credencial verificable de fuente
+  registral vía European Business Wallet (propuesta COM(2025) 838, aún en
+  tramitación) y poder de representación digital de la Directiva (UE) 2025/25, no
+  aplicable en lo sustancial hasta el 1 de agosto de 2028.
 
-Mientras tanto, la representación societaria debe acreditarse por medios
-convencionales (nota simple o copia autorizada del poder), fuera de la
-plataforma.
+**El pagaré de empresa.** El modelo admite que el firmante sea persona jurídica:
+`Nombre` y `NIF` pasan a ser la razón social y el CIF —siguen nombrando al
+obligado cambiario— y un `Representante` recoge a la persona física que firma
+por ella, con su cargo. Una sociedad no firma; firma alguien por ella.
+
+El artículo 9 LCCH no es aquí un requisito formal sino la frontera de quién
+queda obligado: quien firma en nombre de otro debe hallarse autorizado y
+**expresarlo claramente en la antefirma**, y quien lo hace sin poder queda
+obligado personalmente por el título. De ahí que el cargo sea obligatorio, que el
+anverso del PDF lleve la antefirma «P.p. …», y que la falta de acreditación del
+poder se advierta —sin privar de validez al título, porque no es la plataforma
+quien puede juzgar si el poder existe—.
+
+La acreditación es deliberadamente **fina**: un tipo de documento en texto libre,
+una referencia y una fecha. Está pensada para sustituirse por la credencial
+verificable del ecosistema europeo, y cualquier estructura más elaborada que se
+inventase ahora difícilmente coincidiría con la que llegue, si llega.
+
+Una cautela de implementación que conviene no perder: estos campos entran en la
+forma canónica **sólo cuando constan**. Incluirlos siempre habría cambiado la
+forma canónica de todos los pagarés ya firmados, y sus firmas habrían dejado de
+validar: el sistema los habría dado por alterados.
 
 ## 5. Custodia de claves: el control ejercido por tercero
 
@@ -226,6 +246,7 @@ mapea cada error a su artículo (`internal/validator/lcch.go`):
 | Cláusulas del endoso | arts. 18, 56 | Sin responsabilidad, prohibición de nuevo endoso, sin gastos |
 | Aval total y parcial | arts. 35-37 | Con avalado y tope del principal |
 | Prescripción | art. 88 | Comprobación periódica (`internal/scheduler`) |
+| Representación de persona jurídica | art. 9 | Representante con cargo en la antefirma; aviso si falta acreditación del poder |
 
 Nótese que esta cobertura excede el ámbito de la fase inicial descrita en el
 documento doctrinal (§8.3), que se limita a pagarés no a la orden: la
@@ -283,7 +304,6 @@ recibir y ofrece endosar en su lugar.
 
 | Plano | Pendiente | Depende de |
 |---|---|---|
-| Modelo | Persona jurídica y poder de representación (§4) | Nosotros, con horizonte EBW |
 | Institucional | Presunción legal de unicidad (§3) | Cualificación del prestador |
 | Institucional | Firma cualificada eIDAS y cartera de identidad (§4) | Despliegue EUDI Wallet |
 | Institucional | Representación societaria verificable (§4) | COM(2025) 838; Directiva 2025/25 (2028) |
