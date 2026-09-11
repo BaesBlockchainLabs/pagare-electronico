@@ -12,6 +12,7 @@ type Config struct {
 	Server       ServerConfig
 	Blockchain   BlockchainConfig
 	Certificador CertificadorConfig
+	Logalty      LogaltyConfig
 }
 
 // CertificadorConfig identifica a quien expide y firma los certificados de
@@ -28,6 +29,31 @@ type ServerConfig struct {
 	Env  string
 	// CronInterval es la periodicidad del chequeo de pagarés vencidos/prescritos.
 	CronInterval time.Duration
+}
+
+// LogaltyConfig son las credenciales del canal de datos de Logalty, con el que
+// se valida la identidad del usuario contra el chip de su DNI durante el alta.
+//
+// Dejarla vacía desactiva la verificación: el alta sigue funcionando y nadie
+// queda bloqueado, que es lo que hace falta en desarrollo y en los tests.
+type LogaltyConfig struct {
+	Endpoint string
+	Usuario  string
+	Password string
+	// Empresa y Tipo identifican a la empresa emisora y el tipo de envío
+	// configurado para ella. El tipo de validación de identidad exige que el
+	// receptor tenga móvil.
+	Empresa string
+	Tipo    string
+	// Portal es la base del portal web de Logalty. Sólo se usa para enlazar
+	// desde la administración; el flujo del usuario no pasa por ahí.
+	Portal string
+}
+
+// Activa indica si hay configuración suficiente para hablar con Logalty.
+func (l LogaltyConfig) Activa() bool {
+	return l.Endpoint != "" && l.Usuario != "" && l.Password != "" &&
+		l.Empresa != "" && l.Tipo != ""
 }
 
 type BlockchainConfig struct {
@@ -73,6 +99,14 @@ func Load() (*Config, error) {
 			AppID:   appID,
 			AppKey:  appKey,
 			Network: network,
+		},
+		Logalty: LogaltyConfig{
+			Endpoint: os.Getenv("LOGALTY_ENDPOINT"),
+			Usuario:  os.Getenv("LOGALTY_USER"),
+			Password: os.Getenv("LOGALTY_PASSWORD"),
+			Empresa:  os.Getenv("LOGALTY_COMPANY"),
+			Tipo:     os.Getenv("LOGALTY_TYPE"),
+			Portal:   os.Getenv("LOGALTY_PORTAL"),
 		},
 	}, nil
 }

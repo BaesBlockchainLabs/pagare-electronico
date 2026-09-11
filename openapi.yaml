@@ -111,9 +111,15 @@ paths:
       tags:
       - Autenticación
       summary: Registrar usuario
-      description: 'Crea la cuenta e inicia sesión. Aprovisiona además su identidad blockchain, aunque
-        el fallo no es fatal: la emisión la crea si falta, porque el art. 94.7 LCCH exige la firma del
-        que emite.'
+      description: >
+        Crea la cuenta, inicia sesión y arranca la validación de identidad contra el DNI. Aprovisiona
+        además su identidad blockchain, aunque el fallo no es fatal: la emisión la crea si falta,
+        porque el art. 94.7 LCCH exige la firma del que emite.
+
+
+        La cuenta nace en estado pendiente: existe y se puede entrar en ella, pero no opera con pagarés
+        hasta que la validación se supera y trae los datos personales. La respuesta lleva la URL a la
+        que hay que llevar al usuario.
       operationId: register
       security: []
       requestBody:
@@ -129,6 +135,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SesionResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/auth/verificacion:
+    post:
+      tags:
+      - Autenticación
+      summary: Arrancar la validación de identidad
+      description: >
+        Crea el envío de validación contra Logalty y devuelve la URL a la que hay que llevar al usuario
+        para que lea el chip de su DNI. Es idempotente mientras haya un intento en curso: devuelve la
+        URL ya creada en lugar de abrir otro envío.
+      operationId: iniciarVerificacion
+      responses:
+        '200':
+          description: Validación en curso o ya superada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+    get:
+      tags:
+      - Autenticación
+      summary: Estado de la validación de identidad
+      description: >
+        Informa de cómo va la validación y, si el envío ya ha terminado, descarga el certificado XML,
+        comprueba que se superó y vuelca en el usuario los datos leídos del documento: nombre,
+        apellidos, NIF, fecha de nacimiento, nacionalidad, dirección y los del propio documento.
+      operationId: estadoVerificacion
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionResponse'
         4XX:
           $ref: '#/components/responses/Error'
   /api/auth/logout:
@@ -1516,21 +1561,25 @@ components:
         pub:
           type: string
     RegistroRequest:
+      description: >
+        Lo poco que se teclea al darse de alta. Nombre, apellidos, NIF y dirección no están aquí a
+        propósito: los aporta la validación del DNI, que es la única fuente fiable para identificar a
+        las partes de un pagaré.
       allOf:
       - $ref: '#/components/schemas/LoginRequest'
       - type: object
+        required:
+        - email
+        - telefono
         properties:
-          nombre:
-            type: string
-          apellido:
-            type: string
-          nif:
-            type: string
           email:
             type: string
             format: email
           telefono:
             type: string
+            description: Móvil. Obligatorio cuando la validación de identidad está activa, porque es
+              por donde el portal lleva al usuario a leer el chip de su DNI.
+            example: '+34600000000'
     Representante:
       type: object
       description: >
@@ -1578,6 +1627,39 @@ components:
           enum:
           - admin
           - user
+        verificado:
+          type: boolean
+          description: Si la identidad está validada contra el DNI. Sólo en /api/auth/me.
+        verificacion:
+          allOf:
+          - $ref: '#/components/schemas/VerificacionResponse'
+          description: Sólo en el alta, cuando se ha podido arrancar la validación.
+    VerificacionResponse:
+      type: object
+      description: Estado de la validación de identidad contra el chip del DNI.
+      properties:
+        ok:
+          type: boolean
+        activa:
+          type: boolean
+          description: Si esta instalación tiene la validación configurada. Cuando es false nadie queda
+            bloqueado por no estar verificado.
+        estado:
+          type: string
+          enum:
+          - ''
+          - pendiente
+          - verificada
+          - fallida
+        url:
+          type: string
+          format: uri
+          description: A donde hay que llevar al usuario para que lea su DNI. Sólo cuando está pendiente.
+        mensaje:
+          type: string
+        motivo:
+          type: string
+          description: Por qué no se superó, en palabras del portal.
     SimpleOkResponse:
       type: object
       properties:

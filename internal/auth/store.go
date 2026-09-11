@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 
 	"pagare/internal/keyvault"
 )
@@ -86,7 +86,17 @@ func (s *Store) initSchema() error {
 			codigo_postal TEXT,
 			pais TEXT,
 			pub_keys TEXT,  -- stored as JSON array
-			created_at DATETIME
+			created_at DATETIME,
+			-- Identidad verificada contra el chip del DNI (ver
+			-- verificaciones_identidad); nif/nombre/apellido/direccion los fija
+			-- la verificación cuando se supera.
+			verificacion_estado TEXT,
+			verificado_at DATETIME,
+			fecha_nacimiento TEXT,
+			nacionalidad TEXT,
+			doc_tipo TEXT,
+			doc_numero TEXT,
+			doc_caducidad TEXT
 		);
 		CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
@@ -103,6 +113,28 @@ func (s *Store) initSchema() error {
 			created_at  DATETIME
 		);
 		CREATE INDEX IF NOT EXISTS idx_user_keys_user ON user_keys(user_id);
+
+		-- Intentos de validación de identidad contra el chip del DNI. Se guarda
+		-- uno por intento, incluidos los fallidos: forman parte del historial de
+		-- la cuenta. Los identificadores de Logalty (guid, token_id,
+		-- validation_id) y el hash de la declaración de atributos firmada son la
+		-- trazabilidad de la evidencia; los datos personales leídos del
+		-- documento van al usuario, no aquí.
+		CREATE TABLE IF NOT EXISTS verificaciones_identidad (
+			id               TEXT PRIMARY KEY,
+			user_id          TEXT NOT NULL,
+			referencia       TEXT NOT NULL,
+			guid             TEXT,
+			estado           TEXT NOT NULL,
+			motivo           TEXT,
+			url              TEXT,
+			token_id         TEXT,
+			validation_id    TEXT,
+			hash_declaracion TEXT,
+			creada_at        DATETIME,
+			resuelta_at      DATETIME
+		);
+		CREATE INDEX IF NOT EXISTS idx_verificaciones_user ON verificaciones_identidad(user_id);
 	`)
 	if err != nil {
 		return err
@@ -110,6 +142,15 @@ func (s *Store) initSchema() error {
 	// Migraciones aditivas idempotentes para BBDD ya existentes.
 	s.ensureColumn("users", "email", "TEXT")
 	s.ensureColumn("users", "telefono", "TEXT")
+	// Identidad verificada contra el DNI: el estado y los campos que el
+	// documento aporta y que no estaban en el modelo original.
+	s.ensureColumn("users", "verificacion_estado", "TEXT")
+	s.ensureColumn("users", "verificado_at", "DATETIME")
+	s.ensureColumn("users", "fecha_nacimiento", "TEXT")
+	s.ensureColumn("users", "nacionalidad", "TEXT")
+	s.ensureColumn("users", "doc_tipo", "TEXT")
+	s.ensureColumn("users", "doc_numero", "TEXT")
+	s.ensureColumn("users", "doc_caducidad", "TEXT")
 	return nil
 }
 
@@ -224,11 +265,11 @@ func newID() string {
 
 // Authenticate verifies username + password and returns a Principal on success.
 func (s *Store) Authenticate(username, password string) (*Principal, error) {
-	var id, pwHash, roleStr, pubJSON string
+	var id, pwHash, roleStr, pubJSON, verificacion string
 	err := s.db.QueryRow(`
-		SELECT id, password_hash, role, COALESCE(pub_keys, '[]') 
+		SELECT id, password_hash, role, COALESCE(pub_keys, '[]'), COALESCE(verificacion_estado, '')
 		FROM users WHERE username = ?
-	`, username).Scan(&id, &pwHash, &roleStr, &pubJSON)
+	`, username).Scan(&id, &pwHash, &roleStr, &pubJSON, &verificacion)
 	if err == sql.ErrNoRows {
 		return nil, ErrUserNotFound
 	}
@@ -244,20 +285,21 @@ func (s *Store) Authenticate(username, password string) (*Principal, error) {
 	json.Unmarshal([]byte(pubJSON), &pubs)
 
 	return &Principal{
-		UserID:   id,
-		Username: username,
-		Role:     Role(roleStr),
-		PubKeys:  pubs,
+		UserID:     id,
+		Username:   username,
+		Role:       Role(roleStr),
+		PubKeys:    pubs,
+		Verificado: EstadoVerificacion(verificacion) == VerificacionVerificada,
 	}, nil
 }
 
 // GetPrincipalByID returns a Principal for an already-authenticated user ID.
 func (s *Store) GetPrincipalByID(id string) (*Principal, error) {
-	var username, roleStr, pubJSON string
+	var username, roleStr, pubJSON, verificacion string
 	err := s.db.QueryRow(`
-		SELECT username, role, COALESCE(pub_keys, '[]') 
+		SELECT username, role, COALESCE(pub_keys, '[]'), COALESCE(verificacion_estado, '')
 		FROM users WHERE id = ?
-	`, id).Scan(&username, &roleStr, &pubJSON)
+	`, id).Scan(&username, &roleStr, &pubJSON, &verificacion)
 	if err == sql.ErrNoRows {
 		return nil, ErrUserNotFound
 	}
@@ -269,10 +311,11 @@ func (s *Store) GetPrincipalByID(id string) (*Principal, error) {
 	json.Unmarshal([]byte(pubJSON), &pubs)
 
 	return &Principal{
-		UserID:   id,
-		Username: username,
-		Role:     Role(roleStr),
-		PubKeys:  pubs,
+		UserID:     id,
+		Username:   username,
+		Role:       Role(roleStr),
+		PubKeys:    pubs,
+		Verificado: EstadoVerificacion(verificacion) == VerificacionVerificada,
 	}, nil
 }
 
@@ -339,6 +382,9 @@ func (s *Store) List() []*User {
 		       COALESCE(email, ''), COALESCE(telefono, ''),
 		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
 		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
+		       COALESCE(verificacion_estado, ''), verificado_at,
+		       COALESCE(fecha_nacimiento, ''), COALESCE(nacionalidad, ''),
+		       COALESCE(doc_tipo, ''), COALESCE(doc_numero, ''), COALESCE(doc_caducidad, ''),
 		       COALESCE(pub_keys, '[]'), created_at
 		FROM users
 	`)
@@ -350,13 +396,22 @@ func (s *Store) List() []*User {
 	var out []*User
 	for rows.Next() {
 		var u User
-		var pubJSON string
+		var pubJSON, verificacion string
+		var verificadoAt sql.NullTime
 		err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.DisplayName, &u.NIF,
 			&u.Email, &u.Telefono,
 			&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.CodigoPostal,
-			&u.Pais, &pubJSON, &u.CreatedAt)
+			&u.Pais, &verificacion, &verificadoAt,
+			&u.FechaNacimiento, &u.Nacionalidad,
+			&u.DocTipo, &u.DocNumero, &u.DocCaducidad,
+			&pubJSON, &u.CreatedAt)
 		if err != nil {
 			continue
+		}
+		u.Verificacion = EstadoVerificacion(verificacion)
+		if verificadoAt.Valid {
+			t := verificadoAt.Time.UTC()
+			u.VerificadoAt = &t
 		}
 		json.Unmarshal([]byte(pubJSON), &u.PubKeys)
 		// PasswordHash left empty
@@ -368,23 +423,35 @@ func (s *Store) List() []*User {
 // GetByID returns a user (password_hash stripped).
 func (s *Store) GetByID(id string) (*User, error) {
 	var u User
-	var pubJSON string
+	var pubJSON, verificacion string
+	var verificadoAt sql.NullTime
 	err := s.db.QueryRow(`
 		SELECT id, username, role, COALESCE(display_name, ''), COALESCE(nif, ''),
 		       COALESCE(email, ''), COALESCE(telefono, ''),
 		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
 		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
+		       COALESCE(verificacion_estado, ''), verificado_at,
+		       COALESCE(fecha_nacimiento, ''), COALESCE(nacionalidad, ''),
+		       COALESCE(doc_tipo, ''), COALESCE(doc_numero, ''), COALESCE(doc_caducidad, ''),
 		       COALESCE(pub_keys, '[]'), created_at
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.Role, &u.DisplayName, &u.NIF,
 		&u.Email, &u.Telefono,
 		&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.CodigoPostal,
-		&u.Pais, &pubJSON, &u.CreatedAt)
+		&u.Pais, &verificacion, &verificadoAt,
+		&u.FechaNacimiento, &u.Nacionalidad,
+		&u.DocTipo, &u.DocNumero, &u.DocCaducidad,
+		&pubJSON, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	u.Verificacion = EstadoVerificacion(verificacion)
+	if verificadoAt.Valid {
+		t := verificadoAt.Time.UTC()
+		u.VerificadoAt = &t
 	}
 	json.Unmarshal([]byte(pubJSON), &u.PubKeys)
 	return &u, nil
@@ -410,10 +477,10 @@ func (s *Store) CreateUser(u *User, plainPassword string) error {
 	_, err := s.db.Exec(`
 		INSERT INTO users
 		(id, username, password_hash, role, display_name, nif, email, telefono, nombre, apellido,
-		 direccion, localidad, codigo_postal, pais, pub_keys, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 direccion, localidad, codigo_postal, pais, verificacion_estado, pub_keys, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, u.ID, u.Username, u.PasswordHash, u.Role, u.DisplayName, u.NIF, u.Email, u.Telefono, u.Nombre, u.Apellido,
-		u.Direccion, u.Localidad, u.CodigoPostal, u.Pais, string(pubJSON), u.CreatedAt)
+		u.Direccion, u.Localidad, u.CodigoPostal, u.Pais, string(u.Verificacion), string(pubJSON), u.CreatedAt)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -447,12 +514,16 @@ func (s *Store) UpdateUser(u *User) error {
 			username = ?, password_hash = ?, role = ?, display_name = ?, nif = ?,
 			email = ?, telefono = ?,
 			nombre = ?, apellido = ?, direccion = ?, localidad = ?, codigo_postal = ?,
-			pais = ?, pub_keys = ?, created_at = ?
+			pais = ?, fecha_nacimiento = ?, nacionalidad = ?,
+			doc_tipo = ?, doc_numero = ?, doc_caducidad = ?,
+			pub_keys = ?, created_at = ?
 		WHERE id = ?
 	`, u.Username, u.PasswordHash, u.Role, u.DisplayName, u.NIF,
 		u.Email, u.Telefono,
 		u.Nombre, u.Apellido, u.Direccion, u.Localidad, u.CodigoPostal,
-		u.Pais, string(pubJSON), u.CreatedAt, u.ID)
+		u.Pais, u.FechaNacimiento, u.Nacionalidad,
+		u.DocTipo, u.DocNumero, u.DocCaducidad,
+		string(pubJSON), u.CreatedAt, u.ID)
 
 	return err
 }
@@ -499,10 +570,15 @@ func (s *Store) UpdateProfile(userID string, p ProfileInput) error {
 	if err != nil {
 		return err
 	}
-	u.DisplayName = p.DisplayName
-	u.Nombre = p.Nombre
-	u.Apellido = p.Apellido
-	u.NIF = p.NIF
+	// Nombre, apellidos y NIF de un usuario verificado los fijó su DNI: no se
+	// tocan a mano, o la verificación no valdría nada. La dirección sí, porque
+	// la del documento suele estar desfasada y es la que va en el pagaré.
+	if u.Verificacion != VerificacionVerificada {
+		u.DisplayName = p.DisplayName
+		u.Nombre = p.Nombre
+		u.Apellido = p.Apellido
+		u.NIF = p.NIF
+	}
 	u.Email = p.Email
 	u.Telefono = p.Telefono
 	u.Direccion = p.Direccion

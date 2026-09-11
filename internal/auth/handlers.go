@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"pagare/internal/crypto"
+	"pagare/internal/identidad"
 )
 
 var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
@@ -19,6 +20,9 @@ func validEmail(s string) bool { return emailRe.MatchString(s) }
 type Handlers struct {
 	store  *Store
 	crypto *crypto.Service
+	// identidad valida la identidad contra el chip del DNI. Nil cuando no hay
+	// configuración de Logalty; ver SetIdentidad.
+	identidad *identidad.Servicio
 }
 
 func NewHandlers(store *Store, cryptoSvc *crypto.Service) *Handlers {
@@ -67,24 +71,26 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// registerRequest es lo poco que se le pide a quien se da de alta. Nombre,
+// apellidos, NIF y dirección no están aquí a propósito: los aporta la
+// validación del DNI, que es la única fuente en la que se puede confiar para
+// identificar a las partes de un pagaré.
+//
+// El móvil es obligatorio porque el tipo de envío de validación lo exige: es
+// por donde el portal lleva al usuario a leer el chip.
 type registerRequest struct {
-	Username     string `json:"username"`
-	Password     string `json:"password"`
-	Nombre       string `json:"nombre"`
-	Apellido     string `json:"apellido"`
-	NIF          string `json:"nif"`
-	Email        string `json:"email"`
-	Telefono     string `json:"telefono"`
-	Direccion    string `json:"direccion"`
-	Localidad    string `json:"localidad"`
-	CodigoPostal string `json:"codigo_postal"`
-	Pais         string `json:"pais"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Email    string `json:"email"`
+	Telefono string `json:"telefono"`
 }
 
-// Register creates a new self-service user (role=user), provisions their
-// identity keypair and logs them straight in. Open registration, active
-// immediately. NOTE: this is the future integration point for Logalty KYC —
-// a verification step would gate activation here before the session is set.
+// Register da de alta a un usuario (rol=user), le provisiona su par de claves,
+// le inicia sesión y arranca la validación de su identidad contra el DNI.
+//
+// La cuenta nace en estado pendiente: existe y se puede entrar en ella, pero no
+// opera con pagarés hasta que la validación se supera y trae los datos
+// personales. La respuesta lleva la URL a la que hay que llevar al usuario.
 func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -92,32 +98,30 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Telefono = strings.TrimSpace(req.Telefono)
 	if req.Username == "" || len(req.Password) < 6 {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "usuario obligatorio y contraseña de al menos 6 caracteres"})
 		return
 	}
-	if req.Nombre == "" || req.NIF == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "nombre y NIF son obligatorios"})
+	if req.Email == "" || !validEmail(req.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "hace falta un email con formato válido"})
 		return
 	}
-	if req.Email != "" && !validEmail(req.Email) {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "el email no tiene un formato válido"})
+	// Sin móvil no hay validación posible, así que se exige en el alta en vez
+	// de dejar al usuario atascado en la pantalla siguiente.
+	if h.identidad.Activo() && req.Telefono == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "hace falta un móvil: es por donde se valida el DNI"})
 		return
 	}
 
 	u := &User{
 		Username:     req.Username,
 		Role:         RoleUser,
-		Nombre:       req.Nombre,
-		Apellido:     req.Apellido,
-		NIF:          req.NIF,
 		Email:        req.Email,
 		Telefono:     req.Telefono,
-		Direccion:    req.Direccion,
-		Localidad:    req.Localidad,
-		CodigoPostal: req.CodigoPostal,
-		Pais:         req.Pais,
-		DisplayName:  strings.TrimSpace(req.Nombre + " " + req.Apellido),
+		DisplayName:  req.Username,
+		Verificacion: VerificacionNoIniciada,
 	}
 	if err := h.store.CreateUser(u, req.Password); err != nil {
 		if err == ErrUserAlreadyExists {
@@ -144,7 +148,48 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, loginResponse{OK: true, Username: principal.Username, Role: principal.Role})
+	res := map[string]interface{}{
+		"ok":       true,
+		"username": principal.Username,
+		"role":     principal.Role,
+	}
+	// Arrancar la validación no es crítico para el alta: si el portal falla, la
+	// cuenta existe igual y se reintenta desde la pantalla de verificación.
+	if v := h.arrancarVerificacion(r, u); v != nil {
+		res["verificacion"] = v
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// arrancarVerificacion crea el envío de validación del recién registrado y
+// devuelve lo que el alta le enseña. Devuelve nil cuando la verificación no
+// está configurada o el portal no responde.
+func (h *Handlers) arrancarVerificacion(r *http.Request, u *User) map[string]interface{} {
+	if !h.identidad.Activo() {
+		return nil
+	}
+	envio, err := h.identidad.Iniciar(r.Context(), identidad.Solicitud{
+		Referencia: u.ID,
+		Nombre:     nombreParaElPortal(u),
+		Email:      u.Email,
+		Movil:      u.Telefono,
+	})
+	if err != nil {
+		fmt.Printf("[register] no se pudo iniciar la validación de %s: %v\n", u.Username, err)
+		return nil
+	}
+	v := &Verificacion{
+		UserID:     u.ID,
+		Referencia: envio.Referencia,
+		GUID:       envio.GUID,
+		Estado:     VerificacionPendiente,
+		URL:        envio.URL,
+	}
+	if err := h.store.CrearVerificacion(v); err != nil {
+		fmt.Printf("[register] no se pudo registrar la validación de %s: %v\n", u.Username, err)
+		return nil
+	}
+	return respuestaVerificacion(v, "")
 }
 
 // Logout clears the session cookie.
@@ -161,11 +206,12 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":       true,
-		"id":       p.UserID,
-		"username": p.Username,
-		"role":     p.Role,
-		"pub_keys": p.PubKeys,
+		"ok":         true,
+		"id":         p.UserID,
+		"username":   p.Username,
+		"role":       p.Role,
+		"pub_keys":   p.PubKeys,
+		"verificado": p.Verificado,
 	})
 }
 
@@ -174,7 +220,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 // 2. Pure cryptographic: provide pub + challenge (from /claim/challenge) + signature (user signed client-side or externally).
 type ClaimPubRequest struct {
 	Pub       string `json:"pub"`
-	Pvt       string `json:"pvt,omitempty"`       // convenience path (pvt never persisted)
+	Pvt       string `json:"pvt,omitempty"` // convenience path (pvt never persisted)
 	Challenge string `json:"challenge,omitempty"`
 	Signature string `json:"signature,omitempty"`
 }

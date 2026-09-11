@@ -61,3 +61,27 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		next(w, r)
 	}
 }
+
+// ExigirVerificacion bloquea las operaciones sobre pagarés a quien no tenga la
+// identidad validada contra su DNI.
+//
+// activo dice si la verificación está configurada: cuando no lo está —en
+// desarrollo y en los tests— el guardia no estorba, porque nadie podría
+// verificarse aunque quisiera. Los administradores quedan fuera: son quienes
+// tienen que poder desatascar una cuenta.
+func ExigirVerificacion(activo bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := GetPrincipal(r)
+			if !activo || p == nil || p.IsAdmin() || p.Verificado {
+				next.ServeHTTP(w, r)
+				return
+			}
+			writeJSON(w, http.StatusForbidden, map[string]interface{}{
+				"ok":                     false,
+				"msg":                    "tienes que validar tu identidad con tu DNI antes de operar con pagarés",
+				"verificacion_pendiente": true,
+			})
+		})
+	}
+}

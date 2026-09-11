@@ -1,0 +1,59 @@
+<xml-fragment>
+  <urn:main>0000</urn:main>
+  <urn:reason>Operation processed successfully</urn:reason>
+  <urn:idcard_state cancel_code="" cancel_reason="" consent_status="CONSENT_ACCEPTED" data_minimization_level="NORMAL" external_id="ENROLL-0001" locked="false" nfc_step_identification_method="NFC" result_comment=""  result_date="2026-09-11T20:23:50.820+02:00" result_value="7" substate_value="12" token_id="001002-0000-000000000000001.par" validation_id="">
+    <urn:ocr_validation_result>OK</urn:ocr_validation_result>
+    <urn:idcard_state_ocr_result code="TYPE" type="Normal" value="DNI"/>
+    <urn:idcard_state_ocr_result code="ID_NUMBER" type="Normal" value="00000000T"/>
+    <urn:idcard_state_ocr_result code="DOC_NUMBER" type="Normal" value="ABC000000"/>
+    <urn:idcard_state_ocr_result code="EXPEDITION_DATE" type="Normal" value="2020-01-02"/>
+    <urn:idcard_state_ocr_result code="EXPIRY" type="Normal" value="2030-01-02"/>
+    <urn:idcard_state_ocr_result code="BIRTHDATE" type="Normal" value="1980-03-04"/>
+    <urn:idcard_state_ocr_result code="NAME" type="Normal" value="NOMBRE"/>
+    <urn:idcard_state_ocr_result code="SURNAME" type="Normal" value="APELLIDOUNO APELLIDODOS"/>
+    <urn:idcard_state_ocr_result code="SURNAME1" type="Normal" value="APELLIDOUNO"/>
+    <urn:idcard_state_ocr_result code="SURNAME2" type="Normal" value="APELLIDODOS"/>
+    <urn:idcard_state_ocr_result code="SEX" type="Normal" value="Mujer"/>
+    <urn:idcard_state_ocr_result code="STREET_ADDRESS" type="Normal" value="CALLE FALSA 1-CIUDAD-PROVINCIA"/>
+    <urn:idcard_state_ocr_result code="BIRTHPLACE" type="Normal" value="CIUDAD-PROVINCIA"/>
+    <urn:idcard_state_ocr_result code="BIRTHPLACE_MUNICIPALITY" type="Normal" value="CIUDAD"/>
+    <urn:idcard_state_ocr_result code="NATIONALITY" type="Normal" value="España"/>
+    <urn:idcard_state_ocr_result code="ISSUER" type="Normal" value="ESPAÑA"/>
+    <urn:idcard_state_ocr_result code="SELECTED_DOCUMENT_TYPE" type="Normal" value="ES_IDCard_2021"/>
+    <urn:idcard_state_ocr_result code="SELECTED_ID_METHOD_TYPE" type="Normal" value="NFC"/>
+    <urn:idcard_state_ocr_result code="NFC_SOD_COUNTRY_CODE" type="Normal" value="ES"/>
+    <urn:idcard_state_ocr_result code="CHIP_SIGNED_HASHES_LIST" type="Normal" value="DEADBEEF"/>
+    <urn:idcard_state_ocr_result code="AUTH_ISSUING_AUTHORITY" type="Normal" value="AUTORIDAD DE PRUEBA"/>
+    <urn:idcard_state_ocr_result code="SIGN_ISSUING_AUTHORITY" type="Normal" value="AUTORIDAD DE PRUEBA"/>
+    <urn:idcard_state_ocr_result code="TEST_LEGAL_AGE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_EXPIRY_DATE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_CERTIFICATE_CA_ROOT" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_NFC_CHIP_PRESENCE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_NFC_SUCCESSFUL_READING" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_NFC_ERROR_RETRIES" type="Validation" value="2"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_AUTH_CERTIFICATE_STATUS" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_AUTH_CERTIFICATE_EXPIRATION" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_AUTH_CERTIFICATE_IDNUMBER_CORRESPONDENCE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_AUTH_CERTIFICATE_NAME_CORRESPONDENCE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_AUTH_CERTIFICATE_SURNAME_CORRESPONDENCE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_SIGN_CERTIFICATE_STATUS" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_SIGN_CERTIFICATE_EXPIRATION" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_SIGN_CERTIFICATE_IDNUMBER_CORRESPONDENCE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_SIGN_CERTIFICATE_NAME_CORRESPONDENCE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_DOCUMENT_SIGN_CERTIFICATE_SURNAME_CORRESPONDENCE" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="TEST_BIOMETRIC_VALIDATION_CORRESPONDENCE" type="Validation" value="0.998737774164915"/>
+    <urn:idcard_state_ocr_result code="TEST_ANTISPOOFING_SELFIE_VALIDATION_CORRESPONDENCE" type="Validation" value="0.8595648096042146"/>
+    <urn:idcard_state_ocr_result code="TEST_ANTISPOOFING_SELFIE_SIMILARITY_CORRESPONDENCE" type="Validation" value="0.9997344017028809"/>
+    <urn:idcard_state_ocr_result code="TEST_LIFE_RECOGNITION_RATIO" type="Validation" value="0.8698338237148047"/>
+    <urn:idcard_state_ocr_result code="TEST_GLOBAL_RESULT" type="Validation" value="1"/>
+    <urn:idcard_state_ocr_result code="A_CODE_THIS_SDK_DOES_NOT_MODEL" type="Normal" value="surprise"/>
+    <urn:idcard_state_ocr_validation_result blocker="true" code="TEST_LIFE_RECOGNITION_RATIO" condition="" message="" result="OK" value="0.6"/>
+    <urn:idcard_state_ocr_validation_result blocker="true" code="TEST_LEGAL_AGE" condition="" message="" result="OK" value="1"/>
+    <urn:idcard_state_ocr_validation_result blocker="false" code="TEST_NFC_CHIP_PRESENCE" condition="" message="" result="KO" value="1"/>
+    <urn:xforms_data id="'lgtNFCDataConsent_es'" locale="'es-ES'" placement="'TOP'" step="'IDCARD_CONSENT'"/>
+    <urn:xforms_items formatValidation="''" id="'nfc_data_consent_check'" mandatory="'0'" modifiable="''" originalValue="'0'" value="'1'"/>
+    <urn:xforms_items formatValidation="''" id="'nfc_sepblac_consent_check'" mandatory="'1'" modifiable="''" originalValue="'0'" value="'0'"/>
+    <urn:idcard_nfcsigned_result base64="'PD94bWwgdmVyc2lvbj0iMS4wIj8+PGRlY2xhcmF0aW9uPnN5bnRoZXRpYyBzaWduZWQgYXR0cmlidXRlczwvZGVjbGFyYXRpb24+'" extension="'xml'" hash="'0c434972cd367276b99aa2a5b5d034282978c95e38489f07f256722433813543'" signed="'true'"/>
+    <urn:idcard_nfcattributes_declaration base64="'JVBERi0xLjcKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZz4+ZW5kb2JqCnRyYWlsZXI8PC9Sb290IDEgMCBSPj4KJSVFT0YK'" extension="'pdf'" hash="'c0cb1ab29856824fc91b7771a2fa3245caf9b3a0616bfb6b39595d383a866b92'"/>
+  </urn:idcard_state>
+</xml-fragment>

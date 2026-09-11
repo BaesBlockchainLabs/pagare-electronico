@@ -18,6 +18,7 @@ import (
 	"pagare/internal/config"
 	"pagare/internal/crypto"
 	"pagare/internal/handler"
+	"pagare/internal/identidad"
 	"pagare/internal/keyvault"
 	"pagare/internal/scheduler"
 
@@ -70,6 +71,19 @@ func main() {
 		Cargo:   cfg.Certificador.Cargo,
 		Entidad: cfg.Certificador.Entidad,
 	})
+
+	// Validación de identidad contra el chip del DNI, vía Logalty. Sin
+	// configuración queda desactivada: el alta sigue funcionando y nadie queda
+	// bloqueado, que es lo que hace falta en desarrollo.
+	identidadSvc, err := identidad.NuevoServicio(cfg.Logalty)
+	if err != nil {
+		log.Fatalf("Error inicializando la validación de identidad: %v", err)
+	}
+	if identidadSvc.Activo() {
+		log.Printf("Validación de identidad activa (empresa %s, tipo %s)", cfg.Logalty.Empresa, cfg.Logalty.Tipo)
+	} else {
+		log.Printf("⚠️  validación de identidad DESACTIVADA (define LOGALTY_* en .env para exigirla)")
+	}
 
 	// Pagaré handler signs on behalf of the logged-in user using their sealed
 	// private key resolved from the store (no private key handled client-side).
@@ -128,6 +142,7 @@ func main() {
 	r.Get("/pagares/ceder", pageHandler.Ceder)
 	r.Get("/pagares/pagar", pageHandler.PagarAnular)
 	r.Get("/perfil", pageHandler.Perfil)
+	r.Get("/verificacion", pageHandler.Verificacion)
 
 	// requireAdmin guards admin-only action endpoints (JSON 403 for non-admins).
 	requireAdmin := func(next http.Handler) http.Handler {
@@ -312,6 +327,7 @@ func main() {
 
 		// Authentication endpoints must be reachable without a prior session.
 		authH := auth.NewHandlers(authStore, cryptoSvc)
+		authH.SetIdentidad(identidadSvc)
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", authH.Login)
 			r.Post("/register", authH.Register)
@@ -319,6 +335,11 @@ func main() {
 			r.Get("/me", authH.Me)
 			r.Post("/claim/challenge", authH.IssueClaimChallenge)
 			r.Post("/claim", authH.ClaimPub)
+			// Validación de identidad contra el DNI: arrancarla y preguntar
+			// cómo va. La consulta es la que recoge el certificado cuando el
+			// envío termina.
+			r.Post("/verificacion", authH.IniciarVerificacion)
+			r.Get("/verificacion", authH.EstadoVerificacionHandler)
 		})
 
 		// Self-service profile (any authenticated user; handlers check the principal).
@@ -375,11 +396,17 @@ func main() {
 		})
 
 		r.Route("/pagares", func(r chi.Router) {
-			r.Post("/", pagareHandler.Emitir)
-			r.Put("/endoso", pagareHandler.Endosar)
-			r.Put("/cesion", pagareHandler.Ceder)
-			r.Put("/entrega", pagareHandler.Entregar)
-			r.Delete("/", pagareHandler.PagarAnular)
+			// Emitir, endosar, ceder, entregar y pagar/anular comprometen la
+			// identidad de quien lo hace, así que exigen tenerla validada. La
+			// consulta se queda fuera: leer no compromete a nadie.
+			r.Group(func(r chi.Router) {
+				r.Use(auth.ExigirVerificacion(identidadSvc.Activo()))
+				r.Post("/", pagareHandler.Emitir)
+				r.Put("/endoso", pagareHandler.Endosar)
+				r.Put("/cesion", pagareHandler.Ceder)
+				r.Put("/entrega", pagareHandler.Entregar)
+				r.Delete("/", pagareHandler.PagarAnular)
+			})
 			r.Get("/", consultaHandler.ListPagares)
 			r.Get("/buscar", consultaHandler.GetPagare)
 			r.Get("/historico", consultaHandler.GetHistorico)

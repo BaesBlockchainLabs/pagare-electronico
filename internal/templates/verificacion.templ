@@ -1,0 +1,97 @@
+package templates
+
+// Verificacion es la pantalla donde el usuario valida su identidad leyendo el
+// chip de su DNI, y a la que vuelve después para que la plataforma recoja el
+// certificado.
+templ Verificacion(user *CurrentUser) {
+	@Base("Validar identidad", user) {
+		<div class="card" style="max-width:640px;margin:32px auto;">
+			@PageHead("Identidad", "Valida tu identidad", "Para emitir, endosar o ceder pagarés necesitamos saber quién eres. Se lee del chip de tu DNI: no hay nada que teclear.")
+
+			<div id="ver-estado" class="alert" style="margin-bottom:16px;">Consultando el estado…</div>
+
+			<div id="ver-pendiente" class="hidden">
+				<ol class="desc" style="padding-left:20px;line-height:1.8;">
+					<li>Abre el enlace de validación, mejor en el móvil.</li>
+					<li>Acerca tu DNI al móvil para que lea el chip.</li>
+					<li>Vuelve aquí y pulsa <strong>Ya he validado</strong>.</li>
+				</ol>
+				<div class="mt-4" style="display:flex;gap:8px;flex-wrap:wrap;">
+					<a id="ver-enlace" class="btn btn-primary" href="#" target="_blank" rel="noopener">Abrir la validación</a>
+					<button type="button" class="btn btn-outline" onclick="comprobar()">Ya he validado</button>
+				</div>
+			</div>
+
+			<div id="ver-reintento" class="hidden">
+				<div class="mt-4">
+					<button type="button" class="btn btn-primary" onclick="reintentar()">Empezar la validación</button>
+				</div>
+			</div>
+
+			<div id="ver-hecho" class="hidden">
+				<p class="desc">Tus datos personales ya son los de tu documento. Puedes verlos en tu perfil.</p>
+				<div class="mt-4" style="display:flex;gap:8px;">
+					<a class="btn btn-primary" href="/">Ir al panel</a>
+					<a class="btn btn-outline" href="/perfil">Ver mi perfil</a>
+				</div>
+			</div>
+		</div>
+
+		<script>
+		// Los tres bloques son excluyentes: pendiente (hay validación en curso),
+		// reintento (nunca se empezó o falló) y hecho (verificada).
+		function pinta(data) {
+			var estado = document.getElementById('ver-estado');
+			var pendiente = document.getElementById('ver-pendiente');
+			var reintento = document.getElementById('ver-reintento');
+			var hecho = document.getElementById('ver-hecho');
+			pendiente.classList.add('hidden');
+			reintento.classList.add('hidden');
+			hecho.classList.add('hidden');
+
+			if (!data || !data.ok) {
+				estado.className = 'alert alert-error';
+				estado.textContent = (data && data.msg) || 'No se pudo consultar el estado.';
+				return;
+			}
+			if (data.activa === false) {
+				estado.className = 'alert';
+				estado.textContent = 'La validación de identidad no está activada en esta instalación.';
+				return;
+			}
+
+			var texto = data.mensaje || '';
+			if (data.motivo) { texto += ' (' + data.motivo + ')'; }
+			estado.textContent = texto;
+
+			if (data.estado === 'verificada') {
+				estado.className = 'alert alert-success';
+				hecho.classList.remove('hidden');
+			} else if (data.estado === 'pendiente' && data.url) {
+				estado.className = 'alert';
+				document.getElementById('ver-enlace').href = data.url;
+				pendiente.classList.remove('hidden');
+			} else {
+				estado.className = data.estado === 'fallida' ? 'alert alert-error' : 'alert';
+				reintento.classList.remove('hidden');
+			}
+		}
+
+		function comprobar() {
+			fetch('/api/auth/verificacion')
+				.then(function(r){ return r.json(); })
+				.then(pinta)
+				.catch(function(){ pinta({ok:false, msg:'Error de conexión'}); });
+		}
+
+		function reintentar() {
+			fetch('/api/auth/verificacion', { method: 'POST' })
+				.then(function(r){ return r.json(); })
+				.then(pinta)
+				.catch(function(){ pinta({ok:false, msg:'Error de conexión'}); });
+		}
+
+		comprobar();
+		</script>
+	}
+}

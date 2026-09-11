@@ -126,6 +126,23 @@ func (p *PageHandler) Perfil(w http.ResponseWriter, r *http.Request) {
 	templates.Perfil(user).Render(r.Context(), w)
 }
 
+// Verificacion es la pantalla donde el usuario valida su identidad con el DNI.
+// Es la única que un usuario sin verificar puede necesitar, así que no
+// comprueba el estado: lo hace la propia página contra la API.
+func (p *PageHandler) Verificacion(w http.ResponseWriter, r *http.Request) {
+	principal := p.requirePrincipal(w, r)
+	if principal == nil {
+		return
+	}
+	user := &templates.CurrentUser{
+		Username: principal.Username,
+		Role:     string(principal.Role),
+		IsAdmin:  principal.IsAdmin(),
+	}
+	w.Header().Set("Content-Type", "text/html")
+	templates.Verificacion(user).Render(r.Context(), w)
+}
+
 func (p *PageHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 	principal := p.requirePrincipal(w, r)
 	if principal == nil {

@@ -31,52 +31,24 @@ templ Login(user *CurrentUser) {
 				<div class="form-grid">
 					<div class="field">
 						<label class="form-label">Usuario (login) *</label>
-						<input type="text" id="reg-user" placeholder="tu-usuario" autocomplete="username" />
+						<input type="text" id="reg-user" placeholder="tu-usuario" autocomplete="username"/>
 					</div>
 					<div class="field">
 						<label class="form-label">Contraseña * (mín. 6)</label>
-						<input type="password" id="reg-pass" placeholder="••••••••" autocomplete="new-password" />
+						<input type="password" id="reg-pass" placeholder="••••••••" autocomplete="new-password"/>
 					</div>
 					<div class="field">
-						<label class="form-label">Nombre *</label>
-						<input type="text" id="reg-nombre" placeholder="Juan" />
+						<label class="form-label">Email *</label>
+						<input type="email" id="reg-email" placeholder="tu@email.com" autocomplete="email"/>
 					</div>
 					<div class="field">
-						<label class="form-label">Apellidos</label>
-						<input type="text" id="reg-apellido" placeholder="Pérez García" />
-					</div>
-					<div class="field">
-						<label class="form-label">NIF / NIE / CIF *</label>
-						<input type="text" id="reg-nif" placeholder="12345678Z" />
-					</div>
-					<div class="field">
-						<label class="form-label">País (ISO)</label>
-						<input type="text" id="reg-pais" placeholder="ES" value="ES" maxlength="2" />
-					</div>
-					<div class="field">
-						<label class="form-label">Email</label>
-						<input type="email" id="reg-email" placeholder="tu@email.com" autocomplete="email" />
-					</div>
-					<div class="field">
-						<label class="form-label">Teléfono</label>
-						<input type="tel" id="reg-telefono" placeholder="+34 600 000 000" autocomplete="tel" />
-					</div>
-					<div class="field" style="grid-column:1/-1;">
-						<label class="form-label">Dirección</label>
-						<input type="text" id="reg-direccion" placeholder="Calle Mayor 10" />
-					</div>
-					<div class="field">
-						<label class="form-label">Localidad</label>
-						<input type="text" id="reg-localidad" placeholder="Madrid" />
-					</div>
-					<div class="field">
-						<label class="form-label">Código Postal</label>
-						<input type="text" id="reg-cp" placeholder="28001" />
+						<label class="form-label">Móvil *</label>
+						<input type="tel" id="reg-telefono" placeholder="+34600000000" autocomplete="tel"/>
 					</div>
 				</div>
-				<p class="desc" style="margin-top:8px;">Al crear la cuenta se genera automáticamente tu identidad (par de claves); la privada se guarda cifrada y nunca se muestra.</p>
+				<p class="desc" style="margin-top:8px;">Tu nombre, apellidos, NIF y dirección no se teclean: se leen del chip de tu DNI al validar tu identidad, que es el paso siguiente. Al crear la cuenta se genera además tu par de claves; la privada se guarda cifrada y nunca se muestra.</p>
 				<div class="mt-4">
-					<button type="submit" class="btn btn-primary" style="width:100%;">Crear cuenta y entrar</button>
+					<button type="submit" class="btn btn-primary" style="width:100%;">Crear cuenta y validar mi DNI</button>
 				</div>
 			</form>
 		</div>
@@ -99,9 +71,12 @@ templ Login(user *CurrentUser) {
 			var ok = document.getElementById('auth-ok');
 			err.classList.add('hidden'); ok.classList.add('hidden');
 			if (data && data.ok) {
+				// Tras un alta con validación de identidad se va a la pantalla
+				// de verificación, no al panel: la cuenta todavía no opera.
+				var destino = (data.verificacion && data.verificacion.estado === 'pendiente') ? '/verificacion' : '/';
 				ok.textContent = 'Sesión iniciada. Redirigiendo…';
 				ok.classList.remove('hidden');
-				setTimeout(function(){ window.location.href = '/'; }, 250);
+				setTimeout(function(){ window.location.href = destino; }, 250);
 			} else {
 				err.textContent = (data && data.msg) || 'Ha ocurrido un error';
 				err.classList.remove('hidden');
@@ -132,15 +107,8 @@ templ Login(user *CurrentUser) {
 				body: JSON.stringify({
 					username: document.getElementById('reg-user').value.trim(),
 					password: document.getElementById('reg-pass').value,
-					nombre: document.getElementById('reg-nombre').value.trim(),
-					apellido: document.getElementById('reg-apellido').value.trim(),
-					nif: document.getElementById('reg-nif').value.trim(),
 					email: document.getElementById('reg-email').value.trim(),
-					telefono: document.getElementById('reg-telefono').value.trim(),
-					direccion: document.getElementById('reg-direccion').value.trim(),
-					localidad: document.getElementById('reg-localidad').value.trim(),
-					codigo_postal: document.getElementById('reg-cp').value.trim(),
-					pais: document.getElementById('reg-pais').value.trim()
+					telefono: document.getElementById('reg-telefono').value.trim()
 				})
 			})
 			.then(function(r){ return r.json(); })

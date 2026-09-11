@@ -33,6 +33,16 @@ func (h *Handlers) Profile(w http.ResponseWriter, r *http.Request) {
 		"codigo_postal": u.CodigoPostal,
 		"pais":          u.Pais,
 		"pub_keys":      u.PubKeys,
+		// Identidad verificada: el estado y lo que aporta el documento.
+		// Mientras esté verificada, nombre, apellidos y NIF son de sólo
+		// lectura; ver Store.UpdateProfile.
+		"verificacion":     string(u.Verificacion),
+		"verificado_at":    u.VerificadoAt,
+		"fecha_nacimiento": u.FechaNacimiento,
+		"nacionalidad":     u.Nacionalidad,
+		"doc_tipo":         u.DocTipo,
+		"doc_numero":       u.DocNumero,
+		"doc_caducidad":    u.DocCaducidad,
 	})
 }
 
