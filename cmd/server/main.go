@@ -551,6 +551,13 @@ func main() {
 	// Chequeo periódico de pagarés vencidos/prescritos (solo lectura).
 	go checker.Run(ctx, cfg.Server.CronInterval)
 
+	// Repaso de las firmas de PDF pendientes: recoge las ya firmadas y completa
+	// la operación que esperaba a cada una. Sin esto, un pagaré firmado se
+	// queda sin entregar si el firmante no vuelve a la aplicación.
+	if pagareHandler.FirmaActiva() {
+		go scheduler.NuevoRepasoFirmas(pagareHandler).Run(ctx, cfg.Server.FirmasInterval)
+	}
+
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)
 	srv := &http.Server{Addr: addr, Handler: r}
 

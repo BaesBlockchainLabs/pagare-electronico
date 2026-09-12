@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"pagare/internal/auth"
+	"pagare/internal/firma"
 	"pagare/internal/models"
 )
 
@@ -134,18 +135,49 @@ func (h *PagareHandler) Entregar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Con la firma del PDF pendiente, el título no se mueve por aquí: la emisión
-	// dejó la entrega esperando precisamente a esa firma, y entregar ahora sería
-	// saltársela. Va antes que las consultas a la cadena porque es local y
-	// porque, si bloquea, lo demás no hace falta.
+	// Con la firma del PDF pendiente el título no se mueve por aquí: la emisión
+	// dejó la entrega esperando precisamente a esa firma. Pero antes de negarse
+	// se mira si ya está firmada, porque quien pulsa entregar suele venir de
+	// firmar y no tiene por qué saber que hace falta un paso más. Va antes que
+	// las consultas a la cadena porque empieza por una comprobación local.
 	if reg := h.FirmaSinCompletar(req.ID); reg != nil {
-		WriteJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok": false,
-			"msg": "Este pagaré está pendiente de que su firmante firme el PDF. " +
-				"Hasta entonces no puede entregarse; cuando firme, la entrega se hace sola.",
-			"firma": vistaFirma(reg),
-		})
-		return
+		reg, errFirma := h.Completar(r.Context(), reg)
+		switch {
+		case reg.EnCurso():
+			respuesta := map[string]interface{}{
+				"ok": false,
+				"msg": "Este pagaré está pendiente de que su firmante firme el PDF. " +
+					"Hasta entonces no puede entregarse; cuando firme, la entrega se hace sola.",
+				"firma": vistaFirma(reg),
+			}
+			if errFirma != nil {
+				respuesta["aviso"] = errFirma.Error()
+			}
+			WriteJSON(w, http.StatusConflict, respuesta)
+			return
+
+		case reg.Estado == firma.Fallida:
+			WriteJSON(w, http.StatusConflict, map[string]interface{}{
+				"ok": false,
+				"msg": "La firma del PDF no se completó, así que el pagaré no puede entregarse. " +
+					"Vuelve a pedir la firma.",
+				"firma": vistaFirma(reg),
+			})
+			return
+
+		case reg.EjecutadaAt != nil:
+			// La firma estaba hecha y completarla ya ha entregado el pagaré.
+			WriteJSON(w, http.StatusOK, map[string]interface{}{
+				"ok":      true,
+				"msg":     "El firmante ya había firmado: el pagaré queda entregado al beneficiario.",
+				"id":      req.ID,
+				"entrega": Entrega{Entregado: true, Msg: "Entregado al beneficiario"},
+				"firma":   vistaFirma(reg),
+			})
+			return
+		}
+		// Firmada pero sin ejecutar: entregar es justo lo que faltaba, así que
+		// se sigue por el camino normal.
 	}
 
 	// A second handover is not a handover: once the title has moved, any

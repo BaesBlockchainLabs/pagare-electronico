@@ -29,6 +29,9 @@ type ServerConfig struct {
 	Env  string
 	// CronInterval es la periodicidad del chequeo de pagarés vencidos/prescritos.
 	CronInterval time.Duration
+	// FirmasInterval es cada cuánto se repasan las firmas de PDF pendientes.
+	// Va aparte porque una firma se espera en minutos y un vencimiento en días.
+	FirmasInterval time.Duration
 }
 
 // LogaltyConfig son las credenciales del canal de datos de Logalty, con el que
@@ -92,6 +95,11 @@ func Load() (*Config, error) {
 		cronInterval = 24 * time.Hour
 	}
 
+	firmasInterval, err := time.ParseDuration(getEnv("FIRMAS_INTERVAL", "1m"))
+	if err != nil || firmasInterval <= 0 {
+		firmasInterval = time.Minute
+	}
+
 	baseURL := getEnv("BCF_BASE_URL", "https://api.blockchainfue.com/api")
 	appID := os.Getenv("BCF_APP_ID")
 	appKey := os.Getenv("BCF_APP_KEY")
@@ -108,9 +116,10 @@ func Load() (*Config, error) {
 			Entidad: getEnv("CERT_ENTIDAD", "BlockchainFUE"),
 		},
 		Server: ServerConfig{
-			Port:         port,
-			Env:          env,
-			CronInterval: cronInterval,
+			Port:           port,
+			Env:            env,
+			CronInterval:   cronInterval,
+			FirmasInterval: firmasInterval,
 		},
 		Blockchain: BlockchainConfig{
 			BaseURL: baseURL,

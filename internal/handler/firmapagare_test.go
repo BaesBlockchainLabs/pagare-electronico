@@ -377,3 +377,85 @@ func TestFirmaSinCompletar_DesactivadaNoBloquea(t *testing.T) {
 		t.Error("sin firma configurada no puede bloquear nada")
 	}
 }
+
+func pideEntrega(t *testing.T, h *PagareHandler) (*httptest.ResponseRecorder, map[string]interface{}) {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodPut, "/api/pagares/entrega",
+		strings.NewReader(`{"id":"asset-1","to":"pub-benef"}`))
+	r = r.WithContext(auth.ContextWithPrincipal(r.Context(),
+		&auth.Principal{UserID: "u1", Username: "rampa", Role: auth.RoleUser}))
+	w := httptest.NewRecorder()
+	h.Entregar(w, r)
+
+	var res map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	return w, res
+}
+
+// Quien pulsa entregar suele venir de firmar, así que el botón mira primero si
+// la firma ya está y, si lo está, entrega en el acto.
+func TestEntregar_RecogeLaFirmaYEntrega(t *testing.T) {
+	ff := &firmaFalsa{
+		situacion: &firma.Situacion{GUID: "GUID-1", Terminado: true, Firmado: true},
+		firmado:   &firma.Firmado{PDF: []byte("%PDF firmado"), Hash: "bbbb"},
+	}
+	h, regs, red := entornoFirma(t, ff)
+	registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+
+	w, res := pideEntrega(t, h)
+	if w.Code != http.StatusOK {
+		t.Fatalf("código = %d, se esperaba 200: %s", w.Code, w.Body.String())
+	}
+	if res["ok"] != true {
+		t.Errorf("respuesta = %v", res)
+	}
+	if len(*red) != 1 {
+		t.Fatalf("se esperaba una transferencia, hubo %d", len(*red))
+	}
+	if (*red)[0]["to"] != "pub-benef" {
+		t.Errorf("la entrega no fue al beneficiario: %v", (*red)[0])
+	}
+
+	guardado, _ := regs.Ultima("asset-1")
+	if guardado.Estado != firma.Firmada || guardado.EjecutadaAt == nil {
+		t.Errorf("la firma no quedó completa: %+v", guardado)
+	}
+}
+
+// Y si la firma falló, entregar se niega: no hay firma que respalde el título.
+func TestEntregar_FirmaFallidaSeNiega(t *testing.T) {
+	ff := &firmaFalsa{situacion: &firma.Situacion{
+		GUID: "GUID-1", Terminado: true, Firmado: false,
+		Descripcion: "Finalizada / Tiempo Expirado"}}
+	h, regs, red := entornoFirma(t, ff)
+	registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+
+	w, res := pideEntrega(t, h)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("código = %d, se esperaba 409: %s", w.Code, w.Body.String())
+	}
+	if len(*red) != 0 {
+		t.Errorf("sin firma no puede haber entrega: %v", *red)
+	}
+	if f, _ := res["firma"].(map[string]interface{}); f["estado"] != string(firma.Fallida) {
+		t.Errorf("la respuesta tiene que decir que la firma falló: %v", res["firma"])
+	}
+}
+
+// Una firma firmada cuya entrega falló antes no bloquea: se sigue por el
+// camino normal y se reintenta.
+func TestEntregar_FirmadaAMediasSigueAdelante(t *testing.T) {
+	ff := &firmaFalsa{}
+	h, regs, _ := entornoFirma(t, ff)
+	reg := registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+	if err := regs.Resolver(reg, &firma.Firmado{PDF: []byte("%PDF"), Hash: "bbbb"}); err != nil {
+		t.Fatal(err)
+	}
+
+	w, _ := pideEntrega(t, h)
+	// Llega al camino normal: lo que conteste la red ya no es cosa del guardia,
+	// pero no puede ser un 409 de firma pendiente.
+	if w.Code == http.StatusConflict {
+		t.Errorf("una firma ya hecha no puede bloquear la entrega: %s", w.Body.String())
+	}
+}
