@@ -17,6 +17,7 @@ import (
 	"pagare/internal/bcfclient"
 	"pagare/internal/config"
 	"pagare/internal/crypto"
+	"pagare/internal/firma"
 	"pagare/internal/handler"
 	"pagare/internal/identidad"
 	"pagare/internal/keyvault"
@@ -85,6 +86,25 @@ func main() {
 		log.Printf("⚠️  validación de identidad DESACTIVADA (define LOGALTY_* en .env para exigirla)")
 	}
 
+	// Firma cualificada del PDF de los pagarés, vía el servicio de contratación
+	// de Logalty. Sin tipo de contratación configurado queda desactivada y las
+	// operaciones se completan en el acto, como antes de que existiera.
+	firmaSvc, err := firma.NuevoServicio(cfg.Logalty)
+	if err != nil {
+		log.Fatalf("Error inicializando la firma del PDF: %v", err)
+	}
+	registrosFirma, err := firma.AbrirRegistros("")
+	if err != nil {
+		log.Fatalf("Error inicializando el almacén de firmas: %v", err)
+	}
+	defer registrosFirma.Cerrar()
+	if firmaSvc.Activa() {
+		log.Printf("Firma del PDF activa (empresa %s, tipo de contratación %s)",
+			cfg.Logalty.Empresa, cfg.Logalty.TipoContrato)
+	} else {
+		log.Printf("⚠️  firma del PDF DESACTIVADA (define LOGALTY_TYPE_CONTRACT en .env para exigirla)")
+	}
+
 	// Handlers de autenticación: los usa tanto /api/auth como la administración,
 	// que puede mandar a validar a un usuario y refrescar las validaciones.
 	authH := auth.NewHandlers(authStore, cryptoSvc)
@@ -94,6 +114,7 @@ func main() {
 	// private key resolved from the store (no private key handled client-side).
 	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc, authStore)
 	pagareHandler.SetBeneficiarios(authStore)
+	pagareHandler.SetFirma(firmaSvc, registrosFirma, authStore)
 
 	// Development seed: provision N users with keypairs, then exit. Never in prod.
 	if *seedUsers > 0 {
@@ -204,6 +225,22 @@ func main() {
 				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{
 					"ok": true, "msg": "Validación enviada: el usuario recibirá el enlace por SMS y correo.",
 					"estado": string(v.Estado),
+				})
+			})
+
+			// Repasar todas las firmas de PDF pendientes: recoge las que ya se
+			// han firmado y completa la operación que esperaban.
+			r.Post("/firmas/refrescar", func(w http.ResponseWriter, r *http.Request) {
+				revisadas, resueltas, err := pagareHandler.CompletarEnEspera(r.Context())
+				if err != nil {
+					handler.WriteJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+						"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{
+					"ok": true, "revisadas": revisadas, "resueltas": resueltas,
+					"msg": fmt.Sprintf("%d firma(s) pendiente(s) revisada(s), %d resuelta(s).",
+						revisadas, resueltas),
 				})
 			})
 
@@ -459,6 +496,11 @@ func main() {
 			r.Get("/historico", consultaHandler.GetHistorico)
 			r.Get("/pdf", consultaHandler.DescargarPDF)
 			r.Get("/certificado", consultaHandler.DescargarCertificado)
+			// Firma cualificada del PDF: cómo va y, cuando está, el documento.
+			// Consultarla es además lo que la recoge y completa la operación
+			// que estaba esperando.
+			r.Get("/firma", pagareHandler.EstadoFirma)
+			r.Get("/firma/pdf", pagareHandler.DescargarPDFFirmado)
 			r.Get("/propietario", consultaHandler.GetPropietario)
 			r.Get("/public", consultaHandler.GetPublicAsset)
 			r.Get("/alertas", func(w http.ResponseWriter, r *http.Request) {

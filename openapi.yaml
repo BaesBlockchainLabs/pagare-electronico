@@ -818,6 +818,97 @@ paths:
                 $ref: '#/components/schemas/SimpleOkResponse'
         4XX:
           $ref: '#/components/responses/Error'
+  /api/pagares/firma:
+    get:
+      tags:
+      - Pagarés
+      summary: Estado de la firma cualificada del PDF
+      description: >
+        Informa de cómo va la firma del PDF de la última operación del pagaré. Consultarla es además lo
+        que la recoge: si el firmante ya firmó, descarga el PDF, comprueba que el portal firmó
+        exactamente el documento que se le mandó y completa la operación que estaba esperando —la
+        entrega al beneficiario en una emisión, el cambio de titularidad en un endoso—.
+      operationId: estadoFirmaPagare
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  activa:
+                    type: boolean
+                    description: Si esta instalación tiene la firma del PDF configurada. Cuando es
+                      false, las operaciones se completan en el acto y no hay firma que esperar.
+                  aviso:
+                    type: string
+                    description: Presente cuando la firma está bien pero la operación que esperaba
+                      falló; se puede reintentar sin volver a firmar.
+                  firma:
+                    $ref: '#/components/schemas/FirmaPagare'
+        4XX:
+          $ref: '#/components/responses/Error'
+  /api/pagares/firma/pdf:
+    get:
+      tags:
+      - Pagarés
+      summary: Descargar el PDF con la firma cualificada
+      description: >
+        El documento con valor probatorio autónomo: lleva una firma PAdES del prestador y un sello de
+        tiempo RFC 3161, no sólo la firma ed25519 de la red. Sólo existe cuando la firma está
+        completada.
+      operationId: descargarPDFFirmado
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: El PDF firmado
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        4XX:
+          $ref: '#/components/responses/Error'
+  /admin/firmas/refrescar:
+    post:
+      tags:
+      - Administración
+      summary: Repasar las firmas de PDF pendientes
+      description: >
+        Consulta en el portal todas las firmas pendientes, recoge las que ya se han firmado y completa
+        la operación que cada una esperaba. Hace falta porque nadie garantiza que el firmante vuelva a
+        la aplicación después de firmar.
+      operationId: adminRefrescarFirmas
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SimpleOkResponse'
+                - type: object
+                  properties:
+                    revisadas:
+                      type: integer
+                    resueltas:
+                      type: integer
+        4XX:
+          $ref: '#/components/responses/Error'
   /admin/usuarios/{id}/verificacion:
     post:
       tags:
@@ -1689,6 +1780,45 @@ components:
           allOf:
           - $ref: '#/components/schemas/VerificacionResponse'
           description: Sólo en el alta, cuando se ha podido arrancar la validación.
+    FirmaPagare:
+      type: object
+      description: >
+        La firma cualificada del PDF de una operación. Los dos hashes son lo que ata la firma al
+        contenido: hash_original es el del PDF que se mandó a firmar, y el portal devuelve ese mismo
+        documento byte a byte para poder cotejarlo.
+      properties:
+        estado:
+          type: string
+          enum:
+          - ''
+          - pendiente
+          - firmada
+          - fallida
+        operacion:
+          type: string
+          enum:
+          - emision
+          - endoso
+        referencia:
+          type: string
+          description: Identificador del envío en el portal de firma.
+        hash_original:
+          type: string
+          description: SHA-256 del PDF que se mandó a firmar.
+        hash_firmado:
+          type: string
+          description: SHA-256 del PDF firmado que devolvió el portal.
+        motivo:
+          type: string
+          description: Por qué no se completó, en palabras del portal.
+        msg:
+          type: string
+        creada_at:
+          type: string
+          format: date-time
+        resuelta_at:
+          type: string
+          format: date-time
     VerificacionResponse:
       type: object
       description: Estado de la validación de identidad contra el chip del DNI.

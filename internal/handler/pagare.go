@@ -9,7 +9,9 @@ import (
 	"pagare/internal/auth"
 	"pagare/internal/bcfclient"
 	"pagare/internal/crypto"
+	"pagare/internal/firma"
 	"pagare/internal/models"
+	"pagare/internal/pdf"
 	"pagare/internal/validator"
 )
 
@@ -34,6 +36,12 @@ type PagareHandler struct {
 	crypto        *crypto.Service
 	keys          SigningKeys
 	beneficiarios BeneficiaryResolver
+
+	// Firma cualificada del PDF. Nil deja las operaciones como estaban, sin
+	// exigirla; ver SetFirma.
+	firma     FirmaPDF
+	firmas    *firma.Registros
+	firmantes Firmantes
 }
 
 // SetBeneficiarios wires the resolver that turns the beneficiario's NIF into
@@ -151,7 +159,7 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 	// The signature travels inside the asset data, not in the metadata: the
 	// public endpoint only exposes data, and a third party must be able to
 	// verify integrity without an account.
-	firma, err := h.firmarContenido(&req.Asset.Data, from)
+	firmaContenido, err := h.firmarContenido(&req.Asset.Data, from)
 	if err != nil {
 		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"ok": false, "msg": fmt.Sprintf("No se pudo firmar el pagaré: %v", err),
@@ -162,7 +170,7 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 	// entre las menciones esenciales, y su ausencia priva al documento de su
 	// validez como pagaré (art. 95, párr. 1): más vale no emitirlo que emitir
 	// algo que no lo es.
-	if firma == "" {
+	if firmaContenido == "" {
 		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"ok": false,
 			"msg": "No se puede emitir sin firmar: la firma del que emite es " +
@@ -173,7 +181,7 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	asset := map[string]interface{}{
-		"data":     buildAssetData(&req.Asset.Data, firma),
+		"data":     buildAssetData(&req.Asset.Data, firmaContenido),
 		"metadata": buildEmisionMetadata(req.Asset.Metadata),
 	}
 	// Per the BCF schema, the creating identity (from) goes INSIDE asset, so the
@@ -200,6 +208,41 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"ok": false, "msg": "Error procesando respuesta de blockchain",
+		})
+		return
+	}
+
+	// Con firma cualificada la entrega espera: el pagaré existe en la cadena,
+	// pero no llega a manos del beneficiario hasta que el firmante firma su
+	// PDF. Emitir no se puede deshacer, así que lo que se retiene es lo único
+	// retenible — el control del título.
+	if h.FirmaActiva() {
+		destino := req.To
+		if destino == "" {
+			destino = h.pubDelBeneficiario(&req.Asset.Data)
+		}
+		reg, err := h.pedirFirma(r, firma.Emision, resp.ID,
+			pdf.Input{P: &req.Asset.Data, FirmantePub: from.Pub},
+			principal.UserID,
+			pendienteEmision{A: destino, PubFirmante: from.Pub})
+		if err != nil {
+			WriteJSON(w, http.StatusOK, map[string]interface{}{
+				"ok":   true,
+				"msg":  "Pagaré emitido, pero no se pudo pedir la firma del PDF: " + err.Error(),
+				"id":   resp.ID,
+				"cost": resp.Cost,
+				"entrega": Entrega{Msg: "En espera de la firma del PDF; reintenta la firma " +
+					"para que el pagaré llegue al beneficiario"},
+			})
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":      true,
+			"msg":     "Pagaré emitido. Firma su PDF para que llegue al beneficiario: tienes el enlace en tu correo y tu móvil.",
+			"id":      resp.ID,
+			"cost":    resp.Cost,
+			"firma":   vistaFirma(reg),
+			"entrega": Entrega{Msg: "La entrega al beneficiario espera a la firma del PDF"},
 		})
 		return
 	}
@@ -252,7 +295,8 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.comprobarEndosable(req.ID); err != nil {
+	pagare, err := h.comprobarEndosable(req.ID)
+	if err != nil {
 		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"ok": false, "msg": err.Error(), "articulo_lcch": "art. 14 LCCH",
 		})
@@ -287,10 +331,39 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metadata := buildEndosoMetadata(&req.Metadata)
+
+	// Aquí la firma sí va antes: el pagaré ya existe, así que el endoso puede
+	// esperar a estar firmado sin dejar nada a medias en la cadena.
+	if h.FirmaActiva() {
+		reg, err := h.pedirFirma(r, firma.Endoso, req.ID,
+			pdf.Input{
+				P:           pagare,
+				FirmantePub: from.Pub,
+				Endosos:     []pdf.Endoso{endosoParaPDF(&endoso, from.Pub)},
+			},
+			principal.UserID,
+			pendienteEndoso{A: req.To, PubFirmante: from.Pub, Metadata: metadata})
+		if err != nil {
+			WriteJSON(w, http.StatusBadGateway, map[string]interface{}{
+				"ok":  false,
+				"msg": "No se pudo pedir la firma del endoso, así que no se ha endosado: " + err.Error(),
+			})
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":    true,
+			"msg":   "Firma el endoso para que surta efecto: tienes el enlace en tu correo y tu móvil.",
+			"id":    req.ID,
+			"firma": vistaFirma(reg),
+		})
+		return
+	}
+
 	bcfReq := map[string]interface{}{
 		"id":       req.ID,
 		"to":       req.To,
-		"metadata": buildEndosoMetadata(&req.Metadata),
+		"metadata": metadata,
 	}
 	if from != nil {
 		bcfReq["from"] = map[string]string{"pub": from.Pub, "pvt": from.Pvt}
@@ -397,22 +470,24 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 // the clause is there, and endorsing a non-endorsable title would put a chain
 // of holders on something that cannot circulate — a mess to unwind, whereas a
 // refusal during a network hiccup is merely a retry.
-func (h *PagareHandler) comprobarEndosable(id string) error {
+// Devuelve el pagaré tal como está en la cadena, que es además lo que hace
+// falta para construir el PDF que se firma.
+func (h *PagareHandler) comprobarEndosable(id string) (*models.PagareElectronico, error) {
 	body, status, err := h.client.GetAsset(map[string]string{"id": id})
 	if err != nil {
-		return fmt.Errorf("no se pudo comprobar si el pagaré es endosable: %w", err)
+		return nil, fmt.Errorf("no se pudo comprobar si el pagaré es endosable: %w", err)
 	}
 	if status != 200 {
-		return fmt.Errorf("no se pudo recuperar el pagaré para comprobar si es endosable")
+		return nil, fmt.Errorf("no se pudo recuperar el pagaré para comprobar si es endosable")
 	}
 	p, err := assetToPagare(body)
 	if err != nil {
-		return fmt.Errorf("no se pudo interpretar el pagaré para comprobar si es endosable")
+		return nil, fmt.Errorf("no se pudo interpretar el pagaré para comprobar si es endosable")
 	}
 	if p.NoALaOrden {
-		return fmt.Errorf("este pagaré se emitió «no a la orden» y no puede endosarse; solo cabe transmitirlo por cesión ordinaria")
+		return nil, fmt.Errorf("este pagaré se emitió «no a la orden» y no puede endosarse; solo cabe transmitirlo por cesión ordinaria")
 	}
-	return nil
+	return p, nil
 }
 
 // firmarContenido signs the canonical form of the pagaré with the firmante's
