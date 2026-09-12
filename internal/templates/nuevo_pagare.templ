@@ -82,6 +82,7 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			<fieldset>
 				<legend>Firmante (emisor)</legend>
 				<p class="desc" style="margin-bottom:10px;">Eres tú, el usuario que emite el pagaré. Tus datos se rellenan automáticamente y el pagaré se firma con tu identidad; no necesitas introducir claves.</p>
+				<div id="emisor-incompleto" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
 				<label class="check-row" for="firmante-editar">
 					<input type="checkbox" id="firmante-editar" onchange="toggleEmisorEdit()"/>
 					<span>Editar mis datos para este pagaré <small>(no modifica tu perfil)</small></span>
@@ -390,8 +391,31 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 					document.getElementById('firmante_localidad').value = u.localidad || '';
 					document.getElementById('firmante_cp').value = u.codigo_postal || '';
 					document.getElementById('firmante_pais').value = u.pais || 'ES';
+					avisarSiFaltanDatos(u);
 				})
 				.catch(function(){});
+		}
+
+		// El chip del DNI no lleva código postal, así que quien se ha validado
+		// con él llega aquí sin ese dato y el formulario, que lo exige y lo
+		// tiene en sólo lectura, se niega a enviarse sin decir por qué.
+		function avisarSiFaltanDatos(u) {
+			var etiquetas = {
+				nombre: 'nombre', nif: 'NIF', direccion: 'dirección',
+				localidad: 'localidad', codigo_postal: 'código postal', pais: 'país'
+			};
+			var faltan = Object.keys(etiquetas).filter(function(k){ return !u[k]; })
+				.map(function(k){ return etiquetas[k]; });
+
+			var el = document.getElementById('emisor-incompleto');
+			if (faltan.length === 0) {
+				el.classList.add('hidden');
+				return;
+			}
+			el.innerHTML = 'Te falta ' + faltan.join(', ') + ' en tu perfil, y el pagaré no puede ' +
+				'emitirse sin esos datos. <a href="/perfil" style="font-weight:600;">Complétalos en tu perfil</a>' +
+				' (el código postal no viene en el DNI, así que hay que ponerlo a mano).';
+			el.classList.remove('hidden');
 		}
 
 		// Editar a mano los datos del emisor (sin tocar el perfil).

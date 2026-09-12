@@ -554,18 +554,23 @@ func (s *Store) SetPassword(userID, plainPassword string) error {
 // ProfileInput carries the self-editable personal fields of a user's profile.
 // It deliberately excludes username, role and password so a user can never
 // escalate privileges or change their login identity through this path.
+// Las etiquetas JSON son obligatorias, no decorativas: encoding/json ignora
+// las mayúsculas al emparejar pero no los guiones bajos, así que sin ellas
+// "codigo_postal" y "display_name" no encajan con ningún campo y se descartan
+// en silencio. Y como aquí se asigna sin condiciones, descartarlos no dejaba
+// el valor como estaba: lo borraba en cada guardado.
 type ProfileInput struct {
-	DisplayName  string
-	Nombre       string
-	Apellido     string
-	NIF          string
-	Email        string
-	Telefono     string
-	Direccion    string
-	Localidad    string
-	Provincia    string
-	CodigoPostal string
-	Pais         string
+	DisplayName  string `json:"display_name"`
+	Nombre       string `json:"nombre"`
+	Apellido     string `json:"apellido"`
+	NIF          string `json:"nif"`
+	Email        string `json:"email"`
+	Telefono     string `json:"telefono"`
+	Direccion    string `json:"direccion"`
+	Localidad    string `json:"localidad"`
+	Provincia    string `json:"provincia"`
+	CodigoPostal string `json:"codigo_postal"`
+	Pais         string `json:"pais"`
 }
 
 // UpdateProfile updates only the personal fields of the user's own profile.
