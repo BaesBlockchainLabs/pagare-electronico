@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,31 +35,50 @@ func (h *Handlers) IniciarVerificacion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if v, err := h.store.UltimaVerificacion(p.UserID); err == nil {
+	v, err := h.EnviarVerificacion(r.Context(), p.UserID)
+	if err != nil {
+		writeJSON(w, EstadoHTTPVerificacion(err), map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, respuestaVerificacion(v, ""))
+}
+
+// ErrYaVerificado y ErrSinMovil son los dos rechazos que no son avería y que
+// quien llama tiene que poder distinguir de un fallo del portal.
+var (
+	ErrYaVerificado = errors.New("la identidad de este usuario ya está verificada")
+	ErrSinMovil     = errors.New("hace falta un móvil para validar la identidad")
+)
+
+// EnviarVerificacion arranca la validación de identidad de un usuario, o
+// devuelve la que ya está en curso.
+//
+// No duplica un intento pendiente a propósito: cada envío es otro SMS al
+// usuario, y el portal acabaría con dos validaciones vivas para la misma
+// persona.
+func (h *Handlers) EnviarVerificacion(ctx context.Context, userID string) (*Verificacion, error) {
+	if !h.identidad.Activo() {
+		return nil, identidad.ErrDesactivado
+	}
+
+	if v, err := h.store.UltimaVerificacion(userID); err == nil {
 		if v.Estado == VerificacionVerificada {
-			writeJSON(w, http.StatusOK, respuestaVerificacion(v, "Tu identidad ya está verificada."))
-			return
+			return nil, ErrYaVerificado
 		}
-		// Un intento en curso no se duplica: reenviar crearía otro envío en el
-		// portal y otro SMS al usuario.
 		if v.Pendiente() {
-			writeJSON(w, http.StatusOK, respuestaVerificacion(v, "Ya tienes una validación en curso: revisa tu móvil."))
-			return
+			return v, nil
 		}
 	}
 
-	u, err := h.store.GetByID(p.UserID)
+	u, err := h.store.GetByID(userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "no se pudo cargar el usuario"})
-		return
+		return nil, err
 	}
 	if u.Telefono == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "msg": "hace falta un móvil para validar la identidad; añádelo en tu perfil"})
-		return
+		return nil, ErrSinMovil
 	}
 
-	envio, err := h.identidad.Iniciar(r.Context(), identidad.Solicitud{
+	envio, err := h.identidad.Iniciar(ctx, identidad.Solicitud{
 		// La referencia es el id del usuario: es lo que permite seguir el
 		// envío antes de que el portal le asigne GUID.
 		Referencia: u.ID,
@@ -67,8 +87,7 @@ func (h *Handlers) IniciarVerificacion(w http.ResponseWriter, r *http.Request) {
 		Movil:      u.Telefono,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
-		return
+		return nil, err
 	}
 
 	v := &Verificacion{
@@ -78,11 +97,49 @@ func (h *Handlers) IniciarVerificacion(w http.ResponseWriter, r *http.Request) {
 		Estado:     VerificacionPendiente,
 	}
 	if err := h.store.CrearVerificacion(v); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "no se pudo registrar la validación"})
-		return
+		return nil, err
 	}
+	return v, nil
+}
 
-	writeJSON(w, http.StatusOK, respuestaVerificacion(v, ""))
+// RefrescarVerificaciones consulta en el portal todas las validaciones
+// pendientes y resuelve las que ya han terminado. Devuelve cuántas ha mirado y
+// cuántas han dejado de estar pendientes.
+//
+// Es lo que un administrador necesita para no depender de que cada usuario
+// entre en su pantalla: el portal tarda en registrar el resultado y nadie está
+// mirando.
+func (h *Handlers) RefrescarVerificaciones(ctx context.Context) (revisadas, resueltas int, err error) {
+	if !h.identidad.Activo() {
+		return 0, 0, identidad.ErrDesactivado
+	}
+	pendientes, err := h.store.VerificacionesPendientes()
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, v := range pendientes {
+		revisadas++
+		h.refrescar(ctx, v)
+		if !v.Pendiente() {
+			resueltas++
+		}
+	}
+	return revisadas, resueltas, nil
+}
+
+// EstadoHTTPVerificacion traduce los rechazos conocidos; lo demás se lo achaca
+// al portal, que es de donde vienen los errores que no hemos previsto.
+func EstadoHTTPVerificacion(err error) int {
+	switch {
+	case errors.Is(err, identidad.ErrDesactivado):
+		return http.StatusServiceUnavailable
+	case errors.Is(err, ErrYaVerificado), errors.Is(err, ErrSinMovil):
+		return http.StatusBadRequest
+	case errors.Is(err, ErrUserNotFound):
+		return http.StatusNotFound
+	default:
+		return http.StatusBadGateway
+	}
 }
 
 // EstadoVerificacionHandler informa de cómo va la verificación del usuario en
@@ -114,7 +171,7 @@ func (h *Handlers) EstadoVerificacionHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	if v.Pendiente() && h.identidad.Activo() {
-		h.refrescar(r, v)
+		h.refrescar(r.Context(), v)
 	}
 
 	writeJSON(w, http.StatusOK, respuestaVerificacion(v, ""))
@@ -123,8 +180,8 @@ func (h *Handlers) EstadoVerificacionHandler(w http.ResponseWriter, r *http.Requ
 // refrescar consulta el envío en el portal y, si ya terminó, lo resuelve. Los
 // errores de red no cambian el estado guardado: la verificación sigue
 // pendiente y se volverá a mirar.
-func (h *Handlers) refrescar(r *http.Request, v *Verificacion) {
-	sit, err := h.identidad.Consultar(r.Context(), v.Referencia)
+func (h *Handlers) refrescar(ctx context.Context, v *Verificacion) {
+	sit, err := h.identidad.Consultar(ctx, v.Referencia)
 	if err != nil {
 		return
 	}
@@ -147,7 +204,7 @@ func (h *Handlers) refrescar(r *http.Request, v *Verificacion) {
 		return
 	}
 
-	datos, err := h.identidad.Recoger(r.Context(), v.GUID)
+	datos, err := h.identidad.Recoger(ctx, v.GUID)
 	if err != nil {
 		var noSuperada *identidad.ErrNoSuperada
 		if errors.As(err, &noSuperada) {

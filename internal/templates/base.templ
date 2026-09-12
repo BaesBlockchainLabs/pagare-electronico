@@ -4,6 +4,17 @@ type CurrentUser struct {
 	Username string
 	Role     string
 	IsAdmin  bool
+	// Verificado dice si su identidad está validada contra su DNI. Sin eso no
+	// puede operar con pagarés, así que la navegación no le ofrece nada que
+	// vaya a rechazarse.
+	Verificado bool
+}
+
+// PuedeOperar indica si enseñarle las pantallas de pagarés. Los
+// administradores entran siempre: son quienes tienen que poder desatascar una
+// cuenta.
+func (u *CurrentUser) PuedeOperar() bool {
+	return u == nil || u.IsAdmin || u.Verificado
 }
 
 templ Base(title string, user *CurrentUser) {
@@ -528,9 +539,13 @@ templ Base(title string, user *CurrentUser) {
 					<span>Pagaré <b>Electrónico</b><small>Libro mayor electrónico eIDAS2</small></span>
 				</a>
 				<div class="nav-links">
-					<a href="/" class="nav-link">Pagarés</a>
-					<a href="/pagares/endosar" class="nav-link">Endosar</a>
-					<a href="/pagares/pagar" class="nav-link">Pagar</a>
+					if user.PuedeOperar() {
+						<a href="/" class="nav-link">Pagarés</a>
+						<a href="/pagares/endosar" class="nav-link">Endosar</a>
+						<a href="/pagares/pagar" class="nav-link">Pagar</a>
+					} else {
+						<a href="/verificacion" class="nav-link" style="color:#B3402E; font-weight:700">Valida tu identidad</a>
+					}
 					<a href="/pagares/verificar" class="nav-link">Verificar</a>
 					if user != nil {
 						if user.IsAdmin {
@@ -543,10 +558,12 @@ templ Base(title string, user *CurrentUser) {
 					} else {
 						<a href="/login" class="nav-link">Iniciar sesión</a>
 					}
-					<a href="/pagares/nuevo" class="nav-cta">
-						@Icon("plus")
-						Nuevo pagaré
-					</a>
+					if user.PuedeOperar() {
+						<a href="/pagares/nuevo" class="nav-cta">
+							@Icon("plus")
+							Nuevo pagaré
+						</a>
+					}
 				</div>
 			</div>
 		</nav>

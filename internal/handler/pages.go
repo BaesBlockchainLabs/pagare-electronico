@@ -22,6 +22,25 @@ func NewPageHandler(isDev bool) *PageHandler {
 	return &PageHandler{isDev: isDev, specs: []string{"openapi.yaml", "openapi-bcf.yaml"}}
 }
 
+// usuarioActual traduce el principal a lo que necesita la navegación. Un
+// principal nil da un usuario nil, que es como las plantillas representan a un
+// visitante sin sesión.
+//
+// Existe para que ninguna pantalla se olvide de un campo: el estado de
+// verificación decide qué enlaces se enseñan, y repetir la construcción a mano
+// en cada handler era como se olvidaba.
+func usuarioActual(p *auth.Principal) *templates.CurrentUser {
+	if p == nil {
+		return nil
+	}
+	return &templates.CurrentUser{
+		Username:   p.Username,
+		Role:       string(p.Role),
+		IsAdmin:    p.IsAdmin(),
+		Verificado: p.Verificado,
+	}
+}
+
 // requirePrincipal redirects to /login if there is no authenticated user.
 // This keeps the admin experience 100% unchanged once logged in.
 func (p *PageHandler) requirePrincipal(w http.ResponseWriter, r *http.Request) *auth.Principal {
@@ -48,11 +67,7 @@ func (p *PageHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	if principal == nil {
 		return
 	}
-	user := &templates.CurrentUser{
-		Username: principal.Username,
-		Role:     string(principal.Role),
-		IsAdmin:  principal.IsAdmin(),
-	}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.Dashboard(user).Render(r.Context(), w)
 }
@@ -62,7 +77,7 @@ func (p *PageHandler) NuevoPagare(w http.ResponseWriter, r *http.Request) {
 	if principal == nil {
 		return
 	}
-	user := &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.NuevoPagare(p.isDev, user).Render(r.Context(), w)
 }
@@ -73,7 +88,7 @@ func (p *PageHandler) Historico(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.URL.Query().Get("id")
-	user := &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.Historico(id, user).Render(r.Context(), w)
 }
@@ -86,10 +101,7 @@ func (p *PageHandler) Verificar(w http.ResponseWriter, r *http.Request) {
 		network = "test"
 	}
 	// Public page, but render the nav consistently for logged-in users.
-	var user *templates.CurrentUser
-	if pr := auth.GetPrincipal(r); pr != nil {
-		user = &templates.CurrentUser{Username: pr.Username, Role: string(pr.Role), IsAdmin: pr.IsAdmin()}
-	}
+	user := usuarioActual(auth.GetPrincipal(r))
 	w.Header().Set("Content-Type", "text/html")
 	templates.Verificar(id, network, user).Render(r.Context(), w)
 }
@@ -103,11 +115,7 @@ func (p *PageHandler) Admin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	user := &templates.CurrentUser{
-		Username: principal.Username,
-		Role:     string(principal.Role),
-		IsAdmin:  principal.IsAdmin(),
-	}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.Admin(user).Render(r.Context(), w)
 }
@@ -117,11 +125,7 @@ func (p *PageHandler) Perfil(w http.ResponseWriter, r *http.Request) {
 	if principal == nil {
 		return
 	}
-	user := &templates.CurrentUser{
-		Username: principal.Username,
-		Role:     string(principal.Role),
-		IsAdmin:  principal.IsAdmin(),
-	}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.Perfil(user).Render(r.Context(), w)
 }
@@ -134,11 +138,7 @@ func (p *PageHandler) Verificacion(w http.ResponseWriter, r *http.Request) {
 	if principal == nil {
 		return
 	}
-	user := &templates.CurrentUser{
-		Username: principal.Username,
-		Role:     string(principal.Role),
-		IsAdmin:  principal.IsAdmin(),
-	}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.Verificacion(user).Render(r.Context(), w)
 }
@@ -148,7 +148,7 @@ func (p *PageHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 	if principal == nil {
 		return
 	}
-	user := &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.Endosar(user).Render(r.Context(), w)
 }
@@ -158,7 +158,7 @@ func (p *PageHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 	if principal == nil {
 		return
 	}
-	user := &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.PagarAnular(user).Render(r.Context(), w)
 }
@@ -170,7 +170,7 @@ func (p *PageHandler) Ceder(w http.ResponseWriter, r *http.Request) {
 	if principal == nil {
 		return
 	}
-	user := &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
+	user := usuarioActual(principal)
 	w.Header().Set("Content-Type", "text/html")
 	templates.Ceder(user).Render(r.Context(), w)
 }
@@ -179,10 +179,7 @@ func (p *PageHandler) Ceder(w http.ResponseWriter, r *http.Request) {
 // URL to point an integrator at. Public: the specs describe the interface, not
 // anyone's data.
 func (p *PageHandler) ApiDocs(w http.ResponseWriter, r *http.Request) {
-	var user *templates.CurrentUser
-	if principal := auth.GetPrincipal(r); principal != nil {
-		user = &templates.CurrentUser{Username: principal.Username, Role: string(principal.Role), IsAdmin: principal.IsAdmin()}
-	}
+	user := usuarioActual(auth.GetPrincipal(r))
 
 	var specs []*apidocs.Spec
 	var problemas string

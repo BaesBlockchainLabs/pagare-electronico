@@ -62,13 +62,33 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// ExigirVerificacion bloquea las operaciones sobre pagarés a quien no tenga la
-// identidad validada contra su DNI.
+// ExigirVerificacionPagina manda a validar su identidad a quien entre a una
+// página sin haberlo hecho.
 //
 // activo dice si la verificación está configurada: cuando no lo está —en
 // desarrollo y en los tests— el guardia no estorba, porque nadie podría
 // verificarse aunque quisiera. Los administradores quedan fuera: son quienes
 // tienen que poder desatascar una cuenta.
+func ExigirVerificacionPagina(activo bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := GetPrincipal(r)
+			if !activo || p == nil || p.IsAdmin() || p.Verificado {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Sin identidad validada no hay nada que hacer en la aplicación, así
+			// que se va a la única pantalla que sí sirve de algo. Ojo al montarlo:
+			// /verificacion y /perfil tienen que quedar fuera de este grupo o el
+			// redirect se muerde la cola.
+			http.Redirect(w, r, "/verificacion", http.StatusSeeOther)
+		})
+	}
+}
+
+// ExigirVerificacion bloquea las llamadas de API que operan sobre pagarés a
+// quien no tenga la identidad validada. Es el equivalente en JSON de
+// ExigirVerificacionPagina: un redirect no le sirve de nada a un fetch.
 func ExigirVerificacion(activo bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -25,6 +25,46 @@ func pide(t *testing.T, activo bool, p *Principal) int {
 	return w.Code
 }
 
+// El equivalente para páginas manda a validar en vez de devolver JSON: un
+// redirect es lo único que un navegador entiende aquí.
+func TestExigirVerificacionPagina(t *testing.T) {
+	casos := []struct {
+		nombre    string
+		activo    bool
+		principal *Principal
+		esperado  int
+		destino   string
+	}{
+		{"sin verificación configurada no estorba", false,
+			&Principal{UserID: "1", Role: RoleUser}, http.StatusOK, ""},
+		{"usuario sin verificar va a validarse", true,
+			&Principal{UserID: "1", Role: RoleUser}, http.StatusSeeOther, "/verificacion"},
+		{"usuario verificado pasa", true,
+			&Principal{UserID: "1", Role: RoleUser, Verificado: true}, http.StatusOK, ""},
+		{"el administrador pasa", true,
+			&Principal{UserID: "1", Role: RoleAdmin}, http.StatusOK, ""},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			h := ExigirVerificacionPagina(c.activo)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			r := httptest.NewRequest(http.MethodGet, "/pagares/nuevo", nil)
+			r = r.WithContext(ContextWithPrincipal(r.Context(), c.principal))
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			if w.Code != c.esperado {
+				t.Errorf("código = %d, se esperaba %d", w.Code, c.esperado)
+			}
+			if c.destino != "" && w.Header().Get("Location") != c.destino {
+				t.Errorf("destino = %q, se esperaba %q", w.Header().Get("Location"), c.destino)
+			}
+		})
+	}
+}
+
 func TestExigirVerificacion(t *testing.T) {
 	casos := []struct {
 		nombre    string

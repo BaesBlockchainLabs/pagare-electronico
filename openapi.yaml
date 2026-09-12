@@ -818,6 +818,61 @@ paths:
                 $ref: '#/components/schemas/SimpleOkResponse'
         4XX:
           $ref: '#/components/responses/Error'
+  /admin/usuarios/{id}/verificacion:
+    post:
+      tags:
+      - Administración
+      summary: Mandar al usuario a validar su identidad
+      description: >
+        Crea el envío de validación contra Logalty para ese usuario; el portal le manda el enlace por
+        SMS y correo. Si ya tenía una validación en curso devuelve esa, sin crear un segundo envío
+        —que sería un segundo SMS—. Falla si el usuario no tiene móvil o si ya está verificado.
+      operationId: adminEnviarVerificacion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Validación enviada o ya en curso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+  /admin/verificaciones/refrescar:
+    post:
+      tags:
+      - Administración
+      summary: Comprobar las validaciones pendientes
+      description: >
+        Consulta en el portal todas las validaciones pendientes y resuelve las que ya han terminado,
+        descargando su certificado y volcando los datos en el usuario. Hace falta porque el portal
+        tarda en registrar el resultado y no siempre hay alguien mirando su pantalla.
+      operationId: adminRefrescarVerificaciones
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SimpleOkResponse'
+                - type: object
+                  properties:
+                    revisadas:
+                      type: integer
+                      description: Validaciones pendientes consultadas.
+                    resueltas:
+                      type: integer
+                      description: De ésas, las que han dejado de estar pendientes.
+        4XX:
+          $ref: '#/components/responses/Error'
   /admin/usuarios/{id}/pubkeys:
     post:
       tags:

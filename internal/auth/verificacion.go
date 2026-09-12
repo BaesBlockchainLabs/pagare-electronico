@@ -119,6 +119,37 @@ func (s *Store) UltimaVerificacion(userID string) (*Verificacion, error) {
 	return &v, nil
 }
 
+// VerificacionesPendientes devuelve los intentos que todavía pueden resolverse,
+// del más antiguo al más reciente: son los que hay que ir a consultar al
+// portal.
+func (s *Store) VerificacionesPendientes() ([]*Verificacion, error) {
+	rows, err := s.db.Query(`
+		SELECT id, user_id, referencia, COALESCE(guid, ''), estado, COALESCE(motivo, ''),
+		       COALESCE(token_id, ''), COALESCE(validation_id, ''),
+		       COALESCE(hash_declaracion, ''), creada_at
+		FROM verificaciones_identidad
+		WHERE estado = ?
+		ORDER BY creada_at
+	`, string(VerificacionPendiente))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*Verificacion
+	for rows.Next() {
+		var v Verificacion
+		var estado string
+		if err := rows.Scan(&v.ID, &v.UserID, &v.Referencia, &v.GUID, &estado, &v.Motivo,
+			&v.TokenID, &v.ValidationID, &v.HashDeclaracion, &v.CreadaAt); err != nil {
+			continue
+		}
+		v.Estado = EstadoVerificacion(estado)
+		out = append(out, &v)
+	}
+	return out, rows.Err()
+}
+
 // AnotarGUID guarda el GUID que el portal asigna al envío, que en los envíos
 // asíncronos no está disponible hasta pasado un rato.
 func (s *Store) AnotarGUID(verificacionID, guid string) error {

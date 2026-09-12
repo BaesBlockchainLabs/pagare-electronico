@@ -162,12 +162,28 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 // arrancarVerificacion crea el envío de validación del recién registrado y
-// devuelve lo que el alta le enseña. Devuelve nil cuando la verificación no
-// está configurada o el portal no responde.
+// devuelve lo que el alta le enseña. Devuelve nil sólo cuando la verificación
+// no está configurada.
+//
+// Que el portal falle no puede dejar la respuesta sin este bloque: es lo que
+// le dice al alta que mande al usuario a /verificacion, y ahí es donde puede
+// reintentar y ver qué ha pasado. Sin él se quedaría dentro de la aplicación
+// sin poder hacer nada ni saber por qué.
 func (h *Handlers) arrancarVerificacion(r *http.Request, u *User) map[string]interface{} {
 	if !h.identidad.Activo() {
 		return nil
 	}
+
+	falloAlArrancar := func(err error) map[string]interface{} {
+		fmt.Printf("[register] no se pudo iniciar la validación de %s: %v\n", u.Username, err)
+		return map[string]interface{}{
+			"ok":      true,
+			"activa":  true,
+			"estado":  string(VerificacionNoIniciada),
+			"mensaje": "No se pudo empezar la validación de tu identidad. Puedes reintentarlo desde aquí.",
+		}
+	}
+
 	envio, err := h.identidad.Iniciar(r.Context(), identidad.Solicitud{
 		Referencia: u.ID,
 		Nombre:     nombreParaElPortal(u),
@@ -175,8 +191,7 @@ func (h *Handlers) arrancarVerificacion(r *http.Request, u *User) map[string]int
 		Movil:      u.Telefono,
 	})
 	if err != nil {
-		fmt.Printf("[register] no se pudo iniciar la validación de %s: %v\n", u.Username, err)
-		return nil
+		return falloAlArrancar(err)
 	}
 	v := &Verificacion{
 		UserID:     u.ID,
@@ -185,8 +200,7 @@ func (h *Handlers) arrancarVerificacion(r *http.Request, u *User) map[string]int
 		Estado:     VerificacionPendiente,
 	}
 	if err := h.store.CrearVerificacion(v); err != nil {
-		fmt.Printf("[register] no se pudo registrar la validación de %s: %v\n", u.Username, err)
-		return nil
+		return falloAlArrancar(err)
 	}
 	return respuestaVerificacion(v, "")
 }

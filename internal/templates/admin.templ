@@ -66,8 +66,13 @@ templ Admin(user *CurrentUser) {
 					<div class="field u-search">
 						<input type="text" id="user-search" placeholder="Buscar por usuario, nombre o NIF…" oninput="renderUsers()"/>
 					</div>
+					<button type="button" class="btn btn-outline btn-sm" onclick="refrescarVerificaciones()">
+						Comprobar validaciones
+					</button>
 					<span class="u-count" id="user-count"></span>
 				</div>
+
+				<div id="verif-msg" class="alert hidden" style="margin-bottom:14px;"></div>
 
 				<div id="users-error" class="alert alert-error hidden" style="margin-bottom:14px;"></div>
 
@@ -79,12 +84,13 @@ templ Admin(user *CurrentUser) {
 								<th>Nombre completo</th>
 								<th>NIF</th>
 								<th>Localidad</th>
+								<th>Identidad</th>
 								<th>Claves</th>
 								<th style="text-align:right;">Acciones</th>
 							</tr>
 						</thead>
 						<tbody id="users-tbody">
-							<tr><td colspan="6" class="u-sub">Cargando usuarios…</td></tr>
+							<tr><td colspan="7" class="u-sub">Cargando usuarios…</td></tr>
 						</tbody>
 					</table>
 				</div>
@@ -278,7 +284,7 @@ templ Admin(user *CurrentUser) {
 			document.getElementById('user-count').textContent = list.length + ' / ' + allUsers.length + ' usuario(s)';
 
 			var tb = document.getElementById('users-tbody');
-			if (list.length === 0) { tb.innerHTML = '<tr><td colspan="6" class="u-sub">Sin resultados.</td></tr>'; return; }
+			if (list.length === 0) { tb.innerHTML = '<tr><td colspan="7" class="u-sub">Sin resultados.</td></tr>'; return; }
 
 			tb.innerHTML = list.map(function(u){
 				var nombre = ((u.nombre||'') + ' ' + (u.apellido||'')).trim() || '<span class="u-sub">—</span>';
@@ -292,13 +298,72 @@ templ Admin(user *CurrentUser) {
 					'<td>' + esc(((u.nombre||'') + ' ' + (u.apellido||'')).trim()) + (((u.nombre||'')+(u.apellido||'')) ? '' : '<span class="u-sub">—</span>') + '</td>' +
 					'<td class="u-mono">' + (esc(u.nif) || '<span class="u-sub">—</span>') + '</td>' +
 					'<td>' + esc([u.localidad, u.pais].filter(Boolean).join(', ')) + (((u.localidad||'')||(u.pais||'')) ? '' : '<span class="u-sub">—</span>') + '</td>' +
+					'<td>' + identidadCelda(u) + '</td>' +
 					'<td>' + (nkeys ? nkeys + ' clave(s)' : '<span class="u-sub">sin claves</span>') + '</td>' +
 					'<td><div class="u-actions">' +
+						(u.verificacion === 'verificada' ? '' :
+							'<button class="btn btn-gold btn-xs" onclick="enviarVerificacion(\'' + u.id + '\', \'' + esc(u.username) + '\')">' +
+							(u.verificacion === 'pendiente' ? 'Reenviar DNI' : 'Validar DNI') + '</button>') +
 						'<button class="btn btn-outline btn-xs" onclick="openEditModal(\'' + u.id + '\')">Editar</button>' +
 						'<button class="btn btn-danger btn-xs" onclick="deleteUser(\'' + u.id + '\', \'' + esc(u.username) + '\')">Eliminar</button>' +
 					'</div></td>' +
 				'</tr>';
 			}).join('');
+		}
+
+		// La identidad de un usuario en una celda: el estado de su validación
+		// contra el DNI y, cuando la superó, el documento con que lo hizo.
+		function identidadCelda(u) {
+			var estados = {
+				verificada: ['role-badge role-admin', 'verificada'],
+				pendiente:  ['role-badge role-user', 'pendiente'],
+				fallida:    ['role-badge role-user', 'fallida']
+			};
+			var e = estados[u.verificacion];
+			if (!e) return '<span class="u-sub">sin validar</span>';
+			var extra = '';
+			if (u.verificacion === 'verificada') {
+				var d = [u.doc_tipo, (u.verificado_at || '').slice(0, 10)].filter(Boolean).join(' · ');
+				if (d) extra = '<div class="u-sub">' + esc(d) + '</div>';
+			}
+			return '<span class="' + e[0] + '">' + e[1] + '</span>' + extra;
+		}
+
+		function verifMensaje(texto, error) {
+			var el = document.getElementById('verif-msg');
+			el.textContent = texto;
+			el.className = 'alert ' + (error ? 'alert-error' : 'alert-success');
+			el.classList.remove('hidden');
+		}
+
+		// Manda al usuario el enlace para leer el chip de su DNI. El servidor no
+		// duplica una validación en curso, así que reenviar es seguro.
+		async function enviarVerificacion(id, username) {
+			if (!confirm('¿Enviar a ' + username + ' el enlace para validar su DNI?')) return;
+			try {
+				var r = await fetch('/admin/usuarios/' + id + '/verificacion', { method: 'POST' });
+				var data = await r.json();
+				verifMensaje(data.msg || (data.ok ? 'Validación enviada.' : 'No se pudo enviar.'), !data.ok);
+			} catch (e) {
+				verifMensaje('Error de red al enviar la validación.', true);
+				return;
+			}
+			loadUsers();
+		}
+
+		// Pregunta al portal por todas las validaciones pendientes: es lo que
+		// recoge el certificado de quien ya ha leído su DNI.
+		async function refrescarVerificaciones() {
+			verifMensaje('Consultando el portal…', false);
+			try {
+				var r = await fetch('/admin/verificaciones/refrescar', { method: 'POST' });
+				var data = await r.json();
+				verifMensaje(data.msg || (data.ok ? 'Consultado.' : 'No se pudo consultar.'), !data.ok);
+			} catch (e) {
+				verifMensaje('Error de red al consultar las validaciones.', true);
+				return;
+			}
+			loadUsers();
 		}
 
 		function findUser(id) { return allUsers.filter(function(u){ return u.id === id; })[0]; }

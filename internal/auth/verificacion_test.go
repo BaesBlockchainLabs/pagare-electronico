@@ -196,3 +196,51 @@ func TestVerificacion_ElPerfilNoReescribeLoVerificado(t *testing.T) {
 		t.Errorf("la dirección y el contacto tienen que poder cambiarse: %+v", got)
 	}
 }
+
+// El refresco de administración trabaja sobre esta lista, así que sólo puede
+// traer las que todavía pueden resolverse.
+func TestVerificacionesPendientes(t *testing.T) {
+	s := newTestStore(t)
+
+	pendiente := usuarioSinVerificar(t, s, "eva")
+	vPendiente := &Verificacion{UserID: pendiente.ID, Referencia: pendiente.ID}
+	if err := s.CrearVerificacion(vPendiente); err != nil {
+		t.Fatalf("CrearVerificacion: %v", err)
+	}
+
+	fallida := usuarioSinVerificar(t, s, "fran")
+	vFallida := &Verificacion{UserID: fallida.ID, Referencia: fallida.ID}
+	if err := s.CrearVerificacion(vFallida); err != nil {
+		t.Fatalf("CrearVerificacion: %v", err)
+	}
+	if err := s.FallarVerificacion(vFallida.ID, fallida.ID, "Tiempo Expirado"); err != nil {
+		t.Fatalf("FallarVerificacion: %v", err)
+	}
+
+	verificada := usuarioSinVerificar(t, s, "gema")
+	vHecha := &Verificacion{UserID: verificada.ID, Referencia: verificada.ID}
+	if err := s.CrearVerificacion(vHecha); err != nil {
+		t.Fatalf("CrearVerificacion: %v", err)
+	}
+	if err := s.ResolverVerificacion(vHecha.ID, verificada.ID, *vHecha,
+		CamposIdentidad{NIF: "00000000T", Nombre: "NOMBRE"}); err != nil {
+		t.Fatalf("ResolverVerificacion: %v", err)
+	}
+
+	// Un usuario que nunca lo intentó no aparece: no hay nada que consultar.
+	usuarioSinVerificar(t, s, "hugo")
+
+	pendientes, err := s.VerificacionesPendientes()
+	if err != nil {
+		t.Fatalf("VerificacionesPendientes: %v", err)
+	}
+	if len(pendientes) != 1 {
+		t.Fatalf("pendientes = %d, se esperaba 1", len(pendientes))
+	}
+	if pendientes[0].UserID != pendiente.ID {
+		t.Errorf("pendiente = %q, se esperaba %q", pendientes[0].UserID, pendiente.ID)
+	}
+	if pendientes[0].Referencia == "" {
+		t.Error("la referencia hace falta para consultar el envío en el portal")
+	}
+}

@@ -73,7 +73,10 @@ templ Login(user *CurrentUser) {
 			if (data && data.ok) {
 				// Tras un alta con validación de identidad se va a la pantalla
 				// de verificación, no al panel: la cuenta todavía no opera.
-				var destino = (data.verificacion && data.verificacion.estado === 'pendiente') ? '/verificacion' : '/';
+				// También cuando la validación no llegó a arrancar, que es
+				// justo cuando hay que reintentarla.
+				var v = data.verificacion;
+				var destino = (v && v.estado !== 'verificada') ? '/verificacion' : '/';
 				ok.textContent = 'Sesión iniciada. Redirigiendo…';
 				ok.classList.remove('hidden');
 				setTimeout(function(){ window.location.href = destino; }, 250);

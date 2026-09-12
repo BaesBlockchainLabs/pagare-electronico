@@ -85,6 +85,11 @@ func main() {
 		log.Printf("⚠️  validación de identidad DESACTIVADA (define LOGALTY_* en .env para exigirla)")
 	}
 
+	// Handlers de autenticación: los usa tanto /api/auth como la administración,
+	// que puede mandar a validar a un usuario y refrescar las validaciones.
+	authH := auth.NewHandlers(authStore, cryptoSvc)
+	authH.SetIdentidad(identidadSvc)
+
 	// Pagaré handler signs on behalf of the logged-in user using their sealed
 	// private key resolved from the store (no private key handled client-side).
 	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc, authStore)
@@ -133,14 +138,22 @@ func main() {
 		})
 	}
 
-	// Protected pages (require authentication; admin sees everything exactly as before)
-	r.Get("/", pageHandler.Dashboard)
-	r.Get("/pagares", pageHandler.Dashboard)
-	r.Get("/pagares/nuevo", pageHandler.NuevoPagare)
-	r.Get("/pagares/historico", pageHandler.Historico)
-	r.Get("/pagares/endosar", pageHandler.Endosar)
-	r.Get("/pagares/ceder", pageHandler.Ceder)
-	r.Get("/pagares/pagar", pageHandler.PagarAnular)
+	// Protected pages (require authentication; admin sees everything exactly as before).
+	// Quien no ha validado su identidad sale de aquí a /verificacion: no puede
+	// hacer nada en estas pantallas y dejarle entrar sólo es enseñarle un
+	// formulario que va a fallar al enviarlo.
+	r.Group(func(r chi.Router) {
+		r.Use(auth.ExigirVerificacionPagina(identidadSvc.Activo()))
+		r.Get("/", pageHandler.Dashboard)
+		r.Get("/pagares", pageHandler.Dashboard)
+		r.Get("/pagares/nuevo", pageHandler.NuevoPagare)
+		r.Get("/pagares/historico", pageHandler.Historico)
+		r.Get("/pagares/endosar", pageHandler.Endosar)
+		r.Get("/pagares/ceder", pageHandler.Ceder)
+		r.Get("/pagares/pagar", pageHandler.PagarAnular)
+	})
+	// Fuera del grupo a propósito: son las dos pantallas que un usuario sin
+	// validar sí necesita, y /verificacion además se redirigiría a sí misma.
 	r.Get("/perfil", pageHandler.Perfil)
 	r.Get("/verificacion", pageHandler.Verificacion)
 
@@ -177,6 +190,40 @@ func main() {
 					views = append(views, adminUserView(u))
 				}
 				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "usuarios": views})
+			})
+
+			// Mandar a un usuario a validar su identidad. Devuelve la
+			// validación en curso si ya la tenía, para no duplicar el envío ni
+			// el SMS.
+			r.Post("/usuarios/{id}/verificacion", func(w http.ResponseWriter, r *http.Request) {
+				v, err := authH.EnviarVerificacion(r.Context(), chi.URLParam(r, "id"))
+				if err != nil {
+					handler.WriteJSON(w, auth.EstadoHTTPVerificacion(err), map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{
+					"ok": true, "msg": "Validación enviada: el usuario recibirá el enlace por SMS y correo.",
+					"estado": string(v.Estado),
+				})
+			})
+
+			// Consultar en el portal todas las validaciones pendientes y
+			// resolver las que ya han terminado. El portal tarda en registrar
+			// el resultado y nadie está mirando, así que hace falta un empujón
+			// manual.
+			r.Post("/verificaciones/refrescar", func(w http.ResponseWriter, r *http.Request) {
+				revisadas, resueltas, err := authH.RefrescarVerificaciones(r.Context())
+				if err != nil {
+					handler.WriteJSON(w, auth.EstadoHTTPVerificacion(err), map[string]interface{}{"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{
+					"ok":        true,
+					"revisadas": revisadas,
+					"resueltas": resueltas,
+					"msg": fmt.Sprintf("%d validación(es) pendiente(s) consultada(s), %d resuelta(s).",
+						revisadas, resueltas),
+				})
 			})
 
 			// Create a platform user (JSON or form).
@@ -326,8 +373,6 @@ func main() {
 		r.Get("/system/time", proxyToBCF(bcfClient, "Time"))
 
 		// Authentication endpoints must be reachable without a prior session.
-		authH := auth.NewHandlers(authStore, cryptoSvc)
-		authH.SetIdentidad(identidadSvc)
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", authH.Login)
 			r.Post("/register", authH.Register)
@@ -491,7 +536,19 @@ func adminUserView(u *auth.User) map[string]interface{} {
 		"pais":          u.Pais,
 		"pub_keys":      pubKeys,
 		"created_at":    u.CreatedAt.Format(time.RFC3339),
+		// Identidad validada contra el DNI: vacío cuando nunca se intentó.
+		"verificacion":  string(u.Verificacion),
+		"verificado_at": fechaOVacio(u.VerificadoAt),
+		"doc_tipo":      u.DocTipo,
 	}
+}
+
+// fechaOVacio formatea una fecha opcional para el JSON de administración.
+func fechaOVacio(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 // userInput carries the editable fields submitted by the admin (JSON or form).
