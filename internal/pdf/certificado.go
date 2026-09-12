@@ -76,7 +76,7 @@ func Certificado(in CertificadoInput) ([]byte, error) {
 	if err := p.Output(&buf); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return sinColeccion(buf.Bytes()), nil
 }
 
 const margenCert = 22.0

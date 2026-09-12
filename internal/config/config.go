@@ -45,15 +45,30 @@ type LogaltyConfig struct {
 	// receptor tenga móvil.
 	Empresa string
 	Tipo    string
+	// TipoContrato es el tipo de envío de contratación, con el que se firman
+	// los PDFs. Es necesariamente otro: el envío síncrono —el único que
+	// devuelve la URL de firma en el acto— sólo acepta tipos de contratación,
+	// y rechaza los demás con el código 122.
+	TipoContrato string
 	// Portal es la base del portal web de Logalty. Sólo se usa para enlazar
 	// desde la administración; el flujo del usuario no pasa por ahí.
 	Portal string
 }
 
-// Activa indica si hay configuración suficiente para hablar con Logalty.
+// Activa indica si hay configuración suficiente para validar identidades.
 func (l LogaltyConfig) Activa() bool {
-	return l.Endpoint != "" && l.Usuario != "" && l.Password != "" &&
-		l.Empresa != "" && l.Tipo != ""
+	return l.credenciales() && l.Tipo != ""
+}
+
+// FirmaActiva indica si hay configuración suficiente para firmar PDFs. Es
+// independiente de Activa: se puede tener una cosa y no la otra, porque cada
+// una necesita su propio tipo de envío.
+func (l LogaltyConfig) FirmaActiva() bool {
+	return l.credenciales() && l.TipoContrato != ""
+}
+
+func (l LogaltyConfig) credenciales() bool {
+	return l.Endpoint != "" && l.Usuario != "" && l.Password != "" && l.Empresa != ""
 }
 
 type BlockchainConfig struct {
@@ -101,12 +116,13 @@ func Load() (*Config, error) {
 			Network: network,
 		},
 		Logalty: LogaltyConfig{
-			Endpoint: os.Getenv("LOGALTY_ENDPOINT"),
-			Usuario:  os.Getenv("LOGALTY_USER"),
-			Password: os.Getenv("LOGALTY_PASSWORD"),
-			Empresa:  os.Getenv("LOGALTY_COMPANY"),
-			Tipo:     os.Getenv("LOGALTY_TYPE"),
-			Portal:   os.Getenv("LOGALTY_PORTAL"),
+			Endpoint:     os.Getenv("LOGALTY_ENDPOINT"),
+			Usuario:      os.Getenv("LOGALTY_USER"),
+			Password:     os.Getenv("LOGALTY_PASSWORD"),
+			Empresa:      os.Getenv("LOGALTY_COMPANY"),
+			Tipo:         os.Getenv("LOGALTY_TYPE"),
+			TipoContrato: os.Getenv("LOGALTY_TYPE_CONTRACT"),
+			Portal:       os.Getenv("LOGALTY_PORTAL"),
 		},
 	}, nil
 }

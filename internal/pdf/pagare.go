@@ -84,7 +84,7 @@ func Generate(in Input) ([]byte, error) {
 	if err := p.Output(&buf); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return sinColeccion(buf.Bytes()), nil
 }
 
 // frame draws the paper background and the double gold border shared by both sides.
