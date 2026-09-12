@@ -3,7 +3,7 @@ module pagare
 go 1.26.3
 
 require (
-	github.com/BaesBlockchainLabs/logalsend-go v0.0.0-20260911222458-c0330d742485
+	github.com/BaesBlockchainLabs/logalsend-go v0.0.0-20260912153932-15852432d136
 	github.com/a-h/templ v0.3.1001
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-pdf/fpdf v0.9.0

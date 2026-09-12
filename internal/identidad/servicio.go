@@ -73,10 +73,12 @@ type Envio struct {
 // al usuario, por SMS y correo, con el enlace para leer su DNI.
 //
 // El envío síncrono —el que devolvería el enlace en la misma llamada, para
-// llevar al usuario directamente— no sirve aquí: sólo admite tipos de servicio
-// de aceptación, y una validación de documentos de identidad no lo es. El
-// portal lo rechaza con el código 122, "Type Service Incorrect Must be
-// Acceptance".
+// llevar al usuario directamente— no sirve aquí: sólo admite tipos de
+// contratación, y una validación de documentos de identidad no lo es. El
+// portal lo rechaza con el código 122, "el tipo de envío no es contratación".
+//
+// Se usa la variante multirreceptor aunque haya un solo receptor: la guía de
+// integración marca shippingSend como obsoleta y cubre este caso igual.
 func (s *Servicio) Iniciar(ctx context.Context, sol Solicitud) (*Envio, error) {
 	if s == nil {
 		return nil, ErrDesactivado
@@ -87,11 +89,14 @@ func (s *Servicio) Iniciar(ctx context.Context, sol Solicitud) (*Envio, error) {
 
 	// Sin documento: una validación de identidad no firma nada, sólo lee el
 	// chip y emite la declaración de atributos.
-	res, err := s.cliente.ShippingSend(ctx, wsdatachannel.SendRequest{
-		CompanyID: s.empresa,
-		TypeID:    s.tipo,
+	//
+	// La referencia va en la petición y no en el receptor: es de donde la lee
+	// el portal en esta operación, y la del receptor se ignora.
+	res, err := s.cliente.ShippingSendMultiReceiver(ctx, wsdatachannel.MultiReceiverSendRequest{
+		CompanyID:  s.empresa,
+		TypeID:     s.tipo,
+		ExternalID: sol.Referencia,
 		Receivers: []wsdatachannel.Receiver{{
-			ExternalID:     sol.Referencia,
 			ReceiverName:   sol.Nombre,
 			ReceiverEmail:  sol.Email,
 			ReceiverMobile: sol.Movil,
@@ -100,13 +105,19 @@ func (s *Servicio) Iniciar(ctx context.Context, sol Solicitud) (*Envio, error) {
 	if err != nil {
 		return nil, fmt.Errorf("identidad: creando el envío: %w", err)
 	}
-	if err := res.Err(); err != nil {
+	if len(res) == 0 {
+		// El envío puede haberse creado igualmente, así que callar sería lo
+		// peor: invitaría a reintentar y crear un segundo.
+		return nil, fmt.Errorf("identidad: el portal aceptó la llamada sin devolver resultado; " +
+			"comprueba en el portal si el envío se creó antes de reintentar")
+	}
+	if err := res[0].Err(); err != nil {
 		return nil, fmt.Errorf("identidad: el portal rechazó el envío: %w", err)
 	}
 
 	envio := &Envio{Referencia: sol.Referencia}
-	if len(res.Documents) > 0 {
-		envio.GUID = res.Documents[0].GUID
+	if docs := res[0].Documents; len(docs) > 0 {
+		envio.GUID = docs[0].GUID
 	}
 	return envio, nil
 }

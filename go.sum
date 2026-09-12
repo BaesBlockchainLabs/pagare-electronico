@@ -1,5 +1,7 @@
 github.com/BaesBlockchainLabs/logalsend-go v0.0.0-20260911222458-c0330d742485 h1:lM88sIblSAK5mNbzNf2rUfFh5ZQRz30kyRnvacE6yLE=
 github.com/BaesBlockchainLabs/logalsend-go v0.0.0-20260911222458-c0330d742485/go.mod h1:DDSrA3OP5OszRmoVQ9SD/3rwxz5oL4swY8bx28MyAJk=
+github.com/BaesBlockchainLabs/logalsend-go v0.0.0-20260912153932-15852432d136 h1:mMphzav55B8HgrG/n3WqxhtckXgdhJ+dQqzAuB1v9Io=
+github.com/BaesBlockchainLabs/logalsend-go v0.0.0-20260912153932-15852432d136/go.mod h1:DDSrA3OP5OszRmoVQ9SD/3rwxz5oL4swY8bx28MyAJk=
 github.com/a-h/templ v0.3.1001 h1:yHDTgexACdJttyiyamcTHXr2QkIeVF1MukLy44EAhMY=
 github.com/a-h/templ v0.3.1001/go.mod h1:oCZcnKRf5jjsGpf2yELzQfodLphd2mwecwG4Crk5HBo=
 github.com/beevik/etree v1.8.0 h1:TOfpQtMZ3ZuG9f2ZnLvsbOOVxrjTvE0qbYb5D0p44j0=
