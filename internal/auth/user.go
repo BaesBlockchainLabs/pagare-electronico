@@ -24,6 +24,7 @@ type User struct {
 	Apellido     string `json:"apellido,omitempty"`
 	Direccion    string `json:"direccion,omitempty"`
 	Localidad    string `json:"localidad,omitempty"`
+	Provincia    string `json:"provincia,omitempty"`
 	CodigoPostal string `json:"codigo_postal,omitempty"`
 	Pais         string `json:"pais,omitempty"`
 

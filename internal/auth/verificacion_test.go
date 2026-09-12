@@ -65,7 +65,10 @@ func TestVerificacion_ResolverVuelcaLosDatosDelDNI(t *testing.T) {
 		Nombre:          "NOMBRE",
 		Apellido:        "APELLIDOUNO APELLIDODOS",
 		Direccion:       "CALLE FALSA 1",
-		Nacionalidad:    "ESP",
+		Localidad:       "CIUDAD",
+		Provincia:       "PROVINCIA",
+		Pais:            "ES",
+		Nacionalidad:    "España",
 		FechaNacimiento: "1980-03-04",
 		DocTipo:         "DNI",
 		DocNumero:       "ABC000000",
@@ -84,7 +87,10 @@ func TestVerificacion_ResolverVuelcaLosDatosDelDNI(t *testing.T) {
 		{"apellido", got.Apellido, "APELLIDOUNO APELLIDODOS"},
 		{"display_name", got.DisplayName, "NOMBRE APELLIDOUNO APELLIDODOS"},
 		{"dirección", got.Direccion, "CALLE FALSA 1"},
-		{"nacionalidad", got.Nacionalidad, "ESP"},
+		{"localidad", got.Localidad, "CIUDAD"},
+		{"provincia", got.Provincia, "PROVINCIA"},
+		{"país", got.Pais, "ES"},
+		{"nacionalidad", got.Nacionalidad, "España"},
 		{"fecha de nacimiento", got.FechaNacimiento, "1980-03-04"},
 		{"tipo de documento", got.DocTipo, "DNI"},
 		{"número de soporte", got.DocNumero, "ABC000000"},
@@ -108,6 +114,10 @@ func TestVerificacion_ResolverVuelcaLosDatosDelDNI(t *testing.T) {
 	}
 	if !p.Verificado {
 		t.Error("el principal tiene que quedar verificado")
+	}
+
+	if got.CodigoPostal != "" {
+		t.Errorf("el certificado no trae código postal; no debería inventarse uno: %q", got.CodigoPostal)
 	}
 
 	// La evidencia queda anotada para poder volver a pedir el certificado.
@@ -242,5 +252,40 @@ func TestVerificacionesPendientes(t *testing.T) {
 	}
 	if pendientes[0].Referencia == "" {
 		t.Error("la referencia hace falta para consultar el envío en el portal")
+	}
+}
+
+// El chip del DNI no lleva código postal, así que el que haya puesto el usuario
+// tiene que sobrevivir a la verificación: si no, se le borra un dato bueno.
+func TestVerificacion_NoBorraLoQueElDNINoTrae(t *testing.T) {
+	s := newTestStore(t)
+	u := usuarioSinVerificar(t, s, "ivan")
+	if err := s.UpdateProfile(u.ID, ProfileInput{
+		Email: "ivan@example.com", CodigoPostal: "03640", Localidad: "A MANO", Pais: "PT",
+	}); err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+
+	v := &Verificacion{UserID: u.ID, Referencia: u.ID}
+	if err := s.CrearVerificacion(v); err != nil {
+		t.Fatalf("CrearVerificacion: %v", err)
+	}
+	// Una verificación que no trae localidad ni país tampoco puede vaciarlos.
+	if err := s.ResolverVerificacion(v.ID, u.ID, *v, CamposIdentidad{
+		NIF: "00000000T", Nombre: "NOMBRE", Direccion: "CALLE FALSA 1",
+	}); err != nil {
+		t.Fatalf("ResolverVerificacion: %v", err)
+	}
+
+	got, err := s.GetByID(u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.CodigoPostal != "03640" {
+		t.Errorf("código postal = %q, se esperaba que sobreviviera", got.CodigoPostal)
+	}
+	if got.Localidad != "A MANO" || got.Pais != "PT" {
+		t.Errorf("un campo que el certificado no trae no puede vaciarse: localidad=%q pais=%q",
+			got.Localidad, got.Pais)
 	}
 }

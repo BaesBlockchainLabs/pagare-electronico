@@ -53,10 +53,17 @@ func (v *Verificacion) Pendiente() bool {
 // usuario. Vienen del documento, así que sustituyen a lo que hubiera: son más
 // fiables que cualquier cosa tecleada.
 type CamposIdentidad struct {
-	NIF             string
-	Nombre          string
-	Apellido        string
-	Direccion       string
+	NIF      string
+	Nombre   string
+	Apellido string
+
+	// El domicilio del documento. No trae código postal —el chip del DNI no lo
+	// lleva—, así que ése se queda como estaba y lo completa el usuario.
+	Direccion string
+	Localidad string
+	Provincia string
+	Pais      string
+
 	Nacionalidad    string
 	FechaNacimiento string
 	DocTipo         string
@@ -202,11 +209,15 @@ func (s *Store) ResolverVerificacion(verificacionID, userID string, v Verificaci
 		UPDATE users SET
 			nif = ?, nombre = ?, apellido = ?, display_name = ?,
 			direccion = COALESCE(NULLIF(?, ''), direccion),
+			localidad = COALESCE(NULLIF(?, ''), localidad),
+			provincia = COALESCE(NULLIF(?, ''), provincia),
+			pais      = COALESCE(NULLIF(?, ''), pais),
 			nacionalidad = ?, fecha_nacimiento = ?,
 			doc_tipo = ?, doc_numero = ?, doc_caducidad = ?,
 			verificacion_estado = ?, verificado_at = ?
 		WHERE id = ?
-	`, c.NIF, c.Nombre, c.Apellido, display, c.Direccion,
+	`, c.NIF, c.Nombre, c.Apellido, display,
+		c.Direccion, c.Localidad, c.Provincia, c.Pais,
 		c.Nacionalidad, c.FechaNacimiento,
 		c.DocTipo, c.DocNumero, c.DocCaducidad,
 		string(VerificacionVerificada), ahora, userID); err != nil {

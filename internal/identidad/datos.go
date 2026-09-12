@@ -36,7 +36,15 @@ type Datos struct {
 	FechaNacimiento string // ISO 8601, aaaa-mm-dd
 	LugarNacimiento string
 	Nacionalidad    string
-	Direccion       string
+
+	// El domicilio viene en un solo campo, "vía-municipio-provincia", y se
+	// reparte aquí. El chip del DNI no lleva código postal, así que ése sigue
+	// siendo cosa del usuario.
+	Direccion         string // la vía y el número
+	Localidad         string
+	Provincia         string
+	Pais              string // ISO de dos letras, del país emisor del documento
+	DomicilioCompleto string // el campo tal como lo da el portal
 
 	// Metodo es cómo se leyó el documento, "NFC" cuando fue del chip.
 	Metodo string
@@ -107,7 +115,12 @@ func DeCertificado(cert *wsdatachannel.IdentityCertificate) (*Datos, error) {
 		FechaNacimiento: soloFecha(a.BirthDate),
 		LugarNacimiento: primeroNoVacio(a.BirthMunicipality, a.BirthPlace),
 		Nacionalidad:    a.Nationality,
-		Direccion:       a.StreetAddress,
+
+		DomicilioCompleto: strings.TrimSpace(a.StreetAddress),
+		// NFC_SOD_COUNTRY_CODE es el país que emitió el documento. El domicilio
+		// sale de ese mismo documento, así que es el país al que pertenece la
+		// dirección; no es una inferencia sobre dónde vive hoy el titular.
+		Pais: strings.ToUpper(strings.TrimSpace(a.NFCCountryCode)),
 
 		Metodo: primeroNoVacio(a.Method, cert.Method),
 
@@ -115,6 +128,8 @@ func DeCertificado(cert *wsdatachannel.IdentityCertificate) (*Datos, error) {
 		ValidationID: cert.ValidationID,
 		Fecha:        cert.ResultDate.Time,
 	}
+
+	d.Direccion, d.Localidad, d.Provincia = partirDomicilio(d.DomicilioCompleto)
 
 	// SURNAME1/SURNAME2 no siempre vienen; algunos documentos sólo traen los
 	// dos apellidos juntos en SURNAME.
@@ -135,6 +150,34 @@ func DeCertificado(cert *wsdatachannel.IdentityCertificate) (*Datos, error) {
 		return nil, fmt.Errorf("identidad: el certificado no trae número de documento")
 	}
 	return d, nil
+}
+
+// partirDomicilio reparte el domicilio que da el certificado, que llega en un
+// solo campo con la forma "vía-municipio-provincia":
+//
+//	"POL. NO EL BULL 25-MONOVAR-ALICANTE/ALACANT"
+//
+// Municipio y provincia se toman de los dos últimos tramos y todo lo anterior
+// es la vía, porque el guion también aparece dentro de los nombres de calle
+// ("AVDA. RUIZ-PICASSO 3") y es el final lo que tiene forma fija. Un domicilio
+// con menos tramos de los esperados se devuelve entero como vía antes que
+// repartirlo mal.
+//
+// La provincia puede venir en las dos lenguas, "ALICANTE/ALACANT", y se deja
+// como está: es lo que pone el documento.
+func partirDomicilio(domicilio string) (via, localidad, provincia string) {
+	tramos := omitirVacios(strings.Split(domicilio, "-")...)
+	switch len(tramos) {
+	case 0:
+		return "", "", ""
+	case 1:
+		return tramos[0], "", ""
+	case 2:
+		return tramos[0], tramos[1], ""
+	default:
+		corte := len(tramos) - 2
+		return strings.Join(tramos[:corte], "-"), tramos[corte], tramos[corte+1]
+	}
 }
 
 // descripcionFallo prefiere el mensaje del portal y cae en el código cuando no

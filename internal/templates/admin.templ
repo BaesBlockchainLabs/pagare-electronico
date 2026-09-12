@@ -175,6 +175,10 @@ templ Admin(user *CurrentUser) {
 						<input type="text" id="m-localidad" placeholder="Madrid"/>
 					</div>
 					<div class="field">
+						<label class="form-label">Provincia</label>
+						<input type="text" id="m-provincia" placeholder="Madrid"/>
+					</div>
+					<div class="field">
 						<label class="form-label">Código Postal</label>
 						<input type="text" id="m-codigo_postal" placeholder="28001"/>
 					</div>
@@ -378,7 +382,7 @@ templ Admin(user *CurrentUser) {
 
 		// ---------- modal ----------
 		var modalMode = 'edit';
-		var MF = ['username','password','role','display_name','nombre','apellido','nif','email','telefono','direccion','localidad','codigo_postal','pais'];
+		var MF = ['username','password','role','display_name','nombre','apellido','nif','email','telefono','direccion','localidad','provincia','codigo_postal','pais'];
 
 		function setField(k, v) { var el = document.getElementById('m-' + k); if (el) el.value = (v == null ? '' : v); }
 
@@ -414,6 +418,7 @@ templ Admin(user *CurrentUser) {
 			setField('telefono', u.telefono);
 			setField('direccion', u.direccion);
 			setField('localidad', u.localidad);
+			setField('provincia', u.provincia);
 			setField('codigo_postal', u.codigo_postal);
 			setField('pais', u.pais);
 			setField('newpass', '');
@@ -451,6 +456,7 @@ templ Admin(user *CurrentUser) {
 				telefono: document.getElementById('m-telefono').value.trim(),
 				direccion: document.getElementById('m-direccion').value.trim(),
 				localidad: document.getElementById('m-localidad').value.trim(),
+				provincia: document.getElementById('m-provincia').value.trim(),
 				codigo_postal: document.getElementById('m-codigo_postal').value.trim(),
 				pais: document.getElementById('m-pais').value.trim()
 			};

@@ -83,6 +83,7 @@ func (s *Store) initSchema() error {
 			apellido TEXT,
 			direccion TEXT,
 			localidad TEXT,
+			provincia TEXT,
 			codigo_postal TEXT,
 			pais TEXT,
 			pub_keys TEXT,  -- stored as JSON array
@@ -150,6 +151,8 @@ func (s *Store) initSchema() error {
 	s.ensureColumn("users", "doc_tipo", "TEXT")
 	s.ensureColumn("users", "doc_numero", "TEXT")
 	s.ensureColumn("users", "doc_caducidad", "TEXT")
+	// La provincia sale del domicilio del DNI, que llega en un solo campo.
+	s.ensureColumn("users", "provincia", "TEXT")
 	return nil
 }
 
@@ -380,7 +383,8 @@ func (s *Store) List() []*User {
 		SELECT id, username, role, COALESCE(display_name, ''), COALESCE(nif, ''),
 		       COALESCE(email, ''), COALESCE(telefono, ''),
 		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
-		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
+		       COALESCE(localidad, ''), COALESCE(provincia, ''), COALESCE(codigo_postal, ''),
+		       COALESCE(pais, ''),
 		       COALESCE(verificacion_estado, ''), verificado_at,
 		       COALESCE(fecha_nacimiento, ''), COALESCE(nacionalidad, ''),
 		       COALESCE(doc_tipo, ''), COALESCE(doc_numero, ''), COALESCE(doc_caducidad, ''),
@@ -399,8 +403,8 @@ func (s *Store) List() []*User {
 		var verificadoAt sql.NullTime
 		err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.DisplayName, &u.NIF,
 			&u.Email, &u.Telefono,
-			&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.CodigoPostal,
-			&u.Pais, &verificacion, &verificadoAt,
+			&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.Provincia,
+			&u.CodigoPostal, &u.Pais, &verificacion, &verificadoAt,
 			&u.FechaNacimiento, &u.Nacionalidad,
 			&u.DocTipo, &u.DocNumero, &u.DocCaducidad,
 			&pubJSON, &u.CreatedAt)
@@ -428,7 +432,8 @@ func (s *Store) GetByID(id string) (*User, error) {
 		SELECT id, username, role, COALESCE(display_name, ''), COALESCE(nif, ''),
 		       COALESCE(email, ''), COALESCE(telefono, ''),
 		       COALESCE(nombre, ''), COALESCE(apellido, ''), COALESCE(direccion, ''),
-		       COALESCE(localidad, ''), COALESCE(codigo_postal, ''), COALESCE(pais, ''),
+		       COALESCE(localidad, ''), COALESCE(provincia, ''), COALESCE(codigo_postal, ''),
+		       COALESCE(pais, ''),
 		       COALESCE(verificacion_estado, ''), verificado_at,
 		       COALESCE(fecha_nacimiento, ''), COALESCE(nacionalidad, ''),
 		       COALESCE(doc_tipo, ''), COALESCE(doc_numero, ''), COALESCE(doc_caducidad, ''),
@@ -436,8 +441,8 @@ func (s *Store) GetByID(id string) (*User, error) {
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.Role, &u.DisplayName, &u.NIF,
 		&u.Email, &u.Telefono,
-		&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.CodigoPostal,
-		&u.Pais, &verificacion, &verificadoAt,
+		&u.Nombre, &u.Apellido, &u.Direccion, &u.Localidad, &u.Provincia,
+		&u.CodigoPostal, &u.Pais, &verificacion, &verificadoAt,
 		&u.FechaNacimiento, &u.Nacionalidad,
 		&u.DocTipo, &u.DocNumero, &u.DocCaducidad,
 		&pubJSON, &u.CreatedAt)
@@ -476,10 +481,10 @@ func (s *Store) CreateUser(u *User, plainPassword string) error {
 	_, err := s.db.Exec(`
 		INSERT INTO users
 		(id, username, password_hash, role, display_name, nif, email, telefono, nombre, apellido,
-		 direccion, localidad, codigo_postal, pais, verificacion_estado, pub_keys, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 direccion, localidad, provincia, codigo_postal, pais, verificacion_estado, pub_keys, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, u.ID, u.Username, u.PasswordHash, u.Role, u.DisplayName, u.NIF, u.Email, u.Telefono, u.Nombre, u.Apellido,
-		u.Direccion, u.Localidad, u.CodigoPostal, u.Pais, string(u.Verificacion), string(pubJSON), u.CreatedAt)
+		u.Direccion, u.Localidad, u.Provincia, u.CodigoPostal, u.Pais, string(u.Verificacion), string(pubJSON), u.CreatedAt)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -512,15 +517,15 @@ func (s *Store) UpdateUser(u *User) error {
 		UPDATE users SET
 			username = ?, password_hash = ?, role = ?, display_name = ?, nif = ?,
 			email = ?, telefono = ?,
-			nombre = ?, apellido = ?, direccion = ?, localidad = ?, codigo_postal = ?,
-			pais = ?, fecha_nacimiento = ?, nacionalidad = ?,
+			nombre = ?, apellido = ?, direccion = ?, localidad = ?, provincia = ?,
+			codigo_postal = ?, pais = ?, fecha_nacimiento = ?, nacionalidad = ?,
 			doc_tipo = ?, doc_numero = ?, doc_caducidad = ?,
 			pub_keys = ?, created_at = ?
 		WHERE id = ?
 	`, u.Username, u.PasswordHash, u.Role, u.DisplayName, u.NIF,
 		u.Email, u.Telefono,
-		u.Nombre, u.Apellido, u.Direccion, u.Localidad, u.CodigoPostal,
-		u.Pais, u.FechaNacimiento, u.Nacionalidad,
+		u.Nombre, u.Apellido, u.Direccion, u.Localidad, u.Provincia,
+		u.CodigoPostal, u.Pais, u.FechaNacimiento, u.Nacionalidad,
 		u.DocTipo, u.DocNumero, u.DocCaducidad,
 		string(pubJSON), u.CreatedAt, u.ID)
 
@@ -558,6 +563,7 @@ type ProfileInput struct {
 	Telefono     string
 	Direccion    string
 	Localidad    string
+	Provincia    string
 	CodigoPostal string
 	Pais         string
 }
@@ -582,6 +588,7 @@ func (s *Store) UpdateProfile(userID string, p ProfileInput) error {
 	u.Telefono = p.Telefono
 	u.Direccion = p.Direccion
 	u.Localidad = p.Localidad
+	u.Provincia = p.Provincia
 	u.CodigoPostal = p.CodigoPostal
 	u.Pais = p.Pais
 	return s.UpdateUser(u)

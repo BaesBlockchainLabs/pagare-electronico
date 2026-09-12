@@ -30,6 +30,7 @@ func (h *Handlers) Profile(w http.ResponseWriter, r *http.Request) {
 		"telefono":      u.Telefono,
 		"direccion":     u.Direccion,
 		"localidad":     u.Localidad,
+		"provincia":     u.Provincia,
 		"codigo_postal": u.CodigoPostal,
 		"pais":          u.Pais,
 		"pub_keys":      u.PubKeys,
@@ -69,6 +70,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 			Telefono:     r.FormValue("telefono"),
 			Direccion:    r.FormValue("direccion"),
 			Localidad:    r.FormValue("localidad"),
+			Provincia:    r.FormValue("provincia"),
 			CodigoPostal: r.FormValue("codigo_postal"),
 			Pais:         r.FormValue("pais"),
 		}

@@ -51,6 +51,10 @@ templ Perfil(user *CurrentUser) {
 						<input type="text" id="pf-localidad" placeholder="Madrid"/>
 					</div>
 					<div class="field">
+						<label class="form-label">Provincia</label>
+						<input type="text" id="pf-provincia" placeholder="Madrid"/>
+					</div>
+					<div class="field">
 						<label class="form-label">Código Postal</label>
 						<input type="text" id="pf-codigo_postal" placeholder="28001"/>
 					</div>
@@ -98,7 +102,7 @@ templ Perfil(user *CurrentUser) {
 				.then(function(r) { return r.json(); })
 				.then(function(d) {
 					if (!d.ok) return;
-					var f = ['username','role','display_name','nif','email','telefono','nombre','apellido','direccion','localidad','codigo_postal','pais'];
+					var f = ['username','role','display_name','nif','email','telefono','nombre','apellido','direccion','localidad','provincia','codigo_postal','pais'];
 					f.forEach(function(k) {
 						var el = document.getElementById('pf-' + k);
 						if (el) el.value = d[k] || '';
@@ -118,6 +122,7 @@ templ Perfil(user *CurrentUser) {
 				telefono: document.getElementById('pf-telefono').value.trim(),
 				direccion: document.getElementById('pf-direccion').value.trim(),
 				localidad: document.getElementById('pf-localidad').value.trim(),
+				provincia: document.getElementById('pf-provincia').value.trim(),
 				codigo_postal: document.getElementById('pf-codigo_postal').value.trim(),
 				pais: document.getElementById('pf-pais').value.trim()
 			};

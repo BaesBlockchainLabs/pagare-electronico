@@ -239,6 +239,7 @@ func main() {
 					Telefono:     in.Telefono,
 					Direccion:    in.Direccion,
 					Localidad:    in.Localidad,
+					Provincia:    in.Provincia,
 					CodigoPostal: in.CodigoPostal,
 					Pais:         in.Pais,
 				}
@@ -286,6 +287,7 @@ func main() {
 				u.Telefono = in.Telefono
 				u.Direccion = in.Direccion
 				u.Localidad = in.Localidad
+				u.Provincia = in.Provincia
 				u.CodigoPostal = in.CodigoPostal
 				u.Pais = in.Pais
 				u.DisplayName = in.DisplayName
@@ -532,6 +534,7 @@ func adminUserView(u *auth.User) map[string]interface{} {
 		"telefono":      u.Telefono,
 		"direccion":     u.Direccion,
 		"localidad":     u.Localidad,
+		"provincia":     u.Provincia,
 		"codigo_postal": u.CodigoPostal,
 		"pais":          u.Pais,
 		"pub_keys":      pubKeys,
@@ -564,6 +567,7 @@ type userInput struct {
 	Telefono     string `json:"telefono"`
 	Direccion    string `json:"direccion"`
 	Localidad    string `json:"localidad"`
+	Provincia    string `json:"provincia"`
 	CodigoPostal string `json:"codigo_postal"`
 	Pais         string `json:"pais"`
 }

@@ -46,7 +46,10 @@ func TestDeCertificado_ExtraeLosCamposDelDocumento(t *testing.T) {
 		{"sexo", d.Sexo, "Mujer"},
 		{"fecha de nacimiento", d.FechaNacimiento, "1980-03-04"},
 		{"lugar de nacimiento", d.LugarNacimiento, "CIUDAD"},
-		{"dirección", d.Direccion, "CALLE FALSA 1-CIUDAD-PROVINCIA"},
+		{"domicilio completo", d.DomicilioCompleto, "CALLE FALSA 1-CIUDAD-PROVINCIA"},
+		{"dirección", d.Direccion, "CALLE FALSA 1"},
+		{"localidad", d.Localidad, "CIUDAD"},
+		{"provincia", d.Provincia, "PROVINCIA"},
 		{"expedición", d.Expedicion, "2020-01-02"},
 		{"caducidad", d.Caducidad, "2030-01-02"},
 		{"método", d.Metodo, "NFC"},
@@ -125,5 +128,54 @@ func TestServicioDesactivado(t *testing.T) {
 	}
 	if _, err := s.Recoger(t.Context(), "guid"); !errors.Is(err, ErrDesactivado) {
 		t.Errorf("Recoger: se esperaba ErrDesactivado, se obtuvo %v", err)
+	}
+}
+
+// El certificado da el domicilio en un solo campo y no trae código postal: el
+// chip del DNI no lo lleva.
+func TestPartirDomicilio(t *testing.T) {
+	casos := []struct {
+		nombre                    string
+		domicilio                 string
+		via, localidad, provincia string
+	}{
+		{"vía, municipio y provincia, con la provincia en dos lenguas",
+			"POL. NO EL BULL 25-MONOVAR-ALICANTE/ALACANT",
+			"POL. NO EL BULL 25", "MONOVAR", "ALICANTE/ALACANT"},
+		{"un guion dentro del nombre de la vía no despista",
+			"AVDA. RUIZ-PICASSO 3-MADRID-MADRID",
+			"AVDA. RUIZ-PICASSO 3", "MADRID", "MADRID"},
+		{"sin provincia",
+			"CALLE MAYOR 10-TERUEL", "CALLE MAYOR 10", "TERUEL", ""},
+		{"un solo tramo se deja entero antes que repartirlo mal",
+			"CALLE MAYOR 10", "CALLE MAYOR 10", "", ""},
+		{"los espacios sobrantes no cuentan",
+			" CALLE MAYOR 10 - TERUEL - TERUEL ", "CALLE MAYOR 10", "TERUEL", "TERUEL"},
+		{"vacío", "", "", "", ""},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			via, localidad, provincia := partirDomicilio(c.domicilio)
+			if via != c.via || localidad != c.localidad || provincia != c.provincia {
+				t.Errorf("partirDomicilio(%q) = (%q, %q, %q), se esperaba (%q, %q, %q)",
+					c.domicilio, via, localidad, provincia, c.via, c.localidad, c.provincia)
+			}
+		})
+	}
+}
+
+// El país sale del código de país del SOD del chip, que es quien emitió el
+// documento del que también sale el domicilio.
+func TestDeCertificado_PaisDelChip(t *testing.T) {
+	d, err := DeCertificado(certificado(t, "testdata/certificado-dni.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Pais != "ES" {
+		t.Errorf("país = %q, se esperaba \"ES\"", d.Pais)
+	}
+	if d.Nacionalidad == "" {
+		t.Error("la nacionalidad del documento no se extrajo")
 	}
 }
