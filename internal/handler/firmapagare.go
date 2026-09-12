@@ -174,7 +174,15 @@ func urlDeVerificacion(r *http.Request, assetID string) string {
 // Devuelve el registro tal como queda. Un error de red no cambia nada: la firma
 // sigue pendiente y se volverá a mirar.
 func (h *PagareHandler) Completar(ctx context.Context, reg *firma.Registro) (*firma.Registro, error) {
-	if !h.FirmaActiva() || !reg.EnCurso() {
+	if !h.FirmaActiva() {
+		return reg, nil
+	}
+	// Firmada con la operación a medias: el documento ya está, lo que falta es
+	// llevarla a la cadena. Se reintenta sin volver a firmar.
+	if reg.AMedias() {
+		return reg, h.ejecutarPendiente(reg)
+	}
+	if !reg.EnCurso() {
 		return reg, nil
 	}
 
@@ -226,8 +234,16 @@ func esRechazoDefinitivo(err error) bool {
 		strings.Contains(err.Error(), "no devolvió PDF firmado")
 }
 
-// ejecutarPendiente hace lo que la operación dejó a medias esperando la firma.
+// ejecutarPendiente hace lo que la operación dejó a medias esperando la firma,
+// y lo anota para no repetirlo.
 func (h *PagareHandler) ejecutarPendiente(reg *firma.Registro) error {
+	if err := h.hacerPendiente(reg); err != nil {
+		return err
+	}
+	return h.firmas.MarcarEjecutada(reg)
+}
+
+func (h *PagareHandler) hacerPendiente(reg *firma.Registro) error {
 	switch reg.Operacion {
 	case firma.Emision:
 		var p pendienteEmision
@@ -237,6 +253,9 @@ func (h *PagareHandler) ejecutarPendiente(reg *firma.Registro) error {
 		if p.A == "" {
 			// El beneficiario no tenía identidad al emitir. El pagaré queda
 			// firmado y pendiente de entrega, que es un estado legítimo.
+			return nil
+		}
+		if h.yaEsDe(reg.AssetID, p.A) {
 			return nil
 		}
 		desde, err := h.identidadDe(reg.UserID, p.PubFirmante)
@@ -252,6 +271,9 @@ func (h *PagareHandler) ejecutarPendiente(reg *firma.Registro) error {
 		var p pendienteEndoso
 		if err := json.Unmarshal(reg.Pendiente, &p); err != nil {
 			return fmt.Errorf("el endoso en espera no se pudo leer: %w", err)
+		}
+		if h.yaEsDe(reg.AssetID, p.A) {
+			return nil
 		}
 		desde, err := h.identidadDe(reg.UserID, p.PubFirmante)
 		if err != nil {
@@ -275,6 +297,64 @@ func (h *PagareHandler) ejecutarPendiente(reg *firma.Registro) error {
 	default:
 		return fmt.Errorf("operación en espera desconocida: %q", reg.Operacion)
 	}
+}
+
+// FirmaSinCompletar devuelve la firma que impide mover el pagaré, si la hay.
+//
+// Es lo que separa el diseño de ser papel mojado: la emisión deja la entrega en
+// espera de la firma, pero la pantalla de entrega pendiente llama a Entregar,
+// que no sabía nada de firmas y transfería el título igualmente. Con una firma
+// pedida y sin firmar, el pagaré no se mueve por ninguna vía.
+//
+// Una firma ya firmada no bloquea, aunque su operación no se haya ejecutado: en
+// ese caso entregar es precisamente lo que faltaba, y el repaso lo dará por
+// hecho al ver que el título ya está donde debía.
+func (h *PagareHandler) FirmaSinCompletar(assetID string) *firma.Registro {
+	if !h.FirmaActiva() {
+		return nil
+	}
+	reg, err := h.firmas.Ultima(assetID)
+	if err != nil || !reg.EnCurso() {
+		return nil
+	}
+	return reg
+}
+
+// yaEsDe indica si el pagaré ya está en manos de esa clave.
+//
+// Completar una firma se reintenta —lo hace el repaso periódico, el usuario al
+// consultar y la administración—, y la transferencia ya puede haberla hecho
+// otro: la propia emisión con la firma desactivada, o alguien desde la pantalla
+// de entrega pendiente. Sin esta comprobación, el segundo intento se estrella
+// contra un "You don't own this asset" que en realidad significa que la
+// operación ya está hecha.
+//
+// Ante la duda dice que no: equivocarse aquí sólo provoca un intento que la red
+// rechazará, mientras que dar por hecha una transferencia que no ocurrió
+// dejaría el título donde no debe.
+func (h *PagareHandler) yaEsDe(assetID, pub string) bool {
+	if pub == "" {
+		return false
+	}
+	cuerpo, status, err := h.client.GetAssetOwners(assetID)
+	if err != nil || status != 200 {
+		return false
+	}
+	var res struct {
+		OK     bool `json:"ok"`
+		Owners []struct {
+			Pub string `json:"pub"`
+		} `json:"owners"`
+	}
+	if json.Unmarshal(cuerpo, &res) != nil || !res.OK {
+		return false
+	}
+	for _, o := range res.Owners {
+		if o.Pub == pub {
+			return true
+		}
+	}
+	return false
 }
 
 // identidadDe rearma la identidad de firma del usuario a partir de su clave
@@ -305,8 +385,11 @@ func (h *PagareHandler) CompletarEnEspera(ctx context.Context) (revisadas, resue
 		revisadas++
 		if _, err := h.Completar(ctx, reg); err != nil {
 			fmt.Printf("[firma] %s (%s): %v\n", reg.AssetID, reg.Operacion, err)
+			continue
 		}
-		if !reg.EnCurso() {
+		// Resuelta es haber dejado de tener algo que hacer: firmada y con su
+		// operación en la cadena, o cerrada por el portal.
+		if !reg.EnCurso() && !reg.AMedias() {
 			resueltas++
 		}
 	}
@@ -335,12 +418,18 @@ func vistaFirma(reg *firma.Registro) map[string]interface{} {
 	if reg.ResueltaAt != nil {
 		v["resuelta_at"] = reg.ResueltaAt
 	}
-	switch reg.Estado {
-	case firma.Pendiente:
+	if reg.EjecutadaAt != nil {
+		v["ejecutada_at"] = reg.EjecutadaAt
+	}
+	switch {
+	case reg.Estado == firma.Pendiente:
 		v["msg"] = "Pendiente de firma: el firmante tiene el enlace en su correo y su móvil"
-	case firma.Firmada:
+	case reg.AMedias():
+		v["a_medias"] = true
+		v["msg"] = "Firmado, pero la operación no llegó a la cadena; se reintenta sin volver a firmar"
+	case reg.Estado == firma.Firmada:
 		v["msg"] = "Firmado con firma cualificada y sello de tiempo"
-	case firma.Fallida:
+	case reg.Estado == firma.Fallida:
 		v["msg"] = "La firma no se completó"
 	}
 	return v

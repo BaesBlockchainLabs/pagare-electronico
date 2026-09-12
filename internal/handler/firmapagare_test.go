@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"pagare/internal/auth"
@@ -65,11 +66,15 @@ func entornoFirma(t *testing.T, ff *firmaFalsa) (*PagareHandler, *firma.Registro
 	t.Helper()
 	var recibido []map[string]interface{}
 	red := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var cuerpo map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&cuerpo)
-		recibido = append(recibido, cuerpo)
+		// Sólo se apuntan las escrituras: un GET no mueve el título, y contarlo
+		// convertiría cualquier lectura en un falso positivo.
+		if r.Method != http.MethodGet {
+			var cuerpo map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&cuerpo)
+			recibido = append(recibido, cuerpo)
+		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"id":"asset-1","cost":0}`)
+		fmt.Fprint(w, `{"ok":true,"id":"asset-1","cost":0,"owners":[]}`)
 	}))
 	t.Cleanup(red.Close)
 
@@ -315,5 +320,60 @@ func TestEndosoParaPDF(t *testing.T) {
 	}
 	if fila.EndosantePub != "pub-endosante" || fila.Tipo != "en_propiedad" {
 		t.Errorf("fila incompleta: %+v", fila)
+	}
+}
+
+// La pantalla de entrega pendiente llama a Entregar, que no sabía nada de
+// firmas: con esto el título no se mueve mientras la firma esté sin hacer, que
+// es lo que daba sentido a dejar la entrega en espera.
+func TestEntregar_NoSeSaltaLaFirmaPendiente(t *testing.T) {
+	ff := &firmaFalsa{situacion: &firma.Situacion{Terminado: false}}
+	h, regs, red := entornoFirma(t, ff)
+	registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+
+	cuerpo := `{"id":"asset-1","to":"pub-benef"}`
+	r := httptest.NewRequest(http.MethodPut, "/api/pagares/entrega", strings.NewReader(cuerpo))
+	r = r.WithContext(auth.ContextWithPrincipal(r.Context(),
+		&auth.Principal{UserID: "u1", Username: "rampa", Role: auth.RoleUser}))
+	w := httptest.NewRecorder()
+
+	h.Entregar(w, r)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("código = %d, se esperaba 409: %s", w.Code, w.Body.String())
+	}
+	if len(*red) != 0 {
+		t.Errorf("no puede tocar la cadena con la firma pendiente: %v", *red)
+	}
+	var res map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res["firma"] == nil {
+		t.Error("la respuesta tiene que decir en qué estado está la firma")
+	}
+}
+
+// Firmada pero con la entrega sin ejecutar no bloquea: entregar es justo lo
+// que faltaba.
+func TestFirmaSinCompletar_FirmadaNoBloquea(t *testing.T) {
+	ff := &firmaFalsa{}
+	h, regs, _ := entornoFirma(t, ff)
+	reg := registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+
+	if h.FirmaSinCompletar("asset-1") == nil {
+		t.Error("una firma pendiente tiene que bloquear")
+	}
+	if err := regs.Resolver(reg, &firma.Firmado{PDF: []byte("%PDF"), Hash: "bbbb"}); err != nil {
+		t.Fatal(err)
+	}
+	if h.FirmaSinCompletar("asset-1") != nil {
+		t.Error("una firma ya hecha no puede bloquear la entrega que esperaba")
+	}
+}
+
+// Sin firma configurada, Entregar no cambia de comportamiento.
+func TestFirmaSinCompletar_DesactivadaNoBloquea(t *testing.T) {
+	h := NewPagareHandler(nil, nil, nil)
+	if h.FirmaSinCompletar("asset-1") != nil {
+		t.Error("sin firma configurada no puede bloquear nada")
 	}
 }

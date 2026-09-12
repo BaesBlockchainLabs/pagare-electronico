@@ -65,6 +65,16 @@ type Registro struct {
 
 	CreadaAt   time.Time  `json:"creada_at"`
 	ResueltaAt *time.Time `json:"resuelta_at,omitempty"`
+	// EjecutadaAt es cuándo se hizo lo que esperaba a la firma. Una firma
+	// resuelta sin esto está a medias: el documento está firmado y guardado,
+	// pero la operación no llegó a la cadena.
+	EjecutadaAt *time.Time `json:"ejecutada_at,omitempty"`
+}
+
+// AMedias indica que la firma está buena pero su operación no se ejecutó. Se
+// puede reintentar sin volver a firmar.
+func (r *Registro) AMedias() bool {
+	return r != nil && r.Estado == Firmada && r.EjecutadaAt == nil
 }
 
 // EnCurso indica si esta firma todavía puede resolverse.
@@ -118,12 +128,44 @@ func (r *Registros) esquema() error {
 			ruta_pdf      TEXT,
 			pendiente     TEXT,
 			creada_at     DATETIME,
-			resuelta_at   DATETIME
+			resuelta_at   DATETIME,
+			-- Cuándo se ejecutó la operación que esperaba a la firma. Firmada
+			-- sin esto es una firma buena con la operación a medias, que es lo
+			-- que se puede reintentar sin volver a firmar.
+			ejecutada_at  DATETIME
 		);
 		CREATE INDEX IF NOT EXISTS idx_firmas_asset  ON firmas_pagare(asset_id);
 		CREATE INDEX IF NOT EXISTS idx_firmas_estado ON firmas_pagare(estado);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Migración aditiva para las bases de datos creadas antes de distinguir la
+	// firma a medias.
+	r.asegurarColumna("firmas_pagare", "ejecutada_at", "DATETIME")
+	return nil
+}
+
+// asegurarColumna añade una columna si no está: SQLite no tiene
+// "ADD COLUMN IF NOT EXISTS". Se puede llamar en cada arranque.
+func (r *Registros) asegurarColumna(tabla, columna, tipo string) {
+	filas, err := r.db.Query("PRAGMA table_info(" + tabla + ")")
+	if err != nil {
+		return
+	}
+	defer filas.Close()
+	for filas.Next() {
+		var cid, notnull, pk int
+		var nombre, ctipo string
+		var porDefecto any
+		if err := filas.Scan(&cid, &nombre, &ctipo, &notnull, &porDefecto, &pk); err != nil {
+			continue
+		}
+		if nombre == columna {
+			return
+		}
+	}
+	_, _ = r.db.Exec("ALTER TABLE " + tabla + " ADD COLUMN " + columna + " " + tipo)
 }
 
 // Cerrar suelta la base de datos.
@@ -142,8 +184,9 @@ func (r *Registros) Crear(reg *Registro) error {
 	_, err := r.db.Exec(`
 		INSERT INTO firmas_pagare
 		(id, asset_id, operacion, user_id, referencia, guid, estado, motivo,
-		 hash_original, hash_firmado, ruta_pdf, pendiente, creada_at, resuelta_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, '', '', ?, ?, NULL)
+		 hash_original, hash_firmado, ruta_pdf, pendiente, creada_at, resuelta_at,
+		 ejecutada_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, '', '', ?, ?, NULL, NULL)
 	`, reg.ID, reg.AssetID, string(reg.Operacion), reg.UserID, reg.Referencia,
 		reg.GUID, string(reg.Estado), reg.HashOriginal, string(reg.Pendiente), reg.CreadaAt)
 	return err
@@ -152,16 +195,16 @@ func (r *Registros) Crear(reg *Registro) error {
 const camposRegistro = `id, asset_id, operacion, user_id, referencia,
 	COALESCE(guid, ''), estado, COALESCE(motivo, ''), hash_original,
 	COALESCE(hash_firmado, ''), COALESCE(ruta_pdf, ''), COALESCE(pendiente, ''),
-	creada_at, resuelta_at`
+	creada_at, resuelta_at, ejecutada_at`
 
 func leerRegistro(escanear func(...any) error) (*Registro, error) {
 	var reg Registro
 	var operacion, estado, pendiente string
-	var resuelta sql.NullTime
+	var resuelta, ejecutada sql.NullTime
 	if err := escanear(&reg.ID, &reg.AssetID, &operacion, &reg.UserID, &reg.Referencia,
 		&reg.GUID, &estado, &reg.Motivo, &reg.HashOriginal,
 		&reg.HashFirmado, &reg.RutaPDF, &pendiente,
-		&reg.CreadaAt, &resuelta); err != nil {
+		&reg.CreadaAt, &resuelta, &ejecutada); err != nil {
 		return nil, err
 	}
 	reg.Operacion, reg.Estado = Operacion(operacion), Estado(estado)
@@ -171,6 +214,10 @@ func leerRegistro(escanear func(...any) error) (*Registro, error) {
 	if resuelta.Valid {
 		t := resuelta.Time.UTC()
 		reg.ResueltaAt = &t
+	}
+	if ejecutada.Valid {
+		t := ejecutada.Time.UTC()
+		reg.EjecutadaAt = &t
 	}
 	return &reg, nil
 }
@@ -197,11 +244,14 @@ func (r *Registros) PorReferencia(referencia string) (*Registro, error) {
 	return reg, err
 }
 
-// EnEspera devuelve las firmas que todavía pueden resolverse, de la más
-// antigua a la más reciente.
+// EnEspera devuelve las firmas sobre las que queda algo por hacer, de la más
+// antigua a la más reciente: las que aún no se han firmado y las que están
+// firmadas pero con su operación a medias.
 func (r *Registros) EnEspera() ([]*Registro, error) {
 	filas, err := r.db.Query(`SELECT `+camposRegistro+`
-		FROM firmas_pagare WHERE estado = ? ORDER BY creada_at`, string(Pendiente))
+		FROM firmas_pagare
+		WHERE estado = ? OR (estado = ? AND ejecutada_at IS NULL)
+		ORDER BY creada_at`, string(Pendiente), string(Firmada))
 	if err != nil {
 		return nil, err
 	}
@@ -254,6 +304,17 @@ func (r *Registros) Resolver(reg *Registro, f *Firmado) error {
 		return err
 	}
 	reg.Estado, reg.HashFirmado, reg.RutaPDF, reg.ResueltaAt = Firmada, f.Hash, ruta, &ahora
+	return nil
+}
+
+// MarcarEjecutada anota que la operación que esperaba a la firma ya se hizo.
+func (r *Registros) MarcarEjecutada(reg *Registro) error {
+	ahora := time.Now().UTC()
+	if _, err := r.db.Exec(`UPDATE firmas_pagare SET ejecutada_at = ? WHERE id = ?`,
+		ahora, reg.ID); err != nil {
+		return err
+	}
+	reg.EjecutadaAt = &ahora
 	return nil
 }
 

@@ -89,9 +89,48 @@ func TestRegistros_CicloDeUnaEmision(t *testing.T) {
 		t.Errorf("permisos del PDF firmado = %v, se esperaba 0600", info.Mode().Perm())
 	}
 
-	// Resuelta, ya no aparece entre las que hay que consultar al portal.
+	// Firmada pero con la operación sin ejecutar sigue en espera: el documento
+	// está, lo que falta es llevarla a la cadena.
+	if !guardado.AMedias() {
+		t.Error("una firma resuelta sin ejecutar está a medias")
+	}
+	if enEspera, _ := r.EnEspera(); len(enEspera) != 1 {
+		t.Errorf("una firma a medias tiene que seguir en espera: %d", len(enEspera))
+	}
+
+	// Ejecutada la operación, ya no hay nada que hacer con ella.
+	if err := r.MarcarEjecutada(guardado); err != nil {
+		t.Fatalf("MarcarEjecutada: %v", err)
+	}
+	if guardado.AMedias() {
+		t.Error("ejecutada ya no está a medias")
+	}
+	final, _ := r.Ultima("asset-1")
+	if final.EjecutadaAt == nil || final.AMedias() {
+		t.Errorf("no se guardó la ejecución: %+v", final)
+	}
 	if enEspera, _ := r.EnEspera(); len(enEspera) != 0 {
-		t.Errorf("una firma resuelta sigue en espera: %d", len(enEspera))
+		t.Errorf("una firma completa sigue en espera: %d", len(enEspera))
+	}
+}
+
+// Una firma fallida no está a medias: no hay nada que reintentar.
+func TestRegistros_FallidaNoEstaAMedias(t *testing.T) {
+	r := registros(t)
+	reg := &Registro{AssetID: "asset-3", Operacion: Emision, UserID: "u1",
+		Referencia: "ref-3", HashOriginal: "aaaa"}
+	if err := r.Crear(reg); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Fallar(reg.ID, "Tiempo Expirado"); err != nil {
+		t.Fatal(err)
+	}
+	guardado, _ := r.Ultima("asset-3")
+	if guardado.AMedias() {
+		t.Error("una firma fallida no está a medias")
+	}
+	if enEspera, _ := r.EnEspera(); len(enEspera) != 0 {
+		t.Errorf("una firma fallida no tiene que estar en espera: %d", len(enEspera))
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"pagare/internal/auth"
 	"pagare/internal/models"
@@ -71,12 +72,16 @@ func (h *PagareHandler) entregar(assetID string, p *models.PagareElectronico, to
 		"from": map[string]string{"pub": from.Pub, "pvt": from.Pvt},
 	}
 
-	_, status, err := h.client.UpdateAsset(body)
+	respuesta, status, err := h.client.UpdateAsset(body)
 	if err != nil {
 		return Entrega{A: destino, Msg: fmt.Sprintf("El pagaré se emitió pero no pudo entregarse: %v", err)}
 	}
 	if status != 200 {
-		return Entrega{A: destino, Msg: "El pagaré se emitió pero la red rechazó la entrega al beneficiario"}
+		// La respuesta de la red va en el mensaje: sin ella, un rechazo no se
+		// puede diagnosticar sin volver a reproducirlo a mano.
+		return Entrega{A: destino, Msg: fmt.Sprintf(
+			"El pagaré se emitió pero la red rechazó la entrega al beneficiario (%d): %s",
+			status, recorta(respuesta, 300))}
 	}
 
 	return Entrega{Entregado: true, A: destino, Msg: "Entregado al beneficiario"}
@@ -126,6 +131,20 @@ func (h *PagareHandler) Entregar(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ID == "" {
 		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "id es obligatorio"})
+		return
+	}
+
+	// Con la firma del PDF pendiente, el título no se mueve por aquí: la emisión
+	// dejó la entrega esperando precisamente a esa firma, y entregar ahora sería
+	// saltársela. Va antes que las consultas a la cadena porque es local y
+	// porque, si bloquea, lo demás no hace falta.
+	if reg := h.FirmaSinCompletar(req.ID); reg != nil {
+		WriteJSON(w, http.StatusConflict, map[string]interface{}{
+			"ok": false,
+			"msg": "Este pagaré está pendiente de que su firmante firme el PDF. " +
+				"Hasta entonces no puede entregarse; cuando firme, la entrega se hace sola.",
+			"firma": vistaFirma(reg),
+		})
 		return
 	}
 
@@ -203,4 +222,14 @@ func (h *PagareHandler) yaFueEntregado(id string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// recorta deja un cuerpo de respuesta en algo que quepa en un mensaje de error,
+// sin saltos de línea que ensucien el log.
+func recorta(cuerpo []byte, maximo int) string {
+	texto := strings.Join(strings.Fields(string(cuerpo)), " ")
+	if len(texto) > maximo {
+		return texto[:maximo] + "…"
+	}
+	return texto
 }

@@ -29,6 +29,7 @@ import (
 
 func main() {
 	seedUsers := flag.Int("seed", 0, "provisiona N usuarios de desarrollo (con keypair) y sale; sólo en APP_ENV=development")
+	recogerFirmas := flag.Bool("recoger-firmas", false, "recoge las firmas de PDF ya firmadas, completa las operaciones que esperaban y sale")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -127,6 +128,17 @@ func main() {
 			log.Fatalf("Seed falló tras crear %d usuarios: %v", created, err)
 		}
 		log.Printf("Seed completado: %d usuarios nuevos (contraseña 'seed1234').", created)
+		return
+	}
+
+	// Recoger las firmas y salir: para desatascar a mano lo que el repaso
+	// periódico debería haber recogido, sin levantar el servidor.
+	if *recogerFirmas {
+		revisadas, resueltas, err := pagareHandler.CompletarEnEspera(context.Background())
+		if err != nil {
+			log.Fatalf("No se pudieron recoger las firmas: %v", err)
+		}
+		log.Printf("Firmas: %d revisada(s), %d resuelta(s).", revisadas, resueltas)
 		return
 	}
 
