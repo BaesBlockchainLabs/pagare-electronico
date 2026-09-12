@@ -679,3 +679,72 @@ func TestPedirFirmaDeNuevo_OtraReferencia(t *testing.T) {
 		t.Error("el reintento tiene que mandar el documento")
 	}
 }
+
+// Un listado necesita el estado de todas sus firmas de una vez, y esa consulta
+// no puede hablar con el portal: se pinta a menudo.
+func TestEstadoFirmas_EnUnaSolaConsulta(t *testing.T) {
+	ff := &firmaFalsa{situacion: &firma.Situacion{Terminado: true, Firmado: true}}
+	h, regs, _ := entornoFirma(t, ff)
+
+	uno := &firma.Registro{AssetID: "asset-1", Operacion: firma.Emision, UserID: "u1",
+		Referencia: "r1", HashOriginal: "aaaa"}
+	if err := regs.Crear(uno, []byte("%PDF")); err != nil {
+		t.Fatal(err)
+	}
+	dos := &firma.Registro{AssetID: "asset-2", Operacion: firma.Endoso, UserID: "u1",
+		Referencia: "r2", HashOriginal: "bbbb"}
+	if err := regs.Crear(dos, []byte("%PDF")); err != nil {
+		t.Fatal(err)
+	}
+	if err := regs.Fallar(dos.ID, "Tiempo Expirado"); err != nil {
+		t.Fatal(err)
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/api/pagares/firmas?ids=asset-1,asset-2,asset-sin-firma", nil)
+	r = r.WithContext(auth.ContextWithPrincipal(r.Context(), comoFirmante))
+	w := httptest.NewRecorder()
+	h.EstadoFirmas(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("código = %d: %s", w.Code, w.Body.String())
+	}
+	var res struct {
+		OK     bool                      `json:"ok"`
+		Activa bool                      `json:"activa"`
+		Firmas map[string]map[string]any `json:"firmas"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK || !res.Activa {
+		t.Fatalf("respuesta = %s", w.Body.String())
+	}
+	if len(res.Firmas) != 2 {
+		t.Errorf("firmas = %d, se esperaban 2 (el tercero no tiene)", len(res.Firmas))
+	}
+	if res.Firmas["asset-1"]["estado"] != string(firma.Pendiente) {
+		t.Errorf("asset-1 = %v", res.Firmas["asset-1"])
+	}
+	if res.Firmas["asset-2"]["estado"] != string(firma.Fallida) {
+		t.Errorf("asset-2 = %v", res.Firmas["asset-2"])
+	}
+	// Sólo lectura: no puede haber consultado el portal ni recogido nada.
+	if len(ff.recogidas) != 0 {
+		t.Errorf("un listado no puede hablar con el portal: %v", ff.recogidas)
+	}
+}
+
+// Sin firma configurada, el listado no se entera de nada y no revienta.
+func TestEstadoFirmas_Desactivada(t *testing.T) {
+	h := NewPagareHandler(nil, nil, nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/pagares/firmas?ids=a", nil)
+	r = r.WithContext(auth.ContextWithPrincipal(r.Context(), comoFirmante))
+	w := httptest.NewRecorder()
+	h.EstadoFirmas(w, r)
+
+	var res map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if w.Code != http.StatusOK || res["activa"] != false {
+		t.Errorf("código = %d, respuesta = %v", w.Code, res)
+	}
+}

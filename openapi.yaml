@@ -855,6 +855,12 @@ paths:
                       falló; se puede reintentar sin volver a firmar.
                   firma:
                     $ref: '#/components/schemas/FirmaPagare'
+                  firmas:
+                    type: array
+                    description: Todas las firmas de la historia del pagaré, de la más antigua a la más
+                      reciente. Cada una es una operación firmada.
+                    items:
+                      $ref: '#/components/schemas/FirmaPagare'
         4XX:
           $ref: '#/components/responses/Error'
     post:
@@ -898,6 +904,43 @@ paths:
         4XX:
           $ref: '#/components/responses/Error'
         '502':
+          $ref: '#/components/responses/Error'
+  /api/pagares/firmas:
+    get:
+      tags:
+      - Pagarés
+      summary: Estado de la firma de varios pagarés
+      description: >
+        Informa del estado de la firma de varios pagarés a la vez, para que un listado pueda
+        distinguirlos sin una consulta por fila. A diferencia de /api/pagares/firma, es **sólo
+        lectura**: no habla con el portal ni completa ninguna operación, porque un listado se pinta a
+        menudo. Devuelve como máximo 200.
+      operationId: estadoFirmasPagares
+      parameters:
+      - name: ids
+        in: query
+        required: true
+        description: Ids separados por comas.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  activa:
+                    type: boolean
+                  firmas:
+                    type: object
+                    description: Indexado por id de pagaré. Los que no tienen firma no aparecen.
+                    additionalProperties:
+                      $ref: '#/components/schemas/FirmaPagare'
+        4XX:
           $ref: '#/components/responses/Error'
   /api/pagares/firma/pdf:
     get:

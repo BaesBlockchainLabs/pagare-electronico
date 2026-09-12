@@ -12,8 +12,18 @@ templ Historico(id string, user *CurrentUser) {
 					Buscar
 				</button>
 			</div>
-			<div id="historico-result" class="mt-6"></div>
 		</div>
+
+		<!-- Estado de la firma cualificada: lo pinta pintaFirma (base.templ) y se
+		     queda vacío cuando la instalación no la tiene configurada. -->
+		<div id="firma-estado" class="mt-6"></div>
+
+		<div class="card">
+			<div id="historico-result"></div>
+		</div>
+
+		<!-- Las firmas cualificadas de su historia; vacío si no hay ninguna. -->
+		<div id="firmas-historial" class="mt-6"></div>
 		<script>
 		var DOT_ICONS = {
 			create: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M9 15h6"></path><path d="M12 18v-6"></path></svg>',
@@ -26,10 +36,12 @@ templ Historico(id string, user *CurrentUser) {
 		if (urlId) {
 			document.getElementById('pagare-id').value = urlId;
 			loadHistorico();
+			window.cargaFirma(urlId);
 		}
 		function loadHistorico() {
 			var id = document.getElementById('pagare-id').value.trim();
 			if (!id) return;
+			window.cargaFirma(id);
 			document.getElementById('historico-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Cargando…</p>';
 			fetch('/api/pagares/historico?id=' + encodeURIComponent(id))
 				.then(function(r) { return r.json(); })

@@ -516,6 +516,9 @@ func main() {
 			// Volver a pedir una firma que se quedó sin hacer. Sin esto, un
 			// pagaré cuya firma falla queda inentregable para siempre.
 			r.Post("/firma", pagareHandler.PedirFirmaDeNuevo)
+			// Estado de varias firmas de golpe, para los listados. Sólo
+			// lectura: no habla con el portal.
+			r.Get("/firmas", pagareHandler.EstadoFirmas)
 			r.Get("/propietario", consultaHandler.GetPropietario)
 			r.Get("/public", consultaHandler.GetPublicAsset)
 			r.Get("/alertas", func(w http.ResponseWriter, r *http.Request) {

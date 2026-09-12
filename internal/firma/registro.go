@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -377,4 +378,66 @@ func nuevoID() string {
 		panic("firma: sin entropía para el id: " + err.Error())
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// Todas devuelve las firmas de un pagaré, de la más antigua a la más reciente.
+// Son las operaciones firmadas de su historia, incluidos los intentos que no
+// llegaron a puerto.
+func (r *Registros) Todas(assetID string) ([]*Registro, error) {
+	filas, err := r.db.Query(`SELECT `+camposRegistro+`
+		FROM firmas_pagare WHERE asset_id = ? ORDER BY creada_at`, assetID)
+	if err != nil {
+		return nil, err
+	}
+	defer filas.Close()
+
+	var out []*Registro
+	for filas.Next() {
+		reg, err := leerRegistro(filas.Scan)
+		if err != nil {
+			continue
+		}
+		out = append(out, reg)
+	}
+	return out, filas.Err()
+}
+
+// UltimasDe devuelve la firma más reciente de cada pagaré de la lista, indexada
+// por pagaré. Los que no tienen ninguna no aparecen.
+//
+// Existe para que un listado pueda enseñar el estado de todos sus pagarés sin
+// una consulta por fila, y es sólo lectura: no habla con el portal ni completa
+// nada, al contrario que consultar el estado de uno.
+func (r *Registros) UltimasDe(assetIDs []string) (map[string]*Registro, error) {
+	out := make(map[string]*Registro, len(assetIDs))
+	if len(assetIDs) == 0 {
+		return out, nil
+	}
+
+	marcas := make([]string, len(assetIDs))
+	args := make([]any, len(assetIDs))
+	for i, id := range assetIDs {
+		marcas[i] = "?"
+		args[i] = id
+	}
+
+	filas, err := r.db.Query(`SELECT `+camposRegistro+`
+		FROM firmas_pagare
+		WHERE asset_id IN (`+strings.Join(marcas, ",")+`)
+		ORDER BY creada_at`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer filas.Close()
+
+	for filas.Next() {
+		reg, err := leerRegistro(filas.Scan)
+		if err != nil {
+			continue
+		}
+		// Ordenadas de la más antigua a la más reciente, la última que se lee
+		// de cada pagaré es la que manda.
+		out[reg.AssetID] = reg
+	}
+	return out, filas.Err()
 }

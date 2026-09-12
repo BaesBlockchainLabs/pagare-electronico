@@ -482,6 +482,16 @@ func (h *PagareHandler) EstadoFirma(w http.ResponseWriter, r *http.Request) {
 	if errCompletar != nil {
 		res["aviso"] = errCompletar.Error()
 	}
+	// Y todas las de su historia: cada registro es una operación firmada, y con
+	// su hash y la fecha de su sello es lo que hace el histórico seguible por
+	// alguien de fuera.
+	if todas, err := h.firmas.Todas(id); err == nil {
+		vistas := make([]map[string]interface{}, 0, len(todas))
+		for _, una := range todas {
+			vistas = append(vistas, vistaFirma(una))
+		}
+		res["firmas"] = vistas
+	}
 	WriteJSON(w, http.StatusOK, res)
 }
 
@@ -651,4 +661,44 @@ func (h *PagareHandler) PedirFirmaDeNuevo(w http.ResponseWriter, r *http.Request
 		"id":    reg.AssetID,
 		"firma": vistaFirma(nuevo),
 	})
+}
+
+// EstadoFirmas informa del estado de la firma de varios pagarés a la vez, para
+// que un listado pueda distinguirlos sin una consulta por fila.
+//
+// Es sólo lectura, y en eso se diferencia de EstadoFirma: no habla con el
+// portal ni completa ninguna operación. Un listado se pinta a menudo y no puede
+// disparar una llamada externa por pagaré cada vez.
+func (h *PagareHandler) EstadoFirmas(w http.ResponseWriter, r *http.Request) {
+	if auth.GetPrincipal(r) == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+	if !h.FirmaActiva() {
+		WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "activa": false, "firmas": map[string]any{}})
+		return
+	}
+
+	var ids []string
+	for _, id := range strings.Split(r.URL.Query().Get("ids"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	// Un tope para que la consulta no crezca sin control desde el cliente.
+	const tope = 200
+	if len(ids) > tope {
+		ids = ids[:tope]
+	}
+
+	registros, err := h.firmas.UltimasDe(ids)
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+	firmas := make(map[string]interface{}, len(registros))
+	for id, reg := range registros {
+		firmas[id] = vistaFirma(reg)
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "activa": true, "firmas": firmas})
 }

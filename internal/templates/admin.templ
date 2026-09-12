@@ -69,6 +69,9 @@ templ Admin(user *CurrentUser) {
 					<button type="button" class="btn btn-outline btn-sm" onclick="refrescarVerificaciones()">
 						Comprobar validaciones
 					</button>
+					<button type="button" class="btn btn-outline btn-sm" onclick="refrescarFirmas()">
+						Comprobar firmas
+					</button>
 					<span class="u-count" id="user-count"></span>
 				</div>
 
@@ -353,6 +356,20 @@ templ Admin(user *CurrentUser) {
 				return;
 			}
 			loadUsers();
+		}
+
+		// Repasa las firmas de PDF pendientes: recoge las ya firmadas y completa
+		// la operación que cada una esperaba. El cron lo hace cada minuto, pero
+		// desde aquí se ve el resultado y se desatasca sin esperar.
+		async function refrescarFirmas() {
+			verifMensaje('Repasando las firmas pendientes…', false);
+			try {
+				var r = await fetch('/admin/firmas/refrescar', { method: 'POST' });
+				var data = await r.json();
+				verifMensaje(data.msg || (data.ok ? 'Repasado.' : 'No se pudo repasar.'), !data.ok);
+			} catch (e) {
+				verifMensaje('Error de red al repasar las firmas.', true);
+			}
 		}
 
 		// Pregunta al portal por todas las validaciones pendientes: es lo que
