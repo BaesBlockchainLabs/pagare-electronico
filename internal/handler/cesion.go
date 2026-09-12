@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"pagare/internal/auth"
+	"pagare/internal/firma"
 	"pagare/internal/models"
+	"pagare/internal/pdf"
 )
 
 // TipoOperacionCesion marks, in the ledger history, a transfer made by ordinary
@@ -106,6 +108,41 @@ func (h *PagareHandler) Ceder(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Motivo != "" {
 		metadata["motivo"] = req.Motivo
+	}
+
+	// Como en el endoso, la firma va delante: el pagaré ya existe, así que la
+	// cesión puede esperar a estar firmada sin dejar nada a medias en el libro.
+	if h.FirmaActiva() {
+		pagare, err := h.pagareDeLaCadena(req.ID)
+		if err != nil {
+			WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
+			return
+		}
+		reg, err := h.pedirFirma(r, firma.Cesion, req.ID,
+			pdf.Input{
+				P:           pagare,
+				FirmantePub: from.Pub,
+				Cesiones:    []pdf.Cesion{cesionParaPDF(&req.Cesion, from.Pub)},
+			},
+			principal.UserID,
+			pendienteTransferencia{A: req.To, PubFirmante: from.Pub, Metadata: metadata})
+		if err != nil {
+			WriteJSON(w, http.StatusBadGateway, map[string]interface{}{
+				"ok":  false,
+				"msg": "No se pudo pedir la firma de la cesión, así que no se ha cedido: " + err.Error(),
+			})
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":  true,
+			"msg": "Firma la cesión para que surta efecto: tienes el enlace en tu correo y tu móvil.",
+			"id":  req.ID,
+			"a":   req.To,
+			"aviso": "Recuerda notificar la cesión al deudor: hasta entonces no le es oponible y " +
+				"el pago al cedente le libera (art. 1527 CC).",
+			"firma": vistaFirma(reg),
+		})
+		return
 	}
 
 	body, status, err := h.client.UpdateAsset(map[string]interface{}{

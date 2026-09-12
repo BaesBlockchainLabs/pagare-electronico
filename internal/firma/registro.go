@@ -29,6 +29,7 @@ type Operacion string
 const (
 	Emision Operacion = "emision"
 	Endoso  Operacion = "endoso"
+	Cesion  Operacion = "cesion"
 )
 
 // ErrNoEncontrada es lo que devuelve una consulta sin resultado.

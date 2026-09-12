@@ -343,7 +343,7 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 				Endosos:     []pdf.Endoso{endosoParaPDF(&endoso, from.Pub)},
 			},
 			principal.UserID,
-			pendienteEndoso{A: req.To, PubFirmante: from.Pub, Metadata: metadata})
+			pendienteTransferencia{A: req.To, PubFirmante: from.Pub, Metadata: metadata})
 		if err != nil {
 			WriteJSON(w, http.StatusBadGateway, map[string]interface{}{
 				"ok":  false,
@@ -377,6 +377,12 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 	WriteRaw(w, status, body)
 }
 
+// A diferencia de emitir, endosar y ceder, esto no exige firmar el PDF. No es
+// un olvido: aquellas transmiten el título y comprometen a quien firma frente a
+// los tenedores posteriores, mientras que pagar lo extingue y anular lo retira.
+// Ninguna de las dos crea obligación que respaldar, y exigir una firma
+// cualificada para anular convertiría un fallo del prestador en un pagaré que
+// no se puede retirar.
 func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 	principal := auth.GetPrincipal(r)
 	if principal == nil {
@@ -473,19 +479,31 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 // Devuelve el pagaré tal como está en la cadena, que es además lo que hace
 // falta para construir el PDF que se firma.
 func (h *PagareHandler) comprobarEndosable(id string) (*models.PagareElectronico, error) {
-	body, status, err := h.client.GetAsset(map[string]string{"id": id})
+	p, err := h.pagareDeLaCadena(id)
 	if err != nil {
-		return nil, fmt.Errorf("no se pudo comprobar si el pagaré es endosable: %w", err)
-	}
-	if status != 200 {
-		return nil, fmt.Errorf("no se pudo recuperar el pagaré para comprobar si es endosable")
-	}
-	p, err := assetToPagare(body)
-	if err != nil {
-		return nil, fmt.Errorf("no se pudo interpretar el pagaré para comprobar si es endosable")
+		return nil, err
 	}
 	if p.NoALaOrden {
 		return nil, fmt.Errorf("este pagaré se emitió «no a la orden» y no puede endosarse; solo cabe transmitirlo por cesión ordinaria")
+	}
+	return p, nil
+}
+
+// pagareDeLaCadena lee el pagaré tal como está en el libro. Es lo que hace
+// falta para construir el PDF que se firma, y no comprueba nada más: una cesión
+// es precisamente la vía de un pagaré «no a la orden», así que no puede pasar
+// por el filtro del endoso.
+func (h *PagareHandler) pagareDeLaCadena(id string) (*models.PagareElectronico, error) {
+	body, status, err := h.client.GetAsset(map[string]string{"id": id})
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo recuperar el pagaré: %w", err)
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("no se pudo recuperar el pagaré")
+	}
+	p, err := assetToPagare(body)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo interpretar el pagaré")
 	}
 	return p, nil
 }

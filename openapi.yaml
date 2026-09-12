@@ -1799,6 +1799,7 @@ components:
           enum:
           - emision
           - endoso
+          - cesion
         referencia:
           type: string
           description: Identificador del envío en el portal de firma.

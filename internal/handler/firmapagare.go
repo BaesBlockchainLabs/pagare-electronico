@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"pagare/internal/auth"
 	"pagare/internal/firma"
@@ -57,8 +58,10 @@ type pendienteEmision struct {
 	PubFirmante string `json:"pub_firmante"`
 }
 
-// pendienteEndoso es el endoso que espera a la firma.
-type pendienteEndoso struct {
+// pendienteTransferencia es el cambio de titularidad que espera a la firma,
+// tanto de un endoso como de una cesión. Los dos son un TRANSFER en el libro y
+// se diferencian por su metadata, que viaja aquí tal cual.
+type pendienteTransferencia struct {
 	A           string                 `json:"a"`
 	PubFirmante string                 `json:"pub_firmante"`
 	Metadata    map[string]interface{} `json:"metadata"`
@@ -153,10 +156,14 @@ func (h *PagareHandler) pedirFirma(r *http.Request, op firma.Operacion, assetID 
 }
 
 func asuntoDe(op firma.Operacion) string {
-	if op == firma.Endoso {
+	switch op {
+	case firma.Endoso:
 		return "Firma del endoso de un pagaré"
+	case firma.Cesion:
+		return "Firma de la cesión de un pagaré"
+	default:
+		return "Firma de la emisión de un pagaré"
 	}
-	return "Firma de la emisión de un pagaré"
 }
 
 // urlDeVerificacion es el enlace público que lleva el QR del PDF.
@@ -267,10 +274,10 @@ func (h *PagareHandler) hacerPendiente(reg *firma.Registro) error {
 		}
 		return nil
 
-	case firma.Endoso:
-		var p pendienteEndoso
+	case firma.Endoso, firma.Cesion:
+		var p pendienteTransferencia
 		if err := json.Unmarshal(reg.Pendiente, &p); err != nil {
-			return fmt.Errorf("el endoso en espera no se pudo leer: %w", err)
+			return fmt.Errorf("la transferencia en espera no se pudo leer: %w", err)
 		}
 		if h.yaEsDe(reg.AssetID, p.A) {
 			return nil
@@ -287,10 +294,10 @@ func (h *PagareHandler) hacerPendiente(reg *firma.Registro) error {
 		}
 		_, status, err := h.client.UpdateAsset(cuerpo)
 		if err != nil {
-			return fmt.Errorf("el endoso está firmado pero la red no lo aceptó: %w", err)
+			return fmt.Errorf("la %s está firmada pero la red no la aceptó: %w", reg.Operacion, err)
 		}
 		if status != 200 {
-			return fmt.Errorf("el endoso está firmado pero la red lo rechazó con %d", status)
+			return fmt.Errorf("la %s está firmada pero la red la rechazó con %d", reg.Operacion, status)
 		}
 		return nil
 
@@ -520,6 +527,24 @@ func endosoParaPDF(e *models.Endoso, endosantePub string) pdf.Endoso {
 	if e.Endosatario != nil {
 		fila.Endosatario = strings.TrimSpace(e.Endosatario.Nombre + " " + e.Endosatario.Apellido)
 		fila.NIF = e.Endosatario.NIF
+	}
+	return fila
+}
+
+// cesionParaPDF traduce la cesión que se está haciendo a la fila que el PDF
+// pinta aparte de la cadena de endosos. Va separada a propósito: imprimir una
+// cesión entre los endosos sugeriría una responsabilidad por la solvencia del
+// deudor que el cedente no asumió.
+func cesionParaPDF(c *Cesion, cedentePub string) pdf.Cesion {
+	fila := pdf.Cesion{
+		Fecha:             time.Now().Format("2006-01-02"),
+		CedentePub:        cedentePub,
+		NotificacionFecha: c.NotificacionFecha,
+		NotificacionMedio: c.NotificacionMedio,
+	}
+	if c.Cesionario != nil {
+		fila.Cesionario = strings.TrimSpace(c.Cesionario.Nombre + " " + c.Cesionario.Apellido)
+		fila.NIF = c.Cesionario.NIF
 	}
 	return fila
 }

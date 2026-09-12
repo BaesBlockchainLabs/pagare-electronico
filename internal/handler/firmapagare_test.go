@@ -207,7 +207,7 @@ func TestCompletar_FirmadoEjecutaElEndoso(t *testing.T) {
 		firmado:   &firma.Firmado{PDF: []byte("%PDF"), Hash: "bbbb"},
 	}
 	h, regs, red := entornoFirma(t, ff)
-	reg := registroPendiente(t, regs, firma.Endoso, pendienteEndoso{
+	reg := registroPendiente(t, regs, firma.Endoso, pendienteTransferencia{
 		A: "pub-endosatario", PubFirmante: "pub-firm",
 		Metadata: map[string]interface{}{"action": "TRANSFER", "tipo_endoso": "en_propiedad"},
 	})
@@ -457,5 +457,78 @@ func TestEntregar_FirmadaAMediasSigueAdelante(t *testing.T) {
 	// pero no puede ser un 409 de firma pendiente.
 	if w.Code == http.StatusConflict {
 		t.Errorf("una firma ya hecha no puede bloquear la entrega: %s", w.Body.String())
+	}
+}
+
+// La cesión espera a la firma igual que el endoso, y lo que se ejecuta después
+// lleva su propia metadata: es un TRANSFER en el libro, pero de otro régimen.
+func TestCompletar_FirmadoEjecutaLaCesion(t *testing.T) {
+	ff := &firmaFalsa{
+		situacion: &firma.Situacion{GUID: "GUID-1", Terminado: true, Firmado: true},
+		firmado:   &firma.Firmado{PDF: []byte("%PDF"), Hash: "bbbb"},
+	}
+	h, regs, red := entornoFirma(t, ff)
+	reg := registroPendiente(t, regs, firma.Cesion, pendienteTransferencia{
+		A: "pub-cesionario", PubFirmante: "pub-firm",
+		Metadata: map[string]interface{}{
+			"action": TipoOperacionCesion, "tipo_operacion": TipoOperacionCesion,
+			"notificacion_fecha": "2026-09-12",
+		},
+	})
+
+	if _, err := h.Completar(context.Background(), reg); err != nil {
+		t.Fatalf("Completar: %v", err)
+	}
+	if len(*red) != 1 {
+		t.Fatalf("se esperaba una transferencia, hubo %d", len(*red))
+	}
+	cesion := (*red)[0]
+	if cesion["to"] != "pub-cesionario" {
+		t.Errorf("la cesión no fue al cesionario: %v", cesion)
+	}
+	meta, _ := cesion["metadata"].(map[string]interface{})
+	if meta["tipo_operacion"] != TipoOperacionCesion {
+		t.Errorf("la cesión no se marcó como tal: %v", meta)
+	}
+	if meta["notificacion_fecha"] != "2026-09-12" {
+		t.Errorf("la constancia de la notificación se perdió: %v", meta)
+	}
+}
+
+// La cesión va en el PDF aparte de los endosos: imprimirla entre ellos
+// sugeriría una responsabilidad por la solvencia que el cedente no asumió.
+func TestCesionParaPDF(t *testing.T) {
+	fila := cesionParaPDF(&Cesion{
+		Cesionario:        &models.Persona{Nombre: "Bea", Apellido: "Soler", NIF: "11111111H"},
+		NotificacionFecha: "2026-09-12",
+		NotificacionMedio: "burofax",
+	}, "pub-cedente")
+
+	if fila.Cesionario != "Bea Soler" || fila.NIF != "11111111H" {
+		t.Errorf("cesionario = %q / %q", fila.Cesionario, fila.NIF)
+	}
+	if fila.CedentePub != "pub-cedente" {
+		t.Errorf("cedente = %q", fila.CedentePub)
+	}
+	if fila.NotificacionFecha != "2026-09-12" || fila.NotificacionMedio != "burofax" {
+		t.Errorf("la notificación no se conservó: %+v", fila)
+	}
+	if fila.Fecha == "" {
+		t.Error("la cesión tiene que llevar fecha")
+	}
+}
+
+// El asunto del aviso dice qué se firma: el firmante recibe un correo y tiene
+// que saber si es una emisión, un endoso o una cesión.
+func TestAsuntoDe(t *testing.T) {
+	casos := map[firma.Operacion]string{
+		firma.Emision: "emisión",
+		firma.Endoso:  "endoso",
+		firma.Cesion:  "cesión",
+	}
+	for op, esperado := range casos {
+		if asunto := asuntoDe(op); !strings.Contains(asunto, esperado) {
+			t.Errorf("asuntoDe(%q) = %q, se esperaba que mencionara %q", op, asunto, esperado)
+		}
 	}
 }
