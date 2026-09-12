@@ -34,9 +34,6 @@ type Verificacion struct {
 	// Motivo explica un estado fallido en palabras que se le puedan enseñar al
 	// usuario.
 	Motivo string `json:"motivo,omitempty"`
-	// URL es a donde hay que llevar al usuario para que valide. Se guarda para
-	// poder retomar una verificación a medias sin crear otro envío.
-	URL string `json:"url,omitempty"`
 
 	// Los tres siguientes son la trazabilidad de la evidencia en Logalty.
 	TokenID         string `json:"token_id,omitempty"`
@@ -83,10 +80,10 @@ func (s *Store) CrearVerificacion(v *Verificacion) error {
 
 	if _, err := s.db.Exec(`
 		INSERT INTO verificaciones_identidad
-		(id, user_id, referencia, guid, estado, motivo, url, token_id, validation_id,
+		(id, user_id, referencia, guid, estado, motivo, token_id, validation_id,
 		 hash_declaracion, creada_at, resuelta_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-	`, v.ID, v.UserID, v.Referencia, v.GUID, string(v.Estado), v.Motivo, v.URL,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+	`, v.ID, v.UserID, v.Referencia, v.GUID, string(v.Estado), v.Motivo,
 		v.TokenID, v.ValidationID, v.HashDeclaracion, v.CreadaAt); err != nil {
 		return err
 	}
@@ -100,14 +97,14 @@ func (s *Store) UltimaVerificacion(userID string) (*Verificacion, error) {
 	var resuelta sql.NullTime
 	err := s.db.QueryRow(`
 		SELECT id, user_id, referencia, COALESCE(guid, ''), estado, COALESCE(motivo, ''),
-		       COALESCE(url, ''), COALESCE(token_id, ''), COALESCE(validation_id, ''),
+		       COALESCE(token_id, ''), COALESCE(validation_id, ''),
 		       COALESCE(hash_declaracion, ''), creada_at, resuelta_at
 		FROM verificaciones_identidad
 		WHERE user_id = ?
 		ORDER BY creada_at DESC
 		LIMIT 1
 	`, userID).Scan(&v.ID, &v.UserID, &v.Referencia, &v.GUID, &estado, &v.Motivo,
-		&v.URL, &v.TokenID, &v.ValidationID, &v.HashDeclaracion, &v.CreadaAt, &resuelta)
+		&v.TokenID, &v.ValidationID, &v.HashDeclaracion, &v.CreadaAt, &resuelta)
 	if err == sql.ErrNoRows {
 		return nil, ErrVerificacionNoEncontrada
 	}

@@ -45,7 +45,7 @@ func TestVerificacion_ResolverVuelcaLosDatosDelDNI(t *testing.T) {
 	s := newTestStore(t)
 	u := usuarioSinVerificar(t, s, "bea")
 
-	v := &Verificacion{UserID: u.ID, Referencia: u.ID, URL: "https://portal/validar"}
+	v := &Verificacion{UserID: u.ID, Referencia: u.ID}
 	if err := s.CrearVerificacion(v); err != nil {
 		t.Fatalf("CrearVerificacion: %v", err)
 	}

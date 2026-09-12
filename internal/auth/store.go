@@ -127,7 +127,6 @@ func (s *Store) initSchema() error {
 			guid             TEXT,
 			estado           TEXT NOT NULL,
 			motivo           TEXT,
-			url              TEXT,
 			token_id         TEXT,
 			validation_id    TEXT,
 			hash_declaracion TEXT,

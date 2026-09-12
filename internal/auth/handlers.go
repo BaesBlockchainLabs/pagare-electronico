@@ -183,7 +183,6 @@ func (h *Handlers) arrancarVerificacion(r *http.Request, u *User) map[string]int
 		Referencia: envio.Referencia,
 		GUID:       envio.GUID,
 		Estado:     VerificacionPendiente,
-		URL:        envio.URL,
 	}
 	if err := h.store.CrearVerificacion(v); err != nil {
 		fmt.Printf("[register] no se pudo registrar la validación de %s: %v\n", u.Username, err)

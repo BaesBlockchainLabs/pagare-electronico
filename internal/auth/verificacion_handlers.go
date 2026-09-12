@@ -39,8 +39,10 @@ func (h *Handlers) IniciarVerificacion(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, respuestaVerificacion(v, "Tu identidad ya está verificada."))
 			return
 		}
-		if v.Pendiente() && v.URL != "" {
-			writeJSON(w, http.StatusOK, respuestaVerificacion(v, "Ya tienes una validación en curso."))
+		// Un intento en curso no se duplica: reenviar crearía otro envío en el
+		// portal y otro SMS al usuario.
+		if v.Pendiente() {
+			writeJSON(w, http.StatusOK, respuestaVerificacion(v, "Ya tienes una validación en curso: revisa tu móvil."))
 			return
 		}
 	}
@@ -74,14 +76,13 @@ func (h *Handlers) IniciarVerificacion(w http.ResponseWriter, r *http.Request) {
 		Referencia: envio.Referencia,
 		GUID:       envio.GUID,
 		Estado:     VerificacionPendiente,
-		URL:        envio.URL,
 	}
 	if err := h.store.CrearVerificacion(v); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": "no se pudo registrar la validación"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, respuestaVerificacion(v, "Abre el enlace y lee tu DNI con el móvil."))
+	writeJSON(w, http.StatusOK, respuestaVerificacion(v, ""))
 }
 
 // EstadoVerificacionHandler informa de cómo va la verificación del usuario en
@@ -179,8 +180,8 @@ func (h *Handlers) refrescar(r *http.Request, v *Verificacion) {
 }
 
 // respuestaVerificacion es el cuerpo que ven el alta y la pantalla de
-// verificación. No lleva ningún dato del documento: el estado, la URL a la que
-// ir y, si falló, por qué.
+// verificación. No lleva ningún dato del documento: sólo el estado y, si
+// falló, por qué.
 func respuestaVerificacion(v *Verificacion, mensaje string) map[string]interface{} {
 	if mensaje == "" {
 		mensaje = mensajeDe(v)
@@ -190,9 +191,6 @@ func respuestaVerificacion(v *Verificacion, mensaje string) map[string]interface
 		"activa":  true,
 		"estado":  string(v.Estado),
 		"mensaje": mensaje,
-	}
-	if v.Estado == VerificacionPendiente && v.URL != "" {
-		res["url"] = v.URL
 	}
 	if v.Motivo != "" {
 		res["motivo"] = v.Motivo
@@ -207,7 +205,7 @@ func mensajeDe(v *Verificacion) string {
 	case VerificacionFallida:
 		return "La validación no se completó. Puedes volver a intentarlo."
 	case VerificacionPendiente:
-		return "Validación en curso: abre el enlace y lee tu DNI con el móvil."
+		return "Te hemos enviado un enlace por SMS y correo: ábrelo y lee tu DNI con el móvil."
 	default:
 		return "Todavía no has validado tu identidad."
 	}

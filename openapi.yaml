@@ -118,8 +118,8 @@ paths:
 
 
         La cuenta nace en estado pendiente: existe y se puede entrar en ella, pero no opera con pagarés
-        hasta que la validación se supera y trae los datos personales. La respuesta lleva la URL a la
-        que hay que llevar al usuario.
+        hasta que la validación se supera y trae los datos personales. El enlace para validar lo envía
+        el portal al móvil y al correo del usuario.
       operationId: register
       security: []
       requestBody:
@@ -143,9 +143,9 @@ paths:
       - Autenticación
       summary: Arrancar la validación de identidad
       description: >
-        Crea el envío de validación contra Logalty y devuelve la URL a la que hay que llevar al usuario
-        para que lea el chip de su DNI. Es idempotente mientras haya un intento en curso: devuelve la
-        URL ya creada en lugar de abrir otro envío.
+        Crea el envío de validación contra Logalty. Es el portal quien avisa al usuario, por SMS y
+        correo, con el enlace para leer el chip de su DNI. Es idempotente mientras haya un intento en
+        curso: no crea un segundo envío, que sería un segundo SMS.
       operationId: iniciarVerificacion
       responses:
         '200':
@@ -1651,10 +1651,6 @@ components:
           - pendiente
           - verificada
           - fallida
-        url:
-          type: string
-          format: uri
-          description: A donde hay que llevar al usuario para que lea su DNI. Sólo cuando está pendiente.
         mensaje:
           type: string
         motivo:

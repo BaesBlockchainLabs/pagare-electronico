@@ -12,13 +12,13 @@ templ Verificacion(user *CurrentUser) {
 
 			<div id="ver-pendiente" class="hidden">
 				<ol class="desc" style="padding-left:20px;line-height:1.8;">
-					<li>Abre el enlace de validación, mejor en el móvil.</li>
+					<li>Abre en el móvil el enlace que te hemos enviado por SMS y por correo.</li>
 					<li>Acerca tu DNI al móvil para que lea el chip.</li>
 					<li>Vuelve aquí y pulsa <strong>Ya he validado</strong>.</li>
 				</ol>
-				<div class="mt-4" style="display:flex;gap:8px;flex-wrap:wrap;">
-					<a id="ver-enlace" class="btn btn-primary" href="#" target="_blank" rel="noopener">Abrir la validación</a>
-					<button type="button" class="btn btn-outline" onclick="comprobar()">Ya he validado</button>
+				<p class="desc">El portal puede tardar unos minutos en registrar el resultado; si acabas de validar y todavía no aparece, espera un poco y vuelve a comprobar.</p>
+				<div class="mt-4">
+					<button type="button" class="btn btn-primary" onclick="comprobar()">Ya he validado</button>
 				</div>
 			</div>
 
@@ -67,9 +67,8 @@ templ Verificacion(user *CurrentUser) {
 			if (data.estado === 'verificada') {
 				estado.className = 'alert alert-success';
 				hecho.classList.remove('hidden');
-			} else if (data.estado === 'pendiente' && data.url) {
+			} else if (data.estado === 'pendiente') {
 				estado.className = 'alert';
-				document.getElementById('ver-enlace').href = data.url;
 				pendiente.classList.remove('hidden');
 			} else {
 				estado.className = data.estado === 'fallida' ? 'alert alert-error' : 'alert';

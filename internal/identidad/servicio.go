@@ -12,10 +12,6 @@ import (
 	"pagare/internal/config"
 )
 
-// idioma con el que el portal atiende al usuario. Logalty lo quiere como
-// locale completo, no como código de dos letras.
-const idioma = "es-ES"
-
 // Servicio habla con Logalty para validar identidades.
 //
 // El cero de Servicio no es utilizable; usa NuevoServicio. Un *Servicio nil
@@ -66,19 +62,21 @@ type Solicitud struct {
 
 // Envio es un envío de validación ya creado.
 type Envio struct {
-	// URL es a donde hay que llevar al usuario para que lea su DNI.
-	URL string
-	// GUID identifica el envío en el portal. Puede venir vacío si el portal
-	// todavía no lo ha asignado; Consultar lo resuelve por referencia.
+	// GUID identifica el envío en el portal. Viene vacío al crearlo: el portal
+	// no lo asigna hasta que el envío sale. Consultar lo resuelve por
+	// referencia, que es justo para lo que sirve la referencia.
 	GUID       string
 	Referencia string
 }
 
-// Iniciar crea el envío de validación de identidad y devuelve la URL a la que
-// hay que llevar al usuario.
+// Iniciar crea el envío de validación de identidad. Es el portal quien avisa
+// al usuario, por SMS y correo, con el enlace para leer su DNI.
 //
-// Se usa el envío síncrono porque el usuario está delante en ese momento: así
-// se le lleva directamente a validar en lugar de hacerle esperar un SMS.
+// El envío síncrono —el que devolvería el enlace en la misma llamada, para
+// llevar al usuario directamente— no sirve aquí: sólo admite tipos de servicio
+// de aceptación, y una validación de documentos de identidad no lo es. El
+// portal lo rechaza con el código 122, "Type Service Incorrect Must be
+// Acceptance".
 func (s *Servicio) Iniciar(ctx context.Context, sol Solicitud) (*Envio, error) {
 	if s == nil {
 		return nil, ErrDesactivado
@@ -89,10 +87,9 @@ func (s *Servicio) Iniciar(ctx context.Context, sol Solicitud) (*Envio, error) {
 
 	// Sin documento: una validación de identidad no firma nada, sólo lee el
 	// chip y emite la declaración de atributos.
-	res, err := s.cliente.ShippingSynchronousSend(ctx, wsdatachannel.SendRequest{
+	res, err := s.cliente.ShippingSend(ctx, wsdatachannel.SendRequest{
 		CompanyID: s.empresa,
 		TypeID:    s.tipo,
-		Language:  idioma,
 		Receivers: []wsdatachannel.Receiver{{
 			ExternalID:     sol.Referencia,
 			ReceiverName:   sol.Nombre,
@@ -106,11 +103,8 @@ func (s *Servicio) Iniciar(ctx context.Context, sol Solicitud) (*Envio, error) {
 	if err := res.Err(); err != nil {
 		return nil, fmt.Errorf("identidad: el portal rechazó el envío: %w", err)
 	}
-	if strings.TrimSpace(res.URLSaml) == "" {
-		return nil, fmt.Errorf("identidad: el portal aceptó el envío pero no devolvió URL de validación")
-	}
 
-	envio := &Envio{URL: res.URLSaml, Referencia: sol.Referencia}
+	envio := &Envio{Referencia: sol.Referencia}
 	if len(res.Documents) > 0 {
 		envio.GUID = res.Documents[0].GUID
 	}
