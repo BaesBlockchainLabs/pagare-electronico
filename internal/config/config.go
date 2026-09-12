@@ -53,6 +53,9 @@ type LogaltyConfig struct {
 	// Portal es la base del portal web de Logalty. Sólo se usa para enlazar
 	// desde la administración; el flujo del usuario no pasa por ahí.
 	Portal string
+	// Remitente es el "Enviado por" del aviso que el portal manda al firmante.
+	// Vacío, el portal pone el nombre de la empresa.
+	Remitente string
 }
 
 // Activa indica si hay configuración suficiente para validar identidades.

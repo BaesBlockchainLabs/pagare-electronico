@@ -43,6 +43,7 @@ func servicio(t *testing.T) *Servicio {
 		Password:     os.Getenv("LOGALTY_PASSWORD"),
 		Empresa:      os.Getenv("LOGALTY_COMPANY"),
 		TipoContrato: os.Getenv("LOGALTY_TYPE_CONTRACT"),
+		Remitente:    os.Getenv("LOGALTY_SENDER_NAME"),
 	}
 	if !cfg.FirmaActiva() {
 		t.Skip("sin LOGALTY_* en el entorno; usa: set -a; . ./.env; set +a")
@@ -131,6 +132,7 @@ func TestManualFirma(t *testing.T) {
 	envio, err := s.Iniciar(ctx, Peticion{
 		Referencia: ref,
 		Fichero:    "pagare.pdf",
+		Asunto:     "Firma del pagaré de prueba",
 		PDF:        documento,
 		Firmante: Firmante{
 			Nombre: *nombre, Apellidos: "Logalty",
@@ -143,7 +145,7 @@ func TestManualFirma(t *testing.T) {
 	t.Logf("referencia:     %s", envio.Referencia)
 	t.Logf("guid:           %q", envio.GUID)
 	t.Logf("hash original:  %s", envio.HashOriginal)
-	t.Logf("URL de firma:   %s", envio.URL)
+	t.Log("el portal avisa al firmante por correo y SMS; el enlace va ahí")
 
 	sit, err := s.Consultar(ctx, ref)
 	if err != nil {

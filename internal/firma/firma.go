@@ -6,9 +6,19 @@
 // decir, es la firma que el art. 25 eIDAS equipara a la manuscrita, que la
 // firma ed25519 de la cadena no da por sí sola.
 //
-// El flujo es de tres pasos y el firmante está delante en el primero: se crea
-// el envío y el portal devuelve en el acto la URL donde firma; cuando termina,
-// hay PDF firmado que descargar.
+// El flujo es de tres pasos: se crea el envío, el portal avisa al firmante por
+// correo y SMS con el enlace donde firma, y cuando termina hay PDF firmado que
+// descargar.
+//
+// El envío síncrono —el que devuelve una URL de firma en la misma llamada, para
+// llevar al firmante directamente— no sirve aquí, y eso costó averiguarlo: crea
+// el envío, el portal estampa el documento y devuelve una URL con toda la
+// pinta de ser buena, pero abrirla redirige al formulario de acceso del portal
+// en lugar de abrir la firma, incluso recién generada y en una ventana limpia.
+// Comprobado también con buildSamlUrl, que devuelve una URL de la misma forma y
+// se comporta igual. Con el envío asíncrono, el enlace que manda el portal sí
+// abre la firma: es el camino que llegó a Finalizada / Aceptada con su PDF
+// firmado.
 package firma
 
 import (
@@ -26,10 +36,6 @@ import (
 	"pagare/internal/config"
 )
 
-// idioma con el que el portal atiende al firmante. Logalty lo quiere como
-// locale completo, no como código de dos letras.
-const idioma = "es-ES"
-
 // ErrDesactivada se devuelve cuando no hay configuración de firma. No es un
 // fallo: es el modo en el que corre el desarrollo.
 var ErrDesactivada = fmt.Errorf("firma: la firma de PDF con Logalty no está configurada")
@@ -43,6 +49,9 @@ type Servicio struct {
 	cliente *wsdatachannel.Client
 	empresa string
 	tipo    string
+	// remitente es el "Enviado por" del aviso que recibe el firmante. Vacío,
+	// el portal pone el nombre de la empresa.
+	remitente string
 }
 
 // NuevoServicio construye el servicio a partir de la configuración. Devuelve
@@ -57,7 +66,12 @@ func NuevoServicio(cfg config.LogaltyConfig) (*Servicio, error) {
 	if err != nil {
 		return nil, fmt.Errorf("firma: %w", err)
 	}
-	return &Servicio{cliente: cliente, empresa: cfg.Empresa, tipo: cfg.TipoContrato}, nil
+	return &Servicio{
+		cliente:   cliente,
+		empresa:   cfg.Empresa,
+		tipo:      cfg.TipoContrato,
+		remitente: cfg.Remitente,
+	}, nil
 }
 
 // Activa indica si hay con quién firmar.
@@ -96,13 +110,15 @@ type Peticion struct {
 	// Fichero es el nombre que ve el firmante, con extensión.
 	Fichero string
 	PDF     []byte
+	// Asunto es el asunto del correo con que el portal avisa al firmante.
+	Asunto string
 }
 
 // Envio es un envío de firma ya creado.
 type Envio struct {
-	// URL es a donde hay que llevar al firmante, ya: el envío de contratación
-	// síncrono la devuelve en la misma llamada.
-	URL        string
+	// GUID identifica el envío en el portal. Viene vacío al crearlo: el portal
+	// no lo asigna hasta que el envío sale. Consultar lo resuelve por
+	// referencia, que es para lo que sirve la referencia.
 	GUID       string
 	Referencia string
 	// HashOriginal es el SHA-256 del PDF que se mandó. Hay que conservarlo:
@@ -110,12 +126,13 @@ type Envio struct {
 	HashOriginal string
 }
 
-// Iniciar crea el envío de firma y devuelve la URL donde firma el firmante.
+// Iniciar crea el envío de firma. Es el portal quien avisa al firmante, por
+// correo y SMS, con el enlace donde firma.
 //
-// Se usa la operación síncrona multirreceptor porque es la única que devuelve
-// la URL en el acto, y porque las variantes de un solo receptor están
-// obsoletas. Sólo funciona con un tipo de contratación: cualquier otro se
-// rechaza con el código 122.
+// Se usa la variante multirreceptor porque las de un solo receptor están
+// obsoletas, y la asíncrona porque la síncrona devuelve una URL que no abre la
+// firma; ver la documentación del paquete. El tipo tiene que ser de
+// contratación: cualquier otro se rechaza con el código 122.
 func (s *Servicio) Iniciar(ctx context.Context, p Peticion) (*Envio, error) {
 	if s == nil {
 		return nil, ErrDesactivada
@@ -139,12 +156,13 @@ func (s *Servicio) Iniciar(ctx context.Context, p Peticion) (*Envio, error) {
 		fichero = "documento.pdf"
 	}
 
-	res, err := s.cliente.ShippingSynchronousSendMultiReceiver(ctx,
+	res, err := s.cliente.ShippingSendMultiReceiver(ctx,
 		wsdatachannel.MultiReceiverSendRequest{
 			CompanyID:  s.empresa,
 			TypeID:     s.tipo,
 			ExternalID: p.Referencia,
-			Language:   idioma,
+			SenderName: s.remitente,
+			Subject:    p.Asunto,
 			Receivers: []wsdatachannel.Receiver{{
 				ReceiverName:         p.Firmante.Nombre,
 				ReceiverLastName1:    p.Firmante.Apellidos,
@@ -154,7 +172,10 @@ func (s *Servicio) Iniciar(ctx context.Context, p Peticion) (*Envio, error) {
 				ReceiverMobile:       p.Firmante.Movil,
 			}},
 			Files: []wsdatachannel.BinaryContentItem{{
-				Type:    "pdf",
+				// El tipo MIME, no la extensión, aunque el comentario del campo
+				// en el SDK diga lo contrario: es lo que declaraba el envío que
+				// llegó a firmarse, y lo que manda su propia herramienta.
+				Type:    "application/pdf",
 				Name:    fichero,
 				Content: wsdatachannel.EncodeContent(p.PDF),
 			}},
@@ -174,14 +195,8 @@ func (s *Servicio) Iniciar(ctx context.Context, p Peticion) (*Envio, error) {
 	}
 
 	envio := &Envio{Referencia: p.Referencia, HashOriginal: hash}
-	if enlaces := res[0].Link; len(enlaces) > 0 {
-		envio.URL = enlaces[0].URL
-	}
 	if docs := res[0].Documents; len(docs) > 0 {
 		envio.GUID = docs[0].GUID
-	}
-	if envio.URL == "" {
-		return nil, fmt.Errorf("firma: el portal aceptó el envío pero no devolvió URL de firma")
 	}
 	return envio, nil
 }
