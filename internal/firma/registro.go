@@ -57,8 +57,10 @@ type Registro struct {
 	// contenido que generamos.
 	HashOriginal string `json:"hash_original"`
 	HashFirmado  string `json:"hash_firmado,omitempty"`
-	// RutaPDF es donde está guardado el PDF firmado.
-	RutaPDF string `json:"ruta_pdf,omitempty"`
+	// RutaPDF es donde está guardado el PDF firmado, y RutaOriginal donde está
+	// el que se mandó a firmar.
+	RutaPDF      string `json:"ruta_pdf,omitempty"`
+	RutaOriginal string `json:"ruta_original,omitempty"`
 
 	// Pendiente es la operación en espera, serializada. Su forma la decide
 	// quien la creó; este paquete sólo la guarda y la devuelve.
@@ -127,6 +129,11 @@ func (r *Registros) esquema() error {
 			hash_original TEXT NOT NULL,
 			hash_firmado  TEXT,
 			ruta_pdf      TEXT,
+			-- El PDF que se mandó a firmar. Se guarda para que un reintento haga
+			-- firmar el mismo documento y para que hash_original sea cotejable
+			-- contra un fichero que tenemos, no sólo contra lo que devuelve el
+			-- portal.
+			ruta_original TEXT,
 			pendiente     TEXT,
 			creada_at     DATETIME,
 			resuelta_at   DATETIME,
@@ -144,6 +151,7 @@ func (r *Registros) esquema() error {
 	// Migración aditiva para las bases de datos creadas antes de distinguir la
 	// firma a medias.
 	r.asegurarColumna("firmas_pagare", "ejecutada_at", "DATETIME")
+	r.asegurarColumna("firmas_pagare", "ruta_original", "TEXT")
 	return nil
 }
 
@@ -172,31 +180,56 @@ func (r *Registros) asegurarColumna(tabla, columna, tipo string) {
 // Cerrar suelta la base de datos.
 func (r *Registros) Cerrar() error { return r.db.Close() }
 
-// Crear abre una firma pendiente. Asigna id y fecha.
-func (r *Registros) Crear(reg *Registro) error {
+// Crear abre una firma pendiente, guardando el documento que se mandó a firmar.
+// Asigna id, fecha y la ruta del original.
+//
+// El original se escribe antes de la fila, por lo mismo que el firmado: un
+// registro que dice tener un documento y no lo tiene miente, mientras que un
+// fichero huérfano sólo ocupa sitio.
+func (r *Registros) Crear(reg *Registro, original []byte) error {
 	if reg.AssetID == "" || reg.Referencia == "" || reg.HashOriginal == "" {
 		return errors.New("firma: la firma necesita pagaré, referencia y hash del original")
+	}
+	if len(original) == 0 {
+		return errors.New("firma: falta el documento que se mandó a firmar")
 	}
 	reg.ID = nuevoID()
 	reg.CreadaAt = time.Now().UTC()
 	if reg.Estado == "" {
 		reg.Estado = Pendiente
 	}
-	_, err := r.db.Exec(`
+
+	ruta := r.ruta(reg, "original")
+	if err := os.WriteFile(ruta, original, 0600); err != nil {
+		return fmt.Errorf("firma: guardando el documento a firmar: %w", err)
+	}
+
+	if _, err := r.db.Exec(`
 		INSERT INTO firmas_pagare
 		(id, asset_id, operacion, user_id, referencia, guid, estado, motivo,
-		 hash_original, hash_firmado, ruta_pdf, pendiente, creada_at, resuelta_at,
-		 ejecutada_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, '', '', ?, ?, NULL, NULL)
+		 hash_original, hash_firmado, ruta_pdf, ruta_original, pendiente, creada_at,
+		 resuelta_at, ejecutada_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, '', '', ?, ?, ?, NULL, NULL)
 	`, reg.ID, reg.AssetID, string(reg.Operacion), reg.UserID, reg.Referencia,
-		reg.GUID, string(reg.Estado), reg.HashOriginal, string(reg.Pendiente), reg.CreadaAt)
-	return err
+		reg.GUID, string(reg.Estado), reg.HashOriginal, ruta, string(reg.Pendiente),
+		reg.CreadaAt); err != nil {
+		os.Remove(ruta)
+		return err
+	}
+	reg.RutaOriginal = ruta
+	return nil
+}
+
+// ruta es dónde va un documento de una firma.
+func (r *Registros) ruta(reg *Registro, clase string) string {
+	return filepath.Join(r.dir, "firmas",
+		fmt.Sprintf("%s-%s-%s-%s.pdf", reg.AssetID, reg.Operacion, reg.ID, clase))
 }
 
 const camposRegistro = `id, asset_id, operacion, user_id, referencia,
 	COALESCE(guid, ''), estado, COALESCE(motivo, ''), hash_original,
-	COALESCE(hash_firmado, ''), COALESCE(ruta_pdf, ''), COALESCE(pendiente, ''),
-	creada_at, resuelta_at, ejecutada_at`
+	COALESCE(hash_firmado, ''), COALESCE(ruta_pdf, ''), COALESCE(ruta_original, ''),
+	COALESCE(pendiente, ''), creada_at, resuelta_at, ejecutada_at`
 
 func leerRegistro(escanear func(...any) error) (*Registro, error) {
 	var reg Registro
@@ -204,7 +237,7 @@ func leerRegistro(escanear func(...any) error) (*Registro, error) {
 	var resuelta, ejecutada sql.NullTime
 	if err := escanear(&reg.ID, &reg.AssetID, &operacion, &reg.UserID, &reg.Referencia,
 		&reg.GUID, &estado, &reg.Motivo, &reg.HashOriginal,
-		&reg.HashFirmado, &reg.RutaPDF, &pendiente,
+		&reg.HashFirmado, &reg.RutaPDF, &reg.RutaOriginal, &pendiente,
 		&reg.CreadaAt, &resuelta, &ejecutada); err != nil {
 		return nil, err
 	}
@@ -292,8 +325,7 @@ func (r *Registros) Fallar(id, motivo string) error {
 // el documento que la respalda no sirve de nada, mientras que un fichero
 // huérfano sólo ocupa sitio.
 func (r *Registros) Resolver(reg *Registro, f *Firmado) error {
-	nombre := fmt.Sprintf("%s-%s-%s.pdf", reg.AssetID, reg.Operacion, reg.ID)
-	ruta := filepath.Join(r.dir, "firmas", nombre)
+	ruta := r.ruta(reg, "firmado")
 	if err := os.WriteFile(ruta, f.PDF, 0600); err != nil {
 		return fmt.Errorf("firma: guardando el PDF firmado: %w", err)
 	}
@@ -325,6 +357,16 @@ func (r *Registros) PDFFirmado(reg *Registro) ([]byte, error) {
 		return nil, ErrNoEncontrada
 	}
 	return os.ReadFile(reg.RutaPDF)
+}
+
+// PDFOriginal devuelve el documento tal como se mandó a firmar. Es lo que un
+// reintento vuelve a mandar, para que se firme el mismo documento y no otro
+// generado de nuevo.
+func (r *Registros) PDFOriginal(reg *Registro) ([]byte, error) {
+	if reg == nil || reg.RutaOriginal == "" {
+		return nil, ErrNoEncontrada
+	}
+	return os.ReadFile(reg.RutaOriginal)
 }
 
 func nuevoID() string {

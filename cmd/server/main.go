@@ -513,6 +513,9 @@ func main() {
 			// que estaba esperando.
 			r.Get("/firma", pagareHandler.EstadoFirma)
 			r.Get("/firma/pdf", pagareHandler.DescargarPDFFirmado)
+			// Volver a pedir una firma que se quedó sin hacer. Sin esto, un
+			// pagaré cuya firma falla queda inentregable para siempre.
+			r.Post("/firma", pagareHandler.PedirFirmaDeNuevo)
 			r.Get("/propietario", consultaHandler.GetPropietario)
 			r.Get("/public", consultaHandler.GetPublicAsset)
 			r.Get("/alertas", func(w http.ResponseWriter, r *http.Request) {

@@ -24,12 +24,16 @@ type firmaFalsa struct {
 	firmado   *firma.Firmado
 	errorRec  error
 	recogidas []string
+	pedidas   []firma.Peticion
 }
 
 func (f *firmaFalsa) Activa() bool { return true }
 
-func (f *firmaFalsa) Iniciar(context.Context, firma.Peticion) (*firma.Envio, error) {
-	return &firma.Envio{Referencia: "ref", GUID: "GUID-1", HashOriginal: "aaaa"}, nil
+// Devuelve la referencia que se le pide, como hace el servicio real: es lo que
+// distingue un reintento del envío anterior.
+func (f *firmaFalsa) Iniciar(_ context.Context, p firma.Peticion) (*firma.Envio, error) {
+	f.pedidas = append(f.pedidas, p)
+	return &firma.Envio{Referencia: p.Referencia, GUID: "GUID-1", HashOriginal: "aaaa"}, nil
 }
 
 func (f *firmaFalsa) Consultar(context.Context, string) (*firma.Situacion, error) {
@@ -94,7 +98,7 @@ func registroPendiente(t *testing.T, regs *firma.Registros, op firma.Operacion, 
 	bruto, _ := json.Marshal(espera)
 	reg := &firma.Registro{AssetID: "asset-1", Operacion: op, UserID: "u1",
 		Referencia: "ref", HashOriginal: "aaaa", GUID: "GUID-1", Pendiente: bruto}
-	if err := regs.Crear(reg); err != nil {
+	if err := regs.Crear(reg, []byte("%PDF a firmar")); err != nil {
 		t.Fatalf("Crear: %v", err)
 	}
 	return reg
@@ -530,5 +534,148 @@ func TestAsuntoDe(t *testing.T) {
 		if asunto := asuntoDe(op); !strings.Contains(asunto, esperado) {
 			t.Errorf("asuntoDe(%q) = %q, se esperaba que mencionara %q", op, asunto, esperado)
 		}
+	}
+}
+
+func pideReintento(t *testing.T, h *PagareHandler, p *auth.Principal) (*httptest.ResponseRecorder, map[string]interface{}) {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodPost, "/api/pagares/firma",
+		strings.NewReader(`{"id":"asset-1"}`))
+	if p != nil {
+		r = r.WithContext(auth.ContextWithPrincipal(r.Context(), p))
+	}
+	w := httptest.NewRecorder()
+	h.PedirFirmaDeNuevo(w, r)
+	var res map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	return w, res
+}
+
+var comoFirmante = &auth.Principal{UserID: "u1", Username: "rampa", Role: auth.RoleUser}
+
+// Una firma fallida se puede volver a pedir, y se manda el mismo documento.
+func TestPedirFirmaDeNuevo_TrasUnFallo(t *testing.T) {
+	ff := &firmaFalsa{situacion: &firma.Situacion{
+		GUID: "GUID-1", Terminado: true, Firmado: false, Descripcion: "Finalizada / Tiempo Expirado"}}
+	h, regs, _ := entornoFirma(t, ff)
+	reg := registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+	if err := regs.Fallar(reg.ID, "Tiempo Expirado"); err != nil {
+		t.Fatal(err)
+	}
+
+	w, res := pideReintento(t, h, comoFirmante)
+	if w.Code != http.StatusOK {
+		t.Fatalf("código = %d: %s", w.Code, w.Body.String())
+	}
+	if res["ok"] != true {
+		t.Errorf("respuesta = %v", res)
+	}
+
+	nueva, err := regs.Ultima("asset-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nueva.ID == reg.ID {
+		t.Error("tenía que abrirse otra firma, no reusar la fallida")
+	}
+	if !nueva.EnCurso() {
+		t.Errorf("la nueva firma tiene que estar en curso: %q", nueva.Estado)
+	}
+	// El mismo documento: lo que se firma es lo que se pidió firmar.
+	uno, _ := regs.PDFOriginal(reg)
+	otro, _ := regs.PDFOriginal(nueva)
+	if string(uno) != string(otro) {
+		t.Error("el reintento mandó un documento distinto")
+	}
+	// Y la operación en espera viaja con ella.
+	var p pendienteEmision
+	if json.Unmarshal(nueva.Pendiente, &p) != nil || p.A != "pub-benef" {
+		t.Errorf("la operación en espera se perdió: %s", nueva.Pendiente)
+	}
+}
+
+// Con una firma en curso no se pide otra: sería un segundo aviso de lo mismo.
+func TestPedirFirmaDeNuevo_EnCursoSeNiega(t *testing.T) {
+	ff := &firmaFalsa{situacion: &firma.Situacion{GUID: "GUID-1", Terminado: false}}
+	h, regs, _ := entornoFirma(t, ff)
+	registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+
+	w, _ := pideReintento(t, h, comoFirmante)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("código = %d, se esperaba 409: %s", w.Code, w.Body.String())
+	}
+}
+
+// Si resulta que ya estaba firmada, se dice y no se pide nada.
+func TestPedirFirmaDeNuevo_YaFirmada(t *testing.T) {
+	ff := &firmaFalsa{
+		situacion: &firma.Situacion{GUID: "GUID-1", Terminado: true, Firmado: true},
+		firmado:   &firma.Firmado{PDF: []byte("%PDF"), Hash: "bbbb"},
+	}
+	h, regs, _ := entornoFirma(t, ff)
+	registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+
+	w, res := pideReintento(t, h, comoFirmante)
+	if w.Code != http.StatusOK || res["ok"] != true {
+		t.Fatalf("código = %d: %s", w.Code, w.Body.String())
+	}
+	if f, _ := res["firma"].(map[string]interface{}); f["estado"] != string(firma.Firmada) {
+		t.Errorf("tenía que decir que ya está firmada: %v", res["firma"])
+	}
+}
+
+// Reintentar manda un aviso al móvil de una persona, así que no lo dispara
+// cualquiera.
+func TestPedirFirmaDeNuevo_SoloSuFirmante(t *testing.T) {
+	ff := &firmaFalsa{}
+	h, regs, _ := entornoFirma(t, ff)
+	reg := registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+	if err := regs.Fallar(reg.ID, "Tiempo Expirado"); err != nil {
+		t.Fatal(err)
+	}
+
+	otro := &auth.Principal{UserID: "otro", Username: "otro", Role: auth.RoleUser}
+	if w, _ := pideReintento(t, h, otro); w.Code != http.StatusForbidden {
+		t.Errorf("código = %d, se esperaba 403", w.Code)
+	}
+	// Un administrador sí, que es quien desatasca.
+	admin := &auth.Principal{UserID: "admin", Username: "admin", Role: auth.RoleAdmin}
+	if w, _ := pideReintento(t, h, admin); w.Code != http.StatusOK {
+		t.Errorf("un admin tenía que poder: %d", w.Code)
+	}
+}
+
+// Sin sesión, nada.
+func TestPedirFirmaDeNuevo_SinSesion(t *testing.T) {
+	h, _, _ := entornoFirma(t, &firmaFalsa{})
+	if w, _ := pideReintento(t, h, nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("código = %d, se esperaba 401", w.Code)
+	}
+}
+
+// Un reintento tiene que llevar otra referencia: la anterior ya identifica un
+// envío en el portal, y consultar por ella devolvería el viejo.
+func TestPedirFirmaDeNuevo_OtraReferencia(t *testing.T) {
+	ff := &firmaFalsa{}
+	h, regs, _ := entornoFirma(t, ff)
+	reg := registroPendiente(t, regs, firma.Emision, pendienteEmision{A: "pub-benef", PubFirmante: "pub-firm"})
+	if err := regs.Fallar(reg.ID, "Tiempo Expirado"); err != nil {
+		t.Fatal(err)
+	}
+
+	if w, _ := pideReintento(t, h, comoFirmante); w.Code != http.StatusOK {
+		t.Fatalf("código = %d", w.Code)
+	}
+	if len(ff.pedidas) != 1 {
+		t.Fatalf("peticiones al portal = %d", len(ff.pedidas))
+	}
+	if ff.pedidas[0].Referencia == reg.Referencia {
+		t.Errorf("el reintento reusó la referencia anterior: %q", ff.pedidas[0].Referencia)
+	}
+	if ff.pedidas[0].Asunto == "" {
+		t.Error("el aviso tiene que llevar asunto")
+	}
+	if len(ff.pedidas[0].PDF) == 0 {
+		t.Error("el reintento tiene que mandar el documento")
 	}
 }

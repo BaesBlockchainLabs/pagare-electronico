@@ -31,7 +31,7 @@ func TestRegistros_CicloDeUnaEmision(t *testing.T) {
 		HashOriginal: "aaaa",
 		Pendiente:    espera,
 	}
-	if err := r.Crear(reg); err != nil {
+	if err := r.Crear(reg, []byte("%PDF a firmar")); err != nil {
 		t.Fatalf("Crear: %v", err)
 	}
 	if reg.ID == "" || reg.Estado != Pendiente || reg.CreadaAt.IsZero() {
@@ -119,7 +119,7 @@ func TestRegistros_FallidaNoEstaAMedias(t *testing.T) {
 	r := registros(t)
 	reg := &Registro{AssetID: "asset-3", Operacion: Emision, UserID: "u1",
 		Referencia: "ref-3", HashOriginal: "aaaa"}
-	if err := r.Crear(reg); err != nil {
+	if err := r.Crear(reg, []byte("%PDF a firmar")); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Fallar(reg.ID, "Tiempo Expirado"); err != nil {
@@ -139,7 +139,7 @@ func TestRegistros_FallarConservaElMotivo(t *testing.T) {
 	r := registros(t)
 	reg := &Registro{AssetID: "asset-2", Operacion: Endoso, UserID: "u1",
 		Referencia: "ref-2", HashOriginal: "aaaa"}
-	if err := r.Crear(reg); err != nil {
+	if err := r.Crear(reg, []byte("%PDF a firmar")); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Fallar(reg.ID, "Chip NFC ilegible"); err != nil {
@@ -164,10 +164,10 @@ func TestRegistros_ReferenciaUnica(t *testing.T) {
 	r := registros(t)
 	uno := &Registro{AssetID: "a", Operacion: Emision, UserID: "u", Referencia: "misma", HashOriginal: "h"}
 	otro := &Registro{AssetID: "b", Operacion: Emision, UserID: "u", Referencia: "misma", HashOriginal: "h"}
-	if err := r.Crear(uno); err != nil {
+	if err := r.Crear(uno, []byte("%PDF")); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Crear(otro); err == nil {
+	if err := r.Crear(otro, []byte("%PDF")); err == nil {
 		t.Fatal("se admitió una referencia repetida")
 	}
 }
@@ -192,8 +192,63 @@ func TestRegistros_CrearExigeLoMinimo(t *testing.T) {
 		{AssetID: "a", Operacion: Emision, HashOriginal: "h"},
 		{AssetID: "a", Operacion: Emision, Referencia: "r"},
 	} {
-		if err := r.Crear(reg); err == nil {
+		if err := r.Crear(reg, []byte("%PDF a firmar")); err == nil {
 			t.Errorf("se admitió un registro incompleto: %+v", reg)
 		}
+	}
+}
+
+// El documento que se mandó a firmar se conserva: es lo que un reintento
+// vuelve a mandar, para que se firme lo mismo y no algo generado de nuevo.
+func TestRegistros_ConservaElDocumentoAFirmar(t *testing.T) {
+	r := registros(t)
+	original := []byte("%PDF-1.3 el pagare tal como se mando a firmar")
+	reg := &Registro{AssetID: "asset-4", Operacion: Emision, UserID: "u1",
+		Referencia: "ref-4", HashOriginal: "aaaa"}
+	if err := r.Crear(reg, original); err != nil {
+		t.Fatalf("Crear: %v", err)
+	}
+	if reg.RutaOriginal == "" {
+		t.Fatal("no se anotó la ruta del original")
+	}
+
+	guardado, err := r.Ultima("asset-4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	leido, err := r.PDFOriginal(guardado)
+	if err != nil {
+		t.Fatalf("PDFOriginal: %v", err)
+	}
+	if !bytes.Equal(leido, original) {
+		t.Error("el original no se recuperó igual")
+	}
+
+	// El firmado va a otro fichero: los dos tienen que convivir, porque el
+	// original es lo que prueba qué se pidió firmar.
+	if err := r.Resolver(guardado, &Firmado{PDF: []byte("%PDF firmado"), Hash: "bbbb"}); err != nil {
+		t.Fatal(err)
+	}
+	if guardado.RutaPDF == guardado.RutaOriginal {
+		t.Error("el firmado sobrescribió el original")
+	}
+	if leido, _ := r.PDFOriginal(guardado); !bytes.Equal(leido, original) {
+		t.Error("el original se perdió al guardar el firmado")
+	}
+	if leido, _ := r.PDFFirmado(guardado); string(leido) != "%PDF firmado" {
+		t.Error("el firmado no se guardó")
+	}
+}
+
+// Sin documento no hay firma que pedir, así que no se abre el registro.
+func TestRegistros_CrearExigeElDocumento(t *testing.T) {
+	r := registros(t)
+	reg := &Registro{AssetID: "a", Operacion: Emision, UserID: "u",
+		Referencia: "ref-sin-doc", HashOriginal: "h"}
+	if err := r.Crear(reg, nil); err == nil {
+		t.Fatal("se admitió una firma sin documento")
+	}
+	if _, err := r.Ultima("a"); err == nil {
+		t.Error("no debería haber quedado fila")
 	}
 }

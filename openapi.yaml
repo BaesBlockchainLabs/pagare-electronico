@@ -857,6 +857,48 @@ paths:
                     $ref: '#/components/schemas/FirmaPagare'
         4XX:
           $ref: '#/components/responses/Error'
+    post:
+      tags:
+      - Pagarés
+      summary: Volver a pedir la firma
+      description: >
+        Vuelve a pedir la firma de una operación cuya firma se quedó sin hacer. Sin esto un pagaré cuya
+        firma falla queda inentregable para siempre: la emisión ya está en la cadena y no se puede
+        deshacer, así que la única salida sería anularlo y volver a emitir con otro id.
+
+
+        Se manda el mismo documento, no uno generado de nuevo, para que el firmante firme lo que se le
+        pidió firmar. Sólo lo puede pedir quien tiene que firmar, o un administrador: reintentar manda
+        un aviso al móvil de una persona. Si hay una firma en curso se niega, y si ya estaba firmada lo
+        dice sin pedir nada.
+      operationId: pedirFirmaDeNuevo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - id
+              properties:
+                id:
+                  type: string
+      responses:
+        '200':
+          description: Firma pedida de nuevo, o ya firmada
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SimpleOkResponse'
+                - type: object
+                  properties:
+                    firma:
+                      $ref: '#/components/schemas/FirmaPagare'
+        4XX:
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
   /api/pagares/firma/pdf:
     get:
       tags:

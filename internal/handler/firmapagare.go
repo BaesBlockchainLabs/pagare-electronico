@@ -88,17 +88,23 @@ func (h *PagareHandler) pedirFirma(r *http.Request, op firma.Operacion, assetID 
 	if !h.FirmaActiva() {
 		return nil, firma.ErrDesactivada
 	}
-
-	u, err := h.firmantes.GetByID(userID)
-	if err != nil {
-		return nil, fmt.Errorf("no se pudo cargar al firmante: %w", err)
-	}
-
 	entrada.AssetID = assetID
 	entrada.VerifyURL = urlDeVerificacion(r, assetID)
 	documento, err := pdf.Generate(entrada)
 	if err != nil {
 		return nil, fmt.Errorf("no se pudo generar el PDF a firmar: %w", err)
+	}
+	return h.mandarAFirmar(r, op, assetID, documento, userID, pendiente)
+}
+
+// mandarAFirmar crea el envío de un documento ya hecho y lo registra. Es el
+// tramo que comparten pedir la firma por primera vez y volver a pedirla.
+func (h *PagareHandler) mandarAFirmar(r *http.Request, op firma.Operacion, assetID string,
+	documento []byte, userID string, pendiente any) (*firma.Registro, error) {
+
+	u, err := h.firmantes.GetByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo cargar al firmante: %w", err)
 	}
 
 	espera, err := json.Marshal(pendiente)
@@ -146,7 +152,7 @@ func (h *PagareHandler) pedirFirma(r *http.Request, op firma.Operacion, assetID 
 		HashOriginal: envio.HashOriginal,
 		Pendiente:    espera,
 	}
-	if err := h.firmas.Crear(reg); err != nil {
+	if err := h.firmas.Crear(reg, documento); err != nil {
 		// El envío ya salió, así que el firmante recibirá el aviso: decirlo es
 		// mejor que dejarlo en silencio y que firme algo que no vamos a recoger.
 		return nil, fmt.Errorf("la firma se pidió (%s) pero no se pudo registrar: %w",
@@ -547,4 +553,102 @@ func cesionParaPDF(c *Cesion, cedentePub string) pdf.Cesion {
 		fila.NIF = c.Cesionario.NIF
 	}
 	return fila
+}
+
+// PedirFirmaDeNuevo vuelve a pedir la firma de una operación cuya firma se
+// quedó sin hacer.
+//
+// Sin esto un pagaré cuya firma falla queda inentregable para siempre: la
+// emisión ya está en la cadena y no se puede deshacer, así que la única salida
+// sería anularlo y volver a emitir con otro id. Eso convertiría un chip ilegible
+// o un plazo agotado en un título perdido.
+//
+// Se vuelve a mandar el mismo documento, no uno generado de nuevo: el firmante
+// firma lo que se le pidió firmar, y el hash que ya estaba anotado sigue siendo
+// el del contenido.
+func (h *PagareHandler) PedirFirmaDeNuevo(w http.ResponseWriter, r *http.Request) {
+	principal := auth.GetPrincipal(r)
+	if principal == nil {
+		WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+	if !h.FirmaActiva() {
+		WriteJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"ok": false, "msg": "la firma del PDF no está configurada"})
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	if req.ID == "" {
+		req.ID = r.URL.Query().Get("id")
+	}
+	if req.ID == "" {
+		WriteJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "id es obligatorio"})
+		return
+	}
+
+	reg, err := h.firmas.Ultima(req.ID)
+	if errors.Is(err, firma.ErrNoEncontrada) {
+		WriteJSON(w, http.StatusNotFound, map[string]interface{}{
+			"ok": false, "msg": "este pagaré no tiene ninguna firma pedida"})
+		return
+	}
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+
+	// Sólo su firmante o un administrador: reintentar manda un aviso al móvil
+	// de una persona, y no es algo que pueda disparar cualquiera.
+	if reg.UserID != principal.UserID && !principal.IsAdmin() {
+		WriteJSON(w, http.StatusForbidden, map[string]interface{}{
+			"ok": false, "msg": "sólo quien tiene que firmar puede volver a pedir la firma"})
+		return
+	}
+
+	// Antes de nada, mirar si el portal ya la tiene: puede haberse firmado y
+	// nadie haberlo recogido, y entonces no hay nada que reintentar.
+	if reg.EnCurso() {
+		reg, _ = h.Completar(r.Context(), reg)
+	}
+	switch {
+	case reg.EnCurso():
+		WriteJSON(w, http.StatusConflict, map[string]interface{}{
+			"ok": false,
+			"msg": "Ya hay una firma en curso para este pagaré. Revisa tu correo y tu móvil; " +
+				"pedir otra mandaría un segundo aviso de lo mismo.",
+			"firma": vistaFirma(reg),
+		})
+		return
+	case reg.Estado == firma.Firmada:
+		WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"ok": true, "msg": "Esta operación ya está firmada.", "firma": vistaFirma(reg)})
+		return
+	}
+
+	documento, err := h.firmas.PDFOriginal(reg)
+	if err != nil {
+		WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"ok": false,
+			"msg": "no se conserva el documento que se mandó a firmar, así que no se " +
+				"puede volver a pedir la misma firma",
+		})
+		return
+	}
+
+	nuevo, err := h.mandarAFirmar(r, reg.Operacion, reg.AssetID, documento, reg.UserID,
+		json.RawMessage(reg.Pendiente))
+	if err != nil {
+		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":    true,
+		"msg":   "Firma pedida de nuevo: tienes el enlace en tu correo y tu móvil.",
+		"id":    reg.AssetID,
+		"firma": vistaFirma(nuevo),
+	})
 }
