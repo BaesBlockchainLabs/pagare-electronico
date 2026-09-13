@@ -59,7 +59,12 @@ templ Dashboard(user *CurrentUser) {
 		// desde un pagaré, no devuelva siempre a la primera.
 		var PAGINA = parseInt(new URLSearchParams(location.search).get('page') || '1', 10) || 1;
 
-		fetch('/api/pagares?page=' + PAGINA)
+		// Doce por página, no los veinticinco que trae la API por defecto: son
+		// tarjetas grandes y el problema que se quería resolver es que llenaban
+		// la pantalla. Doce cuadra además con la rejilla de tres columnas.
+		var POR_PAGINA = 12;
+
+		fetch('/api/pagares?page=' + PAGINA + '&per_page=' + POR_PAGINA)
 			.then(function(r) { return r.json(); })
 			.then(function(data) {
 				var el = document.getElementById('pagares-list');
@@ -140,7 +145,7 @@ templ Dashboard(user *CurrentUser) {
 					'</article>';
 				});
 				cards += '</div>';
-				cards += paginador(data.count);
+				cards += paginador(data.count, PAGINA);
 				el.innerHTML = cards;
 				marcaFirmas(data.assets || []);
 			})
@@ -150,12 +155,15 @@ templ Dashboard(user *CurrentUser) {
 
 		// Paginador. El listado viene del más nuevo al más antiguo, que es el
 		// orden en que interesa una cartera.
-		function paginador(count) {
+		function paginador(count, actual) {
 			var p = (count && count.pages) || {};
 			var total = p.total || 1;
 			if (total <= 1) return '';
 
-			var actual = p.current || 1;
+			// La página en curso es la que se pidió, no count.pages.current: el
+			// libro devuelve ahí el índice del primer registro de la página, no
+			// su número. Con doce por página, la segunda contesta 13.
+			actual = actual || 1;
 			var enlace = function(n, texto, deshabilitado) {
 				if (deshabilitado) {
 					return '<span class="btn btn-ghost btn-sm" style="opacity:.4;cursor:default;">' + texto + '</span>';
