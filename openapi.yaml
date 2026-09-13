@@ -1066,6 +1066,51 @@ paths:
                       type: integer
         4XX:
           $ref: '#/components/responses/Error'
+  /admin/usuarios/{id}/evidencia:
+    get:
+      tags:
+      - Administración
+      summary: Certificado entero de la validación de identidad
+      description: >
+        Devuelve el certificado de la validación tal como lo emitió el portal, descodificado: los
+        atributos leídos del documento, las comprobaciones con su umbral y si eran bloqueantes, las
+        puntuaciones biométricas, los consentimientos que dio el sujeto, las huellas de los artefactos
+        firmados —cotejadas contra su contenido— y todos los códigos del certificado, incluidos los
+        que la plataforma no modela.
+
+
+        Sirve para auditar: enseña en qué se apoyó la verificación y no sólo su conclusión, y por eso
+        tampoco rechaza una que no se superó. **Nada de esto se guarda**: se pide al portal en el
+        momento y se enseña en pantalla.
+
+
+        Todo lo que devuelve es dato personal del sujeto —nombre, documento, domicilio, fecha de
+        nacimiento y puntuaciones biométricas—, así que es cosa de administradores y no tiene sitio en
+        un log.
+      operationId: adminEvidenciaIdentidad
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  evidencia:
+                    type: object
+                    description: El certificado descodificado. Su forma la fija internal/identidad.
+        4XX:
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
   /admin/usuarios/{id}/verificacion:
     post:
       tags:

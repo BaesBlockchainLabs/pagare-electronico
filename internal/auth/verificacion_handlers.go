@@ -366,3 +366,28 @@ func (h *Handlers) ActualizarContacto(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok": true, "msg": "Datos guardados.", "faltan": []string{}})
 }
+
+// Evidencia devuelve el certificado entero de la validación de un usuario, tal
+// como lo emitió el portal.
+//
+// Sirve para auditar: enseña en qué se apoyó la verificación —las
+// comprobaciones con su umbral, las puntuaciones biométricas, los
+// consentimientos y las huellas de los artefactos firmados— y no sólo su
+// conclusión. Nada de eso se guarda: se pide al portal en el momento.
+//
+// Todo lo que devuelve es dato personal del sujeto, así que es cosa de
+// administradores y no tiene sitio en un log.
+func (h *Handlers) Evidencia(ctx context.Context, userID string) (*identidad.Evidencia, error) {
+	if !h.identidad.Activo() {
+		return nil, identidad.ErrDesactivado
+	}
+	reg, err := h.store.UltimaVerificacion(userID)
+	if err != nil {
+		return nil, err
+	}
+	if reg.GUID == "" {
+		return nil, fmt.Errorf("esta validación no llegó a tener envío en el portal, "+
+			"así que no hay certificado que pedir (estado %q)", reg.Estado)
+	}
+	return h.identidad.Evidencia(ctx, reg.GUID)
+}

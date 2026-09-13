@@ -91,6 +91,19 @@ templ Admin(user *CurrentUser) {
 			</div>
 		</div>
 
+		<!-- Evidencia de una validación de identidad. Se rellena al vuelo y su
+		     contenido no se guarda en ninguna parte: son datos personales del
+		     sujeto, pedidos al portal para mirarlos y nada más. -->
+		<div id="evidencia-modal" class="modal-overlay" onclick="if(event.target===this)cierraEvidencia()">
+			<div class="modal" style="max-width:820px;">
+				<div class="modal-head">
+					<h2 id="evidencia-titulo">Evidencia de la validación</h2>
+					<button type="button" class="modal-close" onclick="cierraEvidencia()">&times;</button>
+				</div>
+				<div id="evidencia-cuerpo"></div>
+			</div>
+		</div>
+
 		<!-- Panel: Clave de aplicación -->
 		<div id="tab-clave-app" class="admin-panel hidden">
 			<div class="card">
@@ -299,6 +312,9 @@ templ Admin(user *CurrentUser) {
 					'<td>' + identidadCelda(u) + '</td>' +
 					'<td>' + (nkeys ? nkeys + ' clave(s)' : '<span class="u-sub">sin claves</span>') + '</td>' +
 					'<td><div class="u-actions">' +
+						(u.verificacion === 'verificada'
+							? '<button class="btn btn-papel btn-xs" onclick="verEvidencia(\'' + u.id + '\', \'' + esc(u.username) + '\')">Evidencia</button>'
+							: '') +
 						(u.verificacion === 'verificada' ? '' :
 							'<button class="btn btn-gold btn-xs" onclick="enviarVerificacion(\'' + u.id + '\', \'' + esc(u.username) + '\')">' +
 							(u.verificacion === 'pendiente' ? 'Reenviar DNI' : 'Validar DNI') + '</button>') +
@@ -325,6 +341,125 @@ templ Admin(user *CurrentUser) {
 				if (d) extra = '<div class="u-sub">' + esc(d) + '</div>';
 			}
 			return '<span class="' + e[0] + '">' + e[1] + '</span>' + extra;
+		}
+
+		// ===== Evidencia de una validación =====
+
+		function cierraEvidencia() {
+			document.getElementById('evidencia-modal').classList.remove('open');
+			// Se vacía al cerrar: son datos personales y no tienen por qué
+			// quedarse en el DOM esperando a que alguien mire.
+			document.getElementById('evidencia-cuerpo').innerHTML = '';
+		}
+
+		async function verEvidencia(id, username) {
+			var cuerpo = document.getElementById('evidencia-cuerpo');
+			document.getElementById('evidencia-titulo').textContent = 'Evidencia de ' + username;
+			cuerpo.innerHTML = '<p class="u-sub">Pidiendo el certificado al portal…</p>';
+			document.getElementById('evidencia-modal').classList.add('open');
+
+			var data;
+			try {
+				var r = await fetch('/admin/usuarios/' + id + '/evidencia');
+				data = await r.json();
+			} catch (e) {
+				cuerpo.innerHTML = '<div class="alert alert-error">Error de red al pedir la evidencia.</div>';
+				return;
+			}
+			if (!data.ok) {
+				cuerpo.innerHTML = '<div class="alert alert-error">' + esc(data.msg || 'No se pudo obtener') + '</div>';
+				return;
+			}
+			cuerpo.innerHTML = pintaEvidencia(data.evidencia || {});
+		}
+
+		function filaDato(etiqueta, valor) {
+			if (valor === undefined || valor === null || valor === '') return '';
+			return '<div class="t-row" style="display:flex;justify-content:space-between;gap:16px;padding:4px 0;">' +
+				'<span class="u-sub">' + esc(etiqueta) + '</span><span>' + esc(String(valor)) + '</span></div>';
+		}
+
+		function seccion(titulo, contenido) {
+			if (!contenido) return '';
+			return '<div class="modal-section"><h3>' + esc(titulo) + '</h3>' + contenido + '</div>';
+		}
+
+        function pintaEvidencia(e) {
+			var a = e.atributos || {};
+
+			var veredicto = '<div class="alert ' + (e.superada ? 'alert-success' : 'alert-error') + '">' +
+				'<div><strong>' + (e.superada ? 'Verificación superada' : 'Verificación NO superada') + '</strong>' +
+				(e.estado ? ' · ' + esc(e.estado) : '') +
+				(e.fecha ? ' · ' + esc(e.fecha) : '') + '</div></div>';
+
+			var identidad =
+				filaDato('Nombre', [a.Nombre, a.Apellido1, a.Apellido2].filter(Boolean).join(' ')) +
+				filaDato('NIF', a.NIF) +
+				filaDato('Documento', a.Documento) +
+				filaDato('Número de soporte', a.NumeroSoporte) +
+				filaDato('Expedición', a.Expedicion) +
+				filaDato('Caducidad', a.Caducidad) +
+				filaDato('Sexo', a.Sexo) +
+				filaDato('Fecha de nacimiento', a.FechaNacimiento) +
+				filaDato('Lugar de nacimiento', a.LugarNacimiento) +
+				filaDato('Nacionalidad', a.Nacionalidad) +
+				filaDato('Domicilio', a.DomicilioCompleto) +
+				filaDato('País del documento', a.Pais) +
+				filaDato('Método de lectura', a.Metodo);
+
+			var comprobaciones = (e.comprobaciones || []).map(function(c) {
+				var marca = c.superada
+					? '<span class="role-badge role-admin">' + esc(c.resultado || 'OK') + '</span>'
+					: '<span class="role-badge role-user" style="background:var(--danger-bg);color:var(--danger);">' +
+						esc(c.resultado || 'KO') + '</span>';
+				return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border);">' +
+					'<span class="u-mono" style="font-size:0.76rem;">' + esc(c.codigo) +
+						(c.bloqueante ? ' <span class="u-sub">(bloqueante)</span>' : '') + '</span>' +
+					'<span>' + (c.umbral ? '<span class="u-sub">umbral ' + esc(c.umbral) + '</span> ' : '') + marca + '</span>' +
+				'</div>' + (c.mensaje ? '<div class="u-sub" style="padding-bottom:4px;">' + esc(c.mensaje) + '</div>' : '');
+			}).join('');
+
+			// Las puntuaciones van de 0 a 1; el certificado en PDF las imprime
+			// como porcentajes, así que aquí también.
+			var biometria = (e.biometria || []).filter(function(b){ return b.valor > 0; }).map(function(b) {
+				return filaDato(b.nombre, (b.valor * 100).toFixed(2) + ' %');
+			}).join('');
+
+			var consentimientos = (e.consentimientos || []).map(function(c) {
+				return filaDato(c.id + (c.obligatorio ? ' (obligatorio)' : ''), c.dado ? 'Sí' : 'No');
+			}).join('');
+
+			var artefactos = (e.artefactos || []).map(function(f) {
+				return '<div style="padding:6px 0;border-top:1px solid var(--border);">' +
+					'<div style="display:flex;justify-content:space-between;gap:12px;">' +
+						'<span>' + esc(f.tipo) + (f.firmado ? ' <span class="u-sub">firmado</span>' : '') + '</span>' +
+						'<span>' + (f.hash_cuadra
+							? '<span class="role-badge role-admin">huella correcta</span>'
+							: '<span class="role-badge role-user" style="background:var(--danger-bg);color:var(--danger);">huella no cuadra</span>') +
+						'</span>' +
+					'</div>' +
+					'<div class="firma-hash">' + esc(f.hash || '') + '</div>' +
+					(f.bytes ? '<div class="u-sub">' + f.bytes + ' bytes</div>' : '') +
+					(f.problema_hash ? '<div class="u-sub">' + esc(f.problema_hash) + '</div>' : '') +
+				'</div>';
+			}).join('');
+
+			var codigos = Object.keys(e.codigos || {}).sort().map(function(k) {
+				return filaDato(k, e.codigos[k]);
+			}).join('');
+
+			return veredicto +
+				seccion('Identidad leída del documento', identidad) +
+				seccion('Trazabilidad', filaDato('Token', e.token_id) + filaDato('Validation ID', e.validation_id) +
+					filaDato('Resultado de la operación', e.resultado) + filaDato('OCR', e.ocr) +
+					filaDato('Consentimiento', e.consentimiento) + filaDato('Minimización de datos', e.minimizacion)) +
+				seccion('Comprobaciones', comprobaciones) +
+				seccion('Biometría', biometria) +
+				seccion('Consentimientos', consentimientos) +
+				seccion('Artefactos firmados', artefactos) +
+				seccion('Todos los códigos del certificado', codigos) +
+				'<p class="u-sub mt-4">Estos datos se han pedido al portal para verlos y no se guardan ' +
+				'en ninguna parte.</p>';
 		}
 
 		function verifMensaje(texto, error) {

@@ -232,6 +232,20 @@ func main() {
 				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "usuarios": views})
 			})
 
+			// El certificado entero de la validación de un usuario, para
+			// auditarla. No se guarda nada: se pide al portal en el momento y
+			// se enseña en pantalla.
+			r.Get("/usuarios/{id}/evidencia", func(w http.ResponseWriter, r *http.Request) {
+				ev, err := authH.Evidencia(r.Context(), chi.URLParam(r, "id"))
+				if err != nil {
+					handler.WriteJSON(w, auth.EstadoHTTPVerificacion(err), map[string]interface{}{
+						"ok": false, "msg": err.Error()})
+					return
+				}
+				handler.WriteJSON(w, http.StatusOK, map[string]interface{}{
+					"ok": true, "evidencia": ev})
+			})
+
 			// Mandar a un usuario a validar su identidad. Devuelve la
 			// validación en curso si ya la tenía, para no duplicar el envío ni
 			// el SMS.
