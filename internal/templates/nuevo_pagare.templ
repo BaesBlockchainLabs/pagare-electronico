@@ -416,6 +416,7 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			fetchAndFillEmisor();
 			toggleAval();
 			toggleAvalParcial();
+			hoyEnEmision();
 			window.scrollTo({top: 0, behavior: 'smooth'});
 		}
 
@@ -437,6 +438,12 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 					document.getElementById('firmante_localidad').value = u.localidad || '';
 					document.getElementById('firmante_cp').value = u.codigo_postal || '';
 					document.getElementById('firmante_pais').value = u.pais || 'ES';
+					// El pagaré se emite donde está el emisor (editable), igual que
+					// el pago se sitúa por defecto donde está el beneficiario. Sólo
+					// si el campo está vacío: esto se vuelve a ejecutar al desmarcar
+					// la edición del emisor, y no puede pisar lo que se haya escrito.
+					var locEmision = document.getElementById('localidad_emision');
+					if (u.localidad && !locEmision.value.trim()) locEmision.value = u.localidad;
 					avisarSiFaltanDatos(u);
 				})
 				.catch(function(){});
@@ -518,9 +525,23 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			BENEF_PUB = (u.pub_keys && u.pub_keys[0]) || '';
 		}
 
+		// La fecha de emisión es la de hoy salvo que se diga otra cosa. Es una
+		// mención esencial del art. 94.6 LCCH y casi siempre es hoy: dejarla en
+		// blanco sólo garantizaba que a veces se olvidara.
+		function hoyEnEmision() {
+			var campo = document.getElementById('fecha_emision');
+			if (campo && !campo.value) {
+				var d = new Date();
+				campo.value = d.getFullYear() + '-' +
+					String(d.getMonth() + 1).padStart(2, '0') + '-' +
+					String(d.getDate()).padStart(2, '0');
+			}
+		}
+
 		// Cargar al inicio
 		loadUsuariosPlataforma();
 		fetchAndFillEmisor();
+		hoyEnEmision();
 		</script>
 	}
 }
