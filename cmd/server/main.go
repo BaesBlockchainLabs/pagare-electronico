@@ -66,6 +66,12 @@ func main() {
 	authStore.SetKeyProvisioner(cryptoSvc)
 	// Resolve blockchain participants (firmante/endosatario) to registered users
 	// from their public key, for the PDF.
+	// Una sola caché de estados para los dos: el listado la llena y las
+	// operaciones la invalidan, o el panel seguiría enseñando el estado
+	// anterior tras endosar.
+	cacheEstados := handler.NuevaCacheEstados()
+	consultaHandler.SetCacheEstados(cacheEstados)
+
 	consultaHandler.SetUsers(authStore)
 	consultaHandler.SetCrypto(cryptoSvc)
 	consultaHandler.SetCertificador(handler.Certificador{
@@ -115,6 +121,7 @@ func main() {
 	// private key resolved from the store (no private key handled client-side).
 	pagareHandler := handler.NewPagareHandler(bcfClient, cryptoSvc, authStore)
 	pagareHandler.SetBeneficiarios(authStore)
+	pagareHandler.SetCacheEstados(cacheEstados)
 	pagareHandler.SetFirma(firmaSvc, registrosFirma, authStore)
 
 	// Development seed: provision N users with keypairs, then exit. Never in prod.

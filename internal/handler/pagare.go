@@ -42,7 +42,15 @@ type PagareHandler struct {
 	firma     FirmaPDF
 	firmas    *firma.Registros
 	firmantes Firmantes
+
+	// estados es la caché que comparte con el listado: cada operación que
+	// cambia un pagaré tiene que olvidarlo, o el listado seguiría enseñando el
+	// estado anterior hasta que caducara.
+	estados *CacheEstados
 }
+
+// SetCacheEstados conecta la caché de estados que comparte con el listado.
+func (h *PagareHandler) SetCacheEstados(c *CacheEstados) { h.estados = c }
 
 // SetBeneficiarios wires the resolver that turns the beneficiario's NIF into
 // the key the pagaré is handed to at emission.
@@ -250,6 +258,7 @@ func (h *PagareHandler) Emitir(w http.ResponseWriter, r *http.Request) {
 	// The ledger created the asset owned by the firmante. Hand it to the
 	// beneficiario, which is what gives them control — the electronic
 	// equivalent of handing over the paper title.
+	h.estados.Olvidar(resp.ID)
 	entrega := h.entregar(resp.ID, &req.Asset.Data, req.To, from)
 
 	msg := "Pagaré emitido y entregado al beneficiario"
@@ -374,6 +383,7 @@ func (h *PagareHandler) Endosar(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
 		return
 	}
+	h.estados.Olvidar(req.ID)
 	WriteRaw(w, status, body)
 }
 
@@ -465,6 +475,9 @@ func (h *PagareHandler) PagarAnular(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusBadGateway, map[string]interface{}{"ok": false, "msg": err.Error()})
 		return
 	}
+	// Pagar o anular es lo que más cambia el estado, así que el listado no puede
+	// seguir dándolo por activo.
+	h.estados.Olvidar(req.ID)
 	WriteRaw(w, status, body)
 }
 

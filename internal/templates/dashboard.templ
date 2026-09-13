@@ -55,7 +55,11 @@ templ Dashboard(user *CurrentUser) {
 
 		var SEAL = '<svg class="pc-watermark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"></circle><path d="M9.2 9.3 11.1 11.2 14.8 7.3"></path><path d="M8.4 14.1 7 21 l5-2.6 5 2.6 -1.4-6.9"></path></svg>';
 
-		fetch('/api/pagares')
+		// Página actual del listado. Vive en la URL para que recargar, o volver
+		// desde un pagaré, no devuelva siempre a la primera.
+		var PAGINA = parseInt(new URLSearchParams(location.search).get('page') || '1', 10) || 1;
+
+		fetch('/api/pagares?page=' + PAGINA)
 			.then(function(r) { return r.json(); })
 			.then(function(data) {
 				var el = document.getElementById('pagares-list');
@@ -136,15 +140,40 @@ templ Dashboard(user *CurrentUser) {
 					'</article>';
 				});
 				cards += '</div>';
-				if (data.count && data.count.pages && data.count.pages.total > 1) {
-					cards += '<p class="text-center text-muted mt-6">Página ' + data.count.pages.current + ' de ' + data.count.pages.total + ' · ' + data.count.total + ' pagarés</p>';
-				}
+				cards += paginador(data.count);
 				el.innerHTML = cards;
 				marcaFirmas(data.assets || []);
 			})
 			.catch(function(err) {
 				document.getElementById('pagares-list').innerHTML = '<div class="alert alert-error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>Error cargando pagarés: ' + esc(err) + '</div>';
 			});
+
+		// Paginador. El listado viene del más nuevo al más antiguo, que es el
+		// orden en que interesa una cartera.
+		function paginador(count) {
+			var p = (count && count.pages) || {};
+			var total = p.total || 1;
+			if (total <= 1) return '';
+
+			var actual = p.current || 1;
+			var enlace = function(n, texto, deshabilitado) {
+				if (deshabilitado) {
+					return '<span class="btn btn-ghost btn-sm" style="opacity:.4;cursor:default;">' + texto + '</span>';
+				}
+				return '<a class="btn btn-outline btn-sm" href="/?page=' + n + '">' + texto + '</a>';
+			};
+
+			// El recuento global sólo lo ve quien puede: a un usuario normal el
+			// servidor no se lo manda, y decir "0 pagarés" sería mentirle.
+			var cuantos = count.total ? ' · ' + count.total + ' pagarés' : '';
+
+			return '<div class="mt-6" style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">' +
+				enlace(actual - 1, '← Anteriores', actual <= 1) +
+				'<span class="text-muted" style="font-size:0.85rem;">Página ' + actual + ' de ' + total +
+					cuantos + '</span>' +
+				enlace(actual + 1, 'Siguientes →', actual >= total) +
+			'</div>';
+		}
 
 		// Marca en cada tarjeta el estado de su firma cualificada, y añade la
 		// descarga del PDF firmado donde exista.

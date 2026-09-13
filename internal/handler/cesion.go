@@ -159,6 +159,7 @@ func (h *PagareHandler) Ceder(w http.ResponseWriter, r *http.Request) {
 		WriteRaw(w, status, body)
 		return
 	}
+	h.estados.Olvidar(req.ID)
 
 	aviso := "Pagaré cedido. Recuerda notificar la cesión al deudor: hasta entonces no le es oponible y el pago al cedente le libera (art. 1527 CC)."
 	if req.NotificacionFecha != "" {

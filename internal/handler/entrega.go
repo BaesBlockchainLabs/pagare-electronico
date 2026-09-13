@@ -85,6 +85,7 @@ func (h *PagareHandler) entregar(assetID string, p *models.PagareElectronico, to
 			status, recorta(respuesta, 300))}
 	}
 
+	h.estados.Olvidar(assetID)
 	return Entrega{Entregado: true, A: destino, Msg: "Entregado al beneficiario"}
 }
 

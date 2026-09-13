@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"pagare/internal/auth"
@@ -27,6 +29,10 @@ type SignatureVerifier interface {
 }
 
 type ConsultaHandler struct {
+	// estados guarda el estado resuelto de cada pagaré, que cuesta una consulta
+	// al histórico. Nil se comporta como si no hubiera caché.
+	estados *CacheEstados
+
 	client       *bcfclient.Client
 	users        UserResolver
 	crypto       SignatureVerifier
@@ -36,6 +42,10 @@ type ConsultaHandler struct {
 func NewConsultaHandler(client *bcfclient.Client) *ConsultaHandler {
 	return &ConsultaHandler{client: client}
 }
+
+// SetCacheEstados conecta la caché de estados. Sin ella el listado funciona
+// igual, sólo que preguntando al libro cada vez.
+func (h *ConsultaHandler) SetCacheEstados(c *CacheEstados) { h.estados = c }
 
 // SetUsers wires the user resolver used to enrich the PDF from public keys.
 func (h *ConsultaHandler) SetUsers(u UserResolver) { h.users = u }
@@ -73,6 +83,12 @@ func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
 		}
 		query = customQuery
 	}
+	// Paginar no es cosmética: resolver el estado de un pagaré cuesta una
+	// consulta al histórico, así que traerlos todos costaba tantos viajes a la
+	// cadena como pagarés hubiera, y crecía con el uso. El libro los devuelve
+	// del más antiguo al más nuevo, e inverse los da al revés: en una cartera
+	// interesa lo último.
+	aplicarPaginacion(query, r)
 
 	body, status, err := h.client.GetAsset(query)
 	if err != nil {
@@ -96,13 +112,18 @@ func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
 		"ENDOSO": "ENDOSADO",
 	}
 
+	// El estado y la titularidad de cada pagaré se resuelven en paralelo y de
+	// una sola lectura del histórico: son consultas independientes que en serie
+	// sumaban su latencia una tras otra.
+	datos := h.datosDeLaPagina(assets, principal, actionToEstado)
+
 	for _, a := range assets {
 		asset, ok := a.(map[string]interface{})
 		if !ok {
 			continue
 		}
 		assetID, _ := asset["id"].(string)
-		estado := h.resolveEstado(assetID, actionToEstado)
+		estado := datos[assetID].estado
 		data, _ := asset["data"].(map[string]interface{})
 		if data == nil {
 			data = make(map[string]interface{})
@@ -126,21 +147,141 @@ func (h *ConsultaHandler) ListPagares(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply ownership scoping for regular users (admins see everything "tal cual")
-	h.filterForPrincipal(raw, principal)
+	h.filtrarPorTitularidad(raw, principal, datos)
 
 	WriteJSON(w, status, raw)
 }
 
+// paginacionPorDefecto es cuántos pagarés trae una página cuando no se pide
+// otra cosa. Es el mismo que usa el libro por su cuenta.
+const paginacionPorDefecto = 25
+
+// aplicarPaginacion traslada a la consulta del libro la página que se pide, y
+// deja el orden del más nuevo al más antiguo salvo que se diga lo contrario.
+func aplicarPaginacion(query map[string]interface{}, r *http.Request) {
+	if n, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && n > 0 {
+		query["page_num"] = n
+	} else if _, ya := query["page_num"]; !ya {
+		query["page_num"] = 1
+	}
+
+	if n, err := strconv.Atoi(r.URL.Query().Get("per_page")); err == nil && n > 0 {
+		// Un tope: la página la pide el cliente y sin límite volveríamos a
+		// traerlo todo, que es justo lo que se quiere evitar.
+		if n > 100 {
+			n = 100
+		}
+		query["per_page"] = n
+	} else if _, ya := query["per_page"]; !ya {
+		query["per_page"] = paginacionPorDefecto
+	}
+
+	if _, ya := query["inverse"]; !ya {
+		query["inverse"] = true
+	}
+}
+
+// datosPagare es lo que el listado necesita saber de la cadena sobre cada
+// pagaré: en qué estado está y si es del usuario que mira.
+type datosPagare struct {
+	estado string
+	mio    bool
+}
+
+// datosDeLaPagina reúne esos datos para todos los pagarés de una página, en
+// paralelo y pidiendo cada cosa una sola vez.
+//
+// Antes costaba hasta tres viajes a la cadena por pagaré, en serie: uno para el
+// estado, otro para los propietarios y otro más para el histórico —el mismo que
+// ya se había pedido para el estado— cuando el usuario no figuraba como dueño.
+// Ahora el histórico se pide una vez y de él salen las dos respuestas.
+//
+// El paralelismo va acotado: son llamadas a un servicio ajeno, y soltarle
+// veinticinco de golpe no es ser mejor vecino que hacerlo de una en una es ser
+// razonable con nosotros mismos.
+func (h *ConsultaHandler) datosDeLaPagina(assets []interface{}, p *auth.Principal,
+	actionMap map[string]string) map[string]datosPagare {
+
+	const enParalelo = 8
+
+	ids := make([]string, 0, len(assets))
+	for _, a := range assets {
+		asset, ok := a.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if id, _ := asset["id"].(string); id != "" {
+			ids = append(ids, id)
+		}
+	}
+
+	datos := make(map[string]datosPagare, len(ids))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	hueco := make(chan struct{}, enParalelo)
+
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			hueco <- struct{}{}
+			defer func() { <-hueco }()
+
+			estado, enCache := h.estados.Estado(id)
+
+			// A un administrador no hay que resolverle la titularidad: los ve
+			// todos igual, así que preguntarla sería una consulta por pagaré
+			// tirada a la basura.
+			mio := p == nil || p.IsAdmin()
+			if !mio {
+				// Figurar como propietario es el criterio barato y el habitual,
+				// así que se prueba primero: si acierta y el estado ya estaba en
+				// caché, este pagaré cuesta una sola consulta.
+				mio = h.figuraComoPropietario(id, p)
+			}
+
+			var historial []interface{}
+			if !enCache || !mio {
+				historial = h.historialDe(id)
+			}
+			if !enCache {
+				estado = estadoDesdeHistorial(historial, actionMap)
+				h.estados.Guardar(id, estado)
+			}
+			if !mio {
+				mio = apareceEnHistorial(historial, p)
+			}
+
+			mu.Lock()
+			datos[id] = datosPagare{estado: estado, mio: mio}
+			mu.Unlock()
+		}(id)
+	}
+	wg.Wait()
+	return datos
+}
+
+// historialDe lee el histórico de un pagaré. Se separa de interpretarlo porque
+// el listado saca dos cosas del mismo histórico —el estado y si el pagaré es
+// del usuario— y pedirlo dos veces era la mitad de su lentitud.
+func (h *ConsultaHandler) historialDe(assetID string) []interface{} {
+	body, status, err := h.client.GetAssetHistory(assetID)
+	if err != nil || status != 200 {
+		return nil
+	}
+	var raw map[string]interface{}
+	if json.Unmarshal(body, &raw) != nil {
+		return nil
+	}
+	history, _ := raw["history"].([]interface{})
+	return history
+}
+
 func (h *ConsultaHandler) resolveEstado(assetID string, actionMap map[string]string) string {
-	histBody, histStatus, err := h.client.GetAssetHistory(assetID)
-	if err != nil || histStatus != 200 {
-		return ""
-	}
-	var histRaw map[string]interface{}
-	if err := json.Unmarshal(histBody, &histRaw); err != nil {
-		return ""
-	}
-	history, _ := histRaw["history"].([]interface{})
+	return estadoDesdeHistorial(h.historialDe(assetID), actionMap)
+}
+
+func estadoDesdeHistorial(history []interface{}, actionMap map[string]string) string {
 	var cierre, transfer, update string
 	var hasBurn, hasTransfer bool
 	for i := len(history) - 1; i >= 0; i-- {
@@ -451,7 +592,18 @@ func (h *ConsultaHandler) GetPublicAsset(w http.ResponseWriter, r *http.Request)
 
 // filterForPrincipal removes assets from the response that the non-admin principal
 // does not own (based on current pubkey owners from BCF). Admins see the full set.
-func (h *ConsultaHandler) filterForPrincipal(raw map[string]interface{}, principal *auth.Principal) {
+// filtrarPorTitularidad deja sólo los pagarés del usuario, usando la
+// titularidad ya resuelta para la página: volver a preguntarla aquí duplicaría
+// las consultas a la cadena.
+//
+// El filtro es posterior a la paginación porque el libro no sabe filtrar por
+// propietario —su consulta admite id, data, fechas y paginación, nada más—, así
+// que una página puede quedarse con menos pagarés de los que trajo, o con
+// ninguno. Es la contrapartida de no traerlos todos, y se prefiere: traerlos
+// todos crece sin tope y acaba por no funcionar para nadie.
+func (h *ConsultaHandler) filtrarPorTitularidad(raw map[string]interface{},
+	principal *auth.Principal, datos map[string]datosPagare) {
+
 	if principal == nil || principal.IsAdmin() {
 		return
 	}
@@ -461,24 +613,25 @@ func (h *ConsultaHandler) filterForPrincipal(raw map[string]interface{}, princip
 		return
 	}
 
-	filtered := make([]interface{}, 0, len(assetsIface))
+	filtrados := make([]interface{}, 0, len(assetsIface))
 	for _, a := range assetsIface {
 		asset, ok := a.(map[string]interface{})
 		if !ok {
 			continue
 		}
 		id, _ := asset["id"].(string)
-		if id == "" {
-			continue
-		}
-		if h.assetOwnedBy(id, principal) {
-			filtered = append(filtered, a)
+		if id != "" && datos[id].mio {
+			filtrados = append(filtrados, a)
 		}
 	}
+	raw["assets"] = filtrados
 
-	raw["assets"] = filtered
-	// Regular users should not see system-wide pagination counts
-	delete(raw, "count")
+	// El recuento global no es asunto suyo —cuántos pagarés hay en la
+	// plataforma no le incumbe—, pero sin saber cuántas páginas hay no puede
+	// pasar a la siguiente. Se le deja lo segundo y se le quita lo primero.
+	if count, ok := raw["count"].(map[string]interface{}); ok {
+		delete(count, "total")
+	}
 }
 
 // assetOwnedBy returns true if any of the current owners (by pubkey) matches
@@ -681,7 +834,9 @@ func (h *ConsultaHandler) OwnsAsset(id string, p *auth.Principal) bool {
 	return h.assetOwnedBy(id, p)
 }
 
-func (h *ConsultaHandler) assetOwnedBy(id string, p *auth.Principal) bool {
+// figuraComoPropietario indica si el usuario consta como dueño del pagaré. Es
+// el primer criterio de "es mío", y el barato: una sola consulta.
+func (h *ConsultaHandler) figuraComoPropietario(id string, p *auth.Principal) bool {
 	if p == nil {
 		return false
 	}
@@ -701,37 +856,50 @@ func (h *ConsultaHandler) assetOwnedBy(id string, p *auth.Principal) bool {
 			}
 		}
 	}
+	return false
+}
+
+func (h *ConsultaHandler) assetOwnedBy(id string, p *auth.Principal) bool {
+	if p == nil {
+		return false
+	}
+	if h.figuraComoPropietario(id, p) {
+		return true
+	}
 
 	// Also consider the asset as "mine" if my pub appears anywhere in its history
-	// (creation from, endoso to/from, etc.) - this makes "cualquiera que tuviera mi identidad" work better.
-	histBody, histStatus, histErr := h.client.GetAssetHistory(id)
-	if histErr == nil && histStatus == 200 {
-		var hist map[string]interface{}
-		if json.Unmarshal(histBody, &hist) == nil {
-			history, _ := hist["history"].([]interface{})
-			for _, entry := range history {
-				e, _ := entry.(map[string]interface{})
-				if e == nil {
-					continue
-				}
-				meta, _ := e["metadata"].(map[string]interface{})
-				if meta == nil {
-					continue
-				}
-				// Check common places where pub may appear
-				for _, key := range []string{"from", "to", "pub", "identidad_blockchain", "firma_digital_pagare", "firma_digital_beneficiario", "firma_digital_endoso"} {
-					if v, ok := meta[key].(string); ok && p.HasPubKey(v) {
-						return true
-					}
-					if m, ok := meta[key].(map[string]interface{}); ok {
-						if pub, ok := m["pub"].(string); ok && p.HasPubKey(pub) {
-							return true
-						}
-					}
+	// (creation from, endoso to/from, etc.) - this makes "cualquiera que tuviera
+	// mi identidad" work better.
+	return apareceEnHistorial(h.historialDe(id), p)
+}
+
+// apareceEnHistorial indica si la clave del usuario sale en algún punto del
+// histórico: creación, endoso, cesión… Es el segundo criterio de "es mío",
+// después de figurar como propietario.
+func apareceEnHistorial(history []interface{}, p *auth.Principal) bool {
+	if p == nil {
+		return false
+	}
+	for _, entry := range history {
+		e, _ := entry.(map[string]interface{})
+		if e == nil {
+			continue
+		}
+		meta, _ := e["metadata"].(map[string]interface{})
+		if meta == nil {
+			continue
+		}
+		// Check common places where pub may appear
+		for _, key := range []string{"from", "to", "pub", "identidad_blockchain", "firma_digital_pagare", "firma_digital_beneficiario", "firma_digital_endoso"} {
+			if v, ok := meta[key].(string); ok && p.HasPubKey(v) {
+				return true
+			}
+			if m, ok := meta[key].(map[string]interface{}); ok {
+				if pub, ok := m["pub"].(string); ok && p.HasPubKey(pub) {
+					return true
 				}
 			}
 		}
 	}
-
 	return false
 }

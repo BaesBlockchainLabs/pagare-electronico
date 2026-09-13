@@ -404,8 +404,19 @@ paths:
       tags:
       - Pagarés
       summary: Listar pagarés
-      description: Devuelve los pagarés con su estado calculado. Un usuario corriente sólo ve los suyos;
-        el administrador, todos.
+      description: >
+        Devuelve una página de pagarés con su estado calculado, del más nuevo al más antiguo. Un
+        usuario corriente sólo ve los suyos; el administrador, todos.
+
+
+        La paginación no es cosmética: resolver el estado de un pagaré cuesta una consulta a su
+        histórico, así que traerlos todos costaba tantos viajes a la cadena como pagarés hubiera.
+
+
+        El filtro por titularidad es posterior a la paginación, porque el libro no sabe filtrar por
+        propietario: una página puede quedarse con menos pagarés de los que trajo, o con ninguno. Y a
+        un usuario corriente no se le devuelve el recuento global de la plataforma, sólo cuántas
+        páginas hay.
       operationId: listarPagares
       parameters:
       - name: query
@@ -414,6 +425,23 @@ paths:
         schema:
           type: string
         description: Consulta JSON de búsqueda (opcional).
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          minimum: 1
+        description: Página, empezando por 1.
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 25
+          maximum: 100
+        description: Pagarés por página. Con tope, porque sin él el cliente podría volver a pedirlo
+          todo, que es lo que se quiere evitar.
       responses:
         '200':
           description: OK

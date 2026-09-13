@@ -298,6 +298,7 @@ func (h *PagareHandler) hacerPendiente(reg *firma.Registro) error {
 			"metadata": p.Metadata,
 			"from":     map[string]string{"pub": desde.Pub, "pvt": desde.Pvt},
 		}
+		defer h.estados.Olvidar(reg.AssetID)
 		_, status, err := h.client.UpdateAsset(cuerpo)
 		if err != nil {
 			return fmt.Errorf("la %s está firmada pero la red no la aceptó: %w", reg.Operacion, err)
