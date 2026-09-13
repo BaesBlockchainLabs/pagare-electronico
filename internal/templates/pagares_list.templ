@@ -32,7 +32,7 @@ templ PagaresList(assets []PagareListItem) {
 						<div class="row"><span>Emitido</span><span>{ a.Fecha }</span></div>
 					</div>
 					<div class="pc-actions">
-						<a href={ templ.SafeURL("/pagares/historico?id=" + a.ID) } class="btn btn-ghost btn-sm">Histórico</a>
+						<a href={ templ.SafeURL("/pagares/historico?id=" + a.ID) } class="btn btn-papel btn-sm">Histórico</a>
 						<a href={ templ.SafeURL("/pagares/verificar?network=test&id=" + a.ID) } class="btn btn-gold btn-sm">Verificar</a>
 					</div>
 				</article>

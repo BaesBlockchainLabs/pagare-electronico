@@ -241,6 +241,16 @@ templ Base(title string, user *CurrentUser) {
 		.btn-outline:hover { background: var(--paper-2); border-color: var(--ink); }
 		.btn-ghost { background: transparent; color: var(--ink-soft); }
 		.btn-ghost:hover { background: var(--paper-2); color: var(--ink); }
+		/* Consultar y descargar: no cambian el título, pero son botones y tienen
+		   que parecerlo. El fantasma —sin fondo— se leía como texto suelto sobre
+		   la tarjeta, que es de por sí clara. */
+		.btn-papel { background: var(--paper-2); color: var(--ink); border-color: var(--border); }
+		.btn-papel:hover { background: var(--gold-bg); border-color: var(--gold); color: var(--gold-deep); }
+		/* El documento con firma cualificada comparte color con el distintivo
+		   que lo anuncia: es el mismo hecho contado dos veces, y conviene que se
+		   vea que van juntos. */
+		.btn-sello { background: var(--gold-bg); color: var(--gold-deep); border-color: #E6D4A0; }
+		.btn-sello:hover { background: var(--gold); color: #2A2110; }
 		.btn-danger { background: var(--danger); color: #fff; }
 		.btn-danger:hover { background: #962F20; transform: translateY(-1px); }
 		.btn-sm { padding: 8px 15px; font-size: 0.84rem; }
