@@ -94,6 +94,20 @@ func TestDashboard_PaginadorNoUsaElIndiceDelLibro(t *testing.T) {
 	if strings.Contains(html, "var actual = p.current") {
 		t.Error("vuelve a tomar la página del índice que devuelve el libro")
 	}
+	// Los botones dicen qué se va a ver, no hacia dónde va el paginador: con la
+	// lista del más nuevo al más antiguo, "siguientes" para los anteriores en
+	// el tiempo confundía.
+	for _, etiqueta := range []string{"← Más recientes", "Más antiguos →"} {
+		if !strings.Contains(html, etiqueta) {
+			t.Errorf("falta el botón %q", etiqueta)
+		}
+	}
+	for _, viejo := range []string{"← Anteriores", "Siguientes →"} {
+		if strings.Contains(html, viejo) {
+			t.Errorf("vuelve a decir %q, que con el orden inverso significa lo contrario", viejo)
+		}
+	}
+
 	// Y el panel pide menos de los 25 por defecto: eran demasiadas tarjetas.
 	if !strings.Contains(html, "var POR_PAGINA = 12") {
 		t.Error("el panel tiene que acotar cuántas tarjetas caben en una página")

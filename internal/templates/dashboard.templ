@@ -175,11 +175,16 @@ templ Dashboard(user *CurrentUser) {
 			// servidor no se lo manda, y decir "0 pagarés" sería mentirle.
 			var cuantos = count.total ? ' · ' + count.total + ' pagarés' : '';
 
+			// Los botones dicen qué se va a ver, no hacia dónde va el paginador.
+			// La lista va del más nuevo al más antiguo, así que avanzar de
+			// página es retroceder en el tiempo: llamar "siguientes" a los que
+			// son anteriores confundía, y llamarlos "anteriores" habría dejado
+			// la flecha apuntando al revés.
 			return '<div class="mt-6" style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">' +
-				enlace(actual - 1, '← Anteriores', actual <= 1) +
+				enlace(actual - 1, '← Más recientes', actual <= 1) +
 				'<span class="text-muted" style="font-size:0.85rem;">Página ' + actual + ' de ' + total +
 					cuantos + '</span>' +
-				enlace(actual + 1, 'Siguientes →', actual >= total) +
+				enlace(actual + 1, 'Más antiguos →', actual >= total) +
 			'</div>';
 		}
 
