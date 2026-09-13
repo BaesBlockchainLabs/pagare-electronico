@@ -58,7 +58,6 @@ templ Ceder(user *CurrentUser) {
 				</fieldset>
 				<p class="desc">Cedes tú, el usuario logueado. La cesión se firma con tu identidad; no necesitas introducir claves.</p>
 				<div id="cesion-error" class="alert alert-error hidden"></div>
-				<div id="cesion-ok" class="alert alert-success hidden"></div>
 				<div class="mt-4">
 					<button type="submit" id="cesion-btn" class="btn btn-primary">
 						@Icon("repeat")
@@ -102,10 +101,8 @@ templ Ceder(user *CurrentUser) {
 		function cederPagare(e) {
 			e.preventDefault();
 			var errEl = document.getElementById('cesion-error');
-			var okEl = document.getElementById('cesion-ok');
 			var btn = document.getElementById('cesion-btn');
 			errEl.classList.add('hidden');
-			okEl.classList.add('hidden');
 
 			var sel = document.getElementById('ces-to-select').value;
 			var cesionario;
@@ -132,8 +129,29 @@ templ Ceder(user *CurrentUser) {
 				btn.disabled = false;
 				btn.textContent = 'Ceder pagaré';
 				if (data.ok) {
-					okEl.textContent = data.msg || 'Pagaré cedido.';
-					okEl.classList.remove('hidden');
+					var firma = data.firma || {};
+					var pendiente = firma.estado === 'pendiente';
+					var avisos = [pendiente
+						? { clase: 'alert-info', html:
+							'La cesión <strong>no surtirá efecto hasta que firmes su PDF</strong>. ' +
+							'Tienes el enlace en tu correo y en tu móvil.' }
+						: { clase: 'alert-success', html: 'El pagaré ha pasado al cesionario.' }];
+					// La notificación al deudor no es un trámite nuestro y se hace
+					// fuera: hasta que se haga, la cesión no le es oponible y el
+					// pago al cedente le libera (art. 1527 CC).
+					if (data.aviso) {
+						avisos.push({ clase: 'alert-info', html: esc0(data.aviso) });
+					}
+					window.dialogoResultado({
+						titulo: pendiente ? 'Falta tu firma' : 'Pagaré cedido',
+						id: data.id || payload.id,
+						avisos: avisos,
+						acciones: [
+							{ texto: 'Ir al panel', href: '/', clase: 'btn-primary' },
+							{ texto: 'Ver este pagaré', clase: 'btn-outline',
+							  href: '/pagares/historico?id=' + encodeURIComponent(data.id || payload.id) }
+						]
+					});
 				} else {
 					errEl.textContent = data.msg || 'Error desconocido';
 					errEl.classList.remove('hidden');

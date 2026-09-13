@@ -48,7 +48,6 @@ templ Endosar(user *CurrentUser) {
 					Este pagaré se emitió <strong>"no a la orden"</strong> (art. 14 LCCH): no puede endosarse, solo transmitirse por cesión ordinaria.
 				</div>
 				<div id="endoso-error" class="alert alert-error hidden"></div>
-				<div id="endoso-ok" class="alert alert-success hidden"></div>
 				<div class="mt-4">
 					<button type="submit" id="endoso-btn" class="btn btn-primary">
 						@Icon("repeat")
@@ -85,10 +84,8 @@ templ Endosar(user *CurrentUser) {
 		function endosarPagare(e) {
 			e.preventDefault();
 			var errEl = document.getElementById('endoso-error');
-			var okEl = document.getElementById('endoso-ok');
 			var btn = document.getElementById('endoso-btn');
 			errEl.classList.add('hidden');
-			okEl.classList.add('hidden');
 
 			var payload = {
 				id: document.getElementById('end-id').value.trim(),
@@ -113,8 +110,25 @@ templ Endosar(user *CurrentUser) {
 				btn.disabled = false;
 				btn.textContent = 'Endosar pagaré';
 				if (data.ok) {
-					okEl.textContent = 'Pagaré endosado correctamente.';
-					okEl.classList.remove('hidden');
+					// Dar el endoso por hecho con la firma pendiente sería
+					// mentir: todavía no ha llegado al libro.
+					var firma = data.firma || {};
+					var pendiente = firma.estado === 'pendiente';
+					window.dialogoResultado({
+						titulo: pendiente ? 'Falta tu firma' : 'Pagaré endosado',
+						id: data.id || payload.id,
+						avisos: [pendiente
+							? { clase: 'alert-info', html:
+								'El endoso <strong>no surtirá efecto hasta que firmes su PDF</strong>. ' +
+								'Tienes el enlace en tu correo y en tu móvil; en cuanto firmes, el ' +
+								'pagaré pasa al endosatario.' }
+							: { clase: 'alert-success', html: 'El pagaré ha pasado al endosatario.' }],
+						acciones: [
+							{ texto: 'Ir al panel', href: '/', clase: 'btn-primary' },
+							{ texto: 'Ver este pagaré', clase: 'btn-outline',
+							  href: '/pagares/historico?id=' + encodeURIComponent(data.id || payload.id) }
+						]
+					});
 				} else {
 					errEl.textContent = data.msg || 'Error';
 					if (data.errors) errEl.textContent += ': ' + data.errors.map(function(e){return e.mensaje}).join('; ');

@@ -706,6 +706,59 @@ templ Base(title string, user *CurrentUser) {
 			return String(d.getDate()).padStart(2, '0') + '/' +
 				String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
 		};
+		// ===== Resultado de una operación =====
+		//
+		// Emitir, endosar y ceder terminan igual desde que hay firma: la
+		// operación queda hecha o esperando a que el firmante firme, y eso no
+		// cabe en un aviso a pie de página. El diálogo se construye aquí porque
+		// las tres pantallas cuentan lo mismo con otras palabras.
+		//
+		// opciones: { titulo, id, avisos: [{clase, html}], acciones: [{texto, href, clase, onclick}] }
+		window.dialogoResultado = function(opciones) {
+			var previo = document.getElementById('dlg-resultado');
+			if (previo) previo.remove();
+
+			var html = '';
+			if (opciones.id) {
+				html += '<p class="desc">Pagaré:</p><p class="emitido-id">' + esc0(opciones.id) + '</p>';
+			}
+			(opciones.avisos || []).forEach(function(a) {
+				html += '<div class="alert ' + (a.clase || 'alert-info') + ' mt-4"><div>' + a.html + '</div></div>';
+			});
+
+			var acciones = (opciones.acciones || []).map(function(a, i) {
+				var clase = 'btn ' + (a.clase || 'btn-outline');
+				if (a.href) {
+					return '<a class="' + clase + '" href="' + a.href + '">' + esc0(a.texto) + '</a>';
+				}
+				return '<button type="button" class="' + clase + '" data-accion="' + i + '">' +
+					esc0(a.texto) + '</button>';
+			}).join('');
+
+			var el = document.createElement('div');
+			el.id = 'dlg-resultado';
+			el.className = 'modal-overlay open';
+			el.innerHTML =
+				'<div class="modal" style="max-width:560px;">' +
+					'<div class="modal-head"><h2>' + esc0(opciones.titulo || '') + '</h2></div>' +
+					html +
+					'<div class="mt-6" style="display:flex;gap:8px;flex-wrap:wrap;">' + acciones + '</div>' +
+				'</div>';
+			document.body.appendChild(el);
+
+			// Los onclick se enganchan después, para no meter código en el HTML.
+			(opciones.acciones || []).forEach(function(a, i) {
+				if (!a.onclick) return;
+				var b = el.querySelector('[data-accion="' + i + '"]');
+				if (b) b.addEventListener('click', a.onclick);
+			});
+		};
+
+		window.cierraDialogoResultado = function() {
+			var el = document.getElementById('dlg-resultado');
+			if (el) el.remove();
+		};
+
 		// ===== Firma cualificada del PDF =====
 		//
 		// Consultar el estado no es sólo leer: es lo que recoge la firma del

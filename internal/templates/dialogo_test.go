@@ -16,9 +16,8 @@ func TestNuevoPagare_DialogoDeResultado(t *testing.T) {
 	html := b.String()
 
 	for _, pieza := range []string{
-		`id="emitido-modal"`, `class="modal-overlay"`, `id="emitido-cuerpo"`,
-		`id="ver-pagare"`, `onclick="otroPagare()"`, `Ir al panel`,
 		`function muestraResultado`, `function otroPagare`,
+		`window.dialogoResultado`, `Ir al panel`, `Emitir otro`,
 	} {
 		if !strings.Contains(html, pieza) {
 			t.Errorf("falta %q", pieza)
@@ -28,11 +27,49 @@ func TestNuevoPagare_DialogoDeResultado(t *testing.T) {
 	if strings.Contains(html, `id="form-success"`) {
 		t.Error("quedó el aviso de pie que el diálogo sustituye")
 	}
-	// Los estilos del modal viven en el layout compartido.
+	// El diálogo lo construye el layout compartido, así que la página no lleva
+	// marcado propio: tenerlo significaría que hay dos implementaciones.
+	if strings.Contains(html, `id="emitido-modal"`) {
+		t.Error("quedó el diálogo propio de la página")
+	}
 	if !strings.Contains(html, ".modal-overlay.open") {
 		t.Error("el layout no trae los estilos del diálogo")
 	}
-	if strings.Count(html, `class="modal-overlay"`) != 1 {
-		t.Errorf("diálogos = %d, se esperaba 1", strings.Count(html, `class="modal-overlay"`))
+}
+
+// Endoso y cesión contaban el resultado a pie de página, y el endoso además
+// mentía: decía "endosado correctamente" cuando la firma estaba pendiente y la
+// operación no había llegado al libro.
+func TestEndosarYCeder_UsanElDialogo(t *testing.T) {
+	casos := map[string]func() string{
+		"endoso": func() string {
+			var b strings.Builder
+			Endosar(&CurrentUser{Username: "ana", Role: "user"}).Render(context.Background(), &b)
+			return b.String()
+		},
+		"cesión": func() string {
+			var b strings.Builder
+			Ceder(&CurrentUser{Username: "ana", Role: "user"}).Render(context.Background(), &b)
+			return b.String()
+		},
+	}
+	for nombre, render := range casos {
+		t.Run(nombre, func(t *testing.T) {
+			html := render()
+			if !strings.Contains(html, "window.dialogoResultado") {
+				t.Error("no usa el diálogo compartido")
+			}
+			if !strings.Contains(html, "no surtirá efecto hasta que firmes") {
+				t.Error("no dice que sin firma la operación no surte efecto")
+			}
+			if strings.Contains(html, "endosado correctamente") {
+				t.Error("sigue afirmando que la operación se hizo sin comprobar la firma")
+			}
+			for _, muerto := range []string{`id="endoso-ok"`, `id="cesion-ok"`} {
+				if strings.Contains(html, muerto) {
+					t.Errorf("quedó %s, el aviso de pie que ya no se muestra", muerto)
+				}
+			}
+		})
 	}
 }

@@ -225,23 +225,6 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			</div>
 		</form>
 
-		<!-- Resultado de la emisión. Va en diálogo y no a pie de página porque
-		     emitir ya no termina al grabar: falta la firma, y el pagaré no está
-		     en manos de nadie hasta que llegue. -->
-		<div id="emitido-modal" class="modal-overlay">
-			<div class="modal" style="max-width:560px;">
-				<div class="modal-head">
-					<h2>Pagaré emitido</h2>
-				</div>
-				<div id="emitido-cuerpo"></div>
-				<div class="mt-6" style="display:flex;gap:8px;flex-wrap:wrap;">
-					<a href="/" class="btn btn-primary">Ir al panel</a>
-					<a id="ver-pagare" href="/" class="btn btn-outline">Ver este pagaré</a>
-					<button type="button" class="btn btn-ghost" onclick="otroPagare()">Emitir otro</button>
-				</div>
-			</div>
-		</div>
-
 		<script>
 		function toggleJuridica() {
 			var on = document.getElementById('firmante_juridica').checked;
@@ -375,35 +358,41 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 		function muestraResultado(data) {
 			var ent = data.entrega || {};
 			var firma = data.firma || {};
-			var cuerpo = document.getElementById('emitido-cuerpo');
 
-			var html = '<p class="desc">Queda registrado en la cadena con este identificador:</p>' +
-				'<p class="emitido-id">' + esc0(data.id || '') + '</p>';
-			if (data.cost != null) {
-				html += '<p class="desc">Coste: ' + esc0(String(data.cost)) + '</p>';
-			}
-
+			var aviso;
 			if (firma.estado === 'pendiente') {
-				html += '<div class="alert alert-info mt-4">' +
-					'<div><strong>Falta tu firma.</strong> El pagaré existe, pero <strong>todavía no ' +
+				aviso = { clase: 'alert-info', html:
+					'<strong>Falta tu firma.</strong> El pagaré existe, pero <strong>todavía no ' +
 					'está en manos del beneficiario</strong>: la entrega espera a que firmes su PDF. ' +
-					'Tienes el enlace en tu correo y en tu móvil. En cuanto firmes, se entrega solo.</div>' +
-				'</div>';
+					'Tienes el enlace en tu correo y en tu móvil. En cuanto firmes, se entrega solo.' };
 			} else if (ent.entregado === false && ent.msg) {
-				html += '<div class="alert alert-info mt-4"><div>' + esc0(ent.msg) + '</div></div>';
+				aviso = { clase: 'alert-info', html: esc0(ent.msg) };
 			} else {
-				html += '<div class="alert alert-success mt-4"><div>Entregado al beneficiario.</div></div>';
+				aviso = { clase: 'alert-success', html: 'Entregado al beneficiario.' };
 			}
 
-			cuerpo.innerHTML = html;
-			document.getElementById('ver-pagare').href = '/pagares/historico?id=' + encodeURIComponent(data.id || '');
-			document.getElementById('emitido-modal').classList.add('open');
+			var avisos = [aviso];
+			if (data.cost != null) {
+				avisos.push({ clase: 'alert-info', html: 'Coste: ' + esc0(String(data.cost)) });
+			}
+
+			window.dialogoResultado({
+				titulo: 'Pagaré emitido',
+				id: data.id,
+				avisos: avisos,
+				acciones: [
+					{ texto: 'Ir al panel', href: '/', clase: 'btn-primary' },
+					{ texto: 'Ver este pagaré', clase: 'btn-outline',
+					  href: '/pagares/historico?id=' + encodeURIComponent(data.id || '') },
+					{ texto: 'Emitir otro', clase: 'btn-ghost', onclick: otroPagare }
+				]
+			});
 		}
 
 		// Vaciar el formulario sólo si se pide otro: quien se va al panel no
 		// necesita que se lo dejemos listo, y quien se queda sí.
 		function otroPagare() {
-			document.getElementById('emitido-modal').classList.remove('open');
+			window.cierraDialogoResultado();
 			var f = document.getElementById('pagare-form');
 			f.reset();
 			f.denominacion.value = "PAGARÉ";
