@@ -45,8 +45,12 @@ templ Login(user *CurrentUser) {
 						<label class="form-label">Móvil *</label>
 						<input type="tel" id="reg-telefono" placeholder="+34600000000" autocomplete="tel"/>
 					</div>
+					<div class="field">
+						<label class="form-label">Código postal *</label>
+						<input type="text" id="reg-cp" placeholder="03640" inputmode="numeric" maxlength="5" autocomplete="postal-code"/>
+					</div>
 				</div>
-				<p class="desc" style="margin-top:8px;">Tu nombre, apellidos, NIF y dirección no se teclean: se leen del chip de tu DNI. Al crear la cuenta te enviaremos al móvil un enlace para validarlo. Se genera además tu par de claves; la privada se guarda cifrada y nunca se muestra.</p>
+				<p class="desc" style="margin-top:8px;">Tu nombre, apellidos, NIF y dirección no se teclean: se leen del chip de tu DNI. El código postal sí, porque es el único dato del domicilio que el chip no lleva. Al crear la cuenta te enviaremos al móvil un enlace para validar tu DNI, y se generará tu par de claves; la privada se guarda cifrada y nunca se muestra.</p>
 				<div class="mt-4">
 					<button type="submit" class="btn btn-primary" style="width:100%;">Crear cuenta y validar mi DNI</button>
 				</div>
@@ -111,7 +115,8 @@ templ Login(user *CurrentUser) {
 					username: document.getElementById('reg-user').value.trim(),
 					password: document.getElementById('reg-pass').value,
 					email: document.getElementById('reg-email').value.trim(),
-					telefono: document.getElementById('reg-telefono').value.trim()
+					telefono: document.getElementById('reg-telefono').value.trim(),
+					codigo_postal: document.getElementById('reg-cp').value.trim()
 				})
 			})
 			.then(function(r){ return r.json(); })

@@ -1795,13 +1795,14 @@ components:
       description: >
         Lo poco que se teclea al darse de alta. Nombre, apellidos, NIF y dirección no están aquí a
         propósito: los aporta la validación del DNI, que es la única fuente fiable para identificar a
-        las partes de un pagaré.
+        las partes de un pagaré. La excepción es el código postal, que el chip no lleva.
       allOf:
       - $ref: '#/components/schemas/LoginRequest'
       - type: object
         required:
         - email
         - telefono
+        - codigo_postal
         properties:
           email:
             type: string
@@ -1811,6 +1812,13 @@ components:
             description: Móvil. Obligatorio cuando la validación de identidad está activa, porque es
               por donde el portal lleva al usuario a leer el chip de su DNI.
             example: '+34600000000'
+          codigo_postal:
+            type: string
+            pattern: '^[0-9]{5}$'
+            description: Cinco dígitos. Se pide aquí porque el chip del DNI no lo lleva, de modo que
+              ninguna validación lo va a aportar nunca, y sin él no se puede emitir. Es el único dato
+              del domicilio que teclea el usuario.
+            example: '03640'
     Representante:
       type: object
       description: >

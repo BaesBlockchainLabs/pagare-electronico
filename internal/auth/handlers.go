@@ -78,12 +78,24 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 //
 // El móvil es obligatorio porque el tipo de envío de validación lo exige: es
 // por donde el portal lleva al usuario a leer el chip.
+//
+// Y el código postal está aquí justamente porque el DNI no lo trae: su chip no
+// lo lleva, de modo que ninguna validación lo va a aportar nunca. Sin él no se
+// puede emitir —el art. 94 exige el domicilio del firmante—, así que pedirlo
+// una vez al principio evita que cada usuario verificado se atasque al llegar
+// al formulario del pagaré con un campo que no sabe de dónde sale.
 type registerRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Email    string `json:"email"`
-	Telefono string `json:"telefono"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	Email        string `json:"email"`
+	Telefono     string `json:"telefono"`
+	CodigoPostal string `json:"codigo_postal"`
 }
+
+// codigoPostalES son los cinco dígitos de un código postal español. El flujo de
+// alta valida identidades con el chip del DNI, así que el domicilio del
+// firmante es español.
+var codigoPostalES = regexp.MustCompile(`^[0-9]{5}$`)
 
 // Register da de alta a un usuario (rol=user), le provisiona su par de claves,
 // le inicia sesión y arranca la validación de su identidad contra el DNI.
@@ -114,12 +126,22 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "hace falta un móvil: es por donde se valida el DNI"})
 		return
 	}
+	req.CodigoPostal = strings.TrimSpace(req.CodigoPostal)
+	if !codigoPostalES.MatchString(req.CodigoPostal) {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false,
+			"msg": "hace falta un código postal de cinco dígitos: el chip del DNI no lo lleva, " +
+				"así que es el único dato del domicilio que tienes que poner tú",
+		})
+		return
+	}
 
 	u := &User{
 		Username:     req.Username,
 		Role:         RoleUser,
 		Email:        req.Email,
 		Telefono:     req.Telefono,
+		CodigoPostal: req.CodigoPostal,
 		DisplayName:  req.Username,
 		Verificacion: VerificacionNoIniciada,
 	}
