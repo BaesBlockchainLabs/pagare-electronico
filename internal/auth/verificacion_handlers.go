@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"pagare/internal/identidad"
 )
@@ -155,6 +157,11 @@ func (h *Handlers) EstadoVerificacionHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Lo que le falte de contacto viaja en la respuesta: sin correo y móvil no
+	// se puede ni empezar a validar, y sin código postal no se podrá emitir
+	// después. Las cuentas anteriores a todo esto no tienen ninguno de los tres.
+	faltan := h.faltaEnContacto(p.UserID)
+
 	v, err := h.store.UltimaVerificacion(p.UserID)
 	if errors.Is(err, ErrVerificacionNoEncontrada) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -162,6 +169,7 @@ func (h *Handlers) EstadoVerificacionHandler(w http.ResponseWriter, r *http.Requ
 			"activa":  h.identidad.Activo(),
 			"estado":  string(VerificacionNoIniciada),
 			"mensaje": "Todavía no has validado tu identidad.",
+			"faltan":  faltan,
 		})
 		return
 	}
@@ -174,7 +182,9 @@ func (h *Handlers) EstadoVerificacionHandler(w http.ResponseWriter, r *http.Requ
 		h.refrescar(r.Context(), v)
 	}
 
-	writeJSON(w, http.StatusOK, respuestaVerificacion(v, ""))
+	res := respuestaVerificacion(v, "")
+	res["faltan"] = faltan
+	writeJSON(w, http.StatusOK, res)
 }
 
 // refrescar consulta el envío en el portal y, si ya terminó, lo resuelve. Los
@@ -279,4 +289,80 @@ func nombreParaElPortal(u *User) string {
 		return fmt.Sprintf("%s %s", u.Nombre, u.Apellido)
 	}
 	return u.Username
+}
+
+// faltaEnContacto es lo que le falta al usuario de correo, móvil y código
+// postal. Una lista vacía significa que puede validarse y, después, emitir.
+func (h *Handlers) faltaEnContacto(userID string) []string {
+	u, err := h.store.GetByID(userID)
+	if err != nil {
+		return nil
+	}
+	faltan := FaltaEnContacto(u)
+	if faltan == nil {
+		// Se serializa como lista vacía, no como null: la pantalla distingue
+		// "no falta nada" de "no se pudo mirar".
+		return []string{}
+	}
+	return faltan
+}
+
+// ActualizarContacto completa el correo, el móvil y el código postal de quien
+// ya tiene cuenta.
+//
+// Las cuentas anteriores a la validación de identidad no tienen ninguno de los
+// tres, así que no pueden ni empezar a validarse. Mandarlas al perfil a
+// rellenarlos funciona, pero es un desvío que nadie entiende cuando lo único
+// que quería era entrar; esto permite pedírselos en la propia pantalla de
+// validación.
+//
+// No reutiliza UpdateProfile a propósito: aquél reemplaza el perfil entero, así
+// que mandar sólo el contacto borraría el nombre, el NIF y la dirección.
+func (h *Handlers) ActualizarContacto(w http.ResponseWriter, r *http.Request) {
+	p := GetPrincipal(r)
+	if p == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"ok": false, "msg": "autenticación requerida"})
+		return
+	}
+
+	var req struct {
+		Email        string `json:"email"`
+		Telefono     string `json:"telefono"`
+		CodigoPostal string `json:"codigo_postal"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "msg": "invalid body"})
+		return
+	}
+	req.Email = strings.TrimSpace(req.Email)
+	req.Telefono = strings.TrimSpace(req.Telefono)
+	req.CodigoPostal = strings.TrimSpace(req.CodigoPostal)
+
+	if !validEmail(req.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "msg": "hace falta un email con formato válido"})
+		return
+	}
+	if req.Telefono == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "msg": "hace falta un móvil: es por donde se valida el DNI"})
+		return
+	}
+	if !codigoPostalES.MatchString(req.CodigoPostal) {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false,
+			"msg": "hace falta un código postal de cinco dígitos: el chip del DNI no lo lleva, " +
+				"así que es el único dato del domicilio que tienes que poner tú",
+		})
+		return
+	}
+
+	if err := h.store.ActualizarContacto(p.UserID, Contacto{
+		Email: req.Email, Telefono: req.Telefono, CodigoPostal: req.CodigoPostal,
+	}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "msg": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "msg": "Datos guardados.", "faltan": []string{}})
 }

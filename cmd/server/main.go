@@ -436,6 +436,10 @@ func main() {
 			// envío termina.
 			r.Post("/verificacion", authH.IniciarVerificacion)
 			r.Get("/verificacion", authH.EstadoVerificacionHandler)
+			// Completar el contacto sin pasar por el perfil: las cuentas
+			// anteriores a la validación no tienen correo ni móvil, y sin ellos
+			// no pueden ni empezar.
+			r.Post("/contacto", authH.ActualizarContacto)
 		})
 
 		// Self-service profile (any authenticated user; handlers check the principal).

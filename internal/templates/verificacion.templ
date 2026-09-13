@@ -10,6 +10,32 @@ templ Verificacion(user *CurrentUser) {
 
 			<div id="ver-estado" class="alert" style="margin-bottom:16px;">Consultando el estado…</div>
 
+			<!-- Completar el contacto. Las cuentas anteriores a la validación no
+			     tienen correo ni móvil, y sin ellos no se puede ni empezar. -->
+			<div id="ver-contacto" class="hidden">
+				<p class="desc">Para validar tu DNI nos hacen falta estos datos. El enlace de validación
+				te llegará al correo y al móvil; el código postal lo pedimos porque el chip del DNI no
+				lo lleva y sin él no podrás emitir pagarés.</p>
+				<div class="form-grid mt-4">
+					<div class="field">
+						<label class="form-label">Email *</label>
+						<input type="email" id="ct-email" placeholder="tu@email.com" autocomplete="email"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Móvil *</label>
+						<input type="tel" id="ct-telefono" placeholder="+34600000000" autocomplete="tel"/>
+					</div>
+					<div class="field">
+						<label class="form-label">Código postal *</label>
+						<input type="text" id="ct-cp" placeholder="03640" inputmode="numeric" maxlength="5" autocomplete="postal-code"/>
+					</div>
+				</div>
+				<div id="ct-aviso"></div>
+				<div class="mt-4">
+					<button type="button" class="btn btn-primary" onclick="guardaContacto()">Guardar y continuar</button>
+				</div>
+			</div>
+
 			<div id="ver-pendiente" class="hidden">
 				<ol class="desc" style="padding-left:20px;line-height:1.8;">
 					<li>Abre en el móvil el enlace que te hemos enviado por SMS y por correo.</li>
@@ -38,13 +64,16 @@ templ Verificacion(user *CurrentUser) {
 		</div>
 
 		<script>
-		// Los tres bloques son excluyentes: pendiente (hay validación en curso),
-		// reintento (nunca se empezó o falló) y hecho (verificada).
+		// Los bloques son excluyentes: contacto (faltan datos para empezar),
+		// pendiente (hay validación en curso), reintento (nunca se empezó o
+		// falló) y hecho (verificada).
 		function pinta(data) {
 			var estado = document.getElementById('ver-estado');
+			var contacto = document.getElementById('ver-contacto');
 			var pendiente = document.getElementById('ver-pendiente');
 			var reintento = document.getElementById('ver-reintento');
 			var hecho = document.getElementById('ver-hecho');
+			contacto.classList.add('hidden');
 			pendiente.classList.add('hidden');
 			reintento.classList.add('hidden');
 			hecho.classList.add('hidden');
@@ -64,6 +93,17 @@ templ Verificacion(user *CurrentUser) {
 			if (data.motivo) { texto += ' (' + data.motivo + ')'; }
 			estado.textContent = texto;
 
+			// Sin correo, móvil o código postal no se puede empezar, así que se
+			// piden aquí en vez de mandar al usuario al perfil a buscarlos.
+			var faltan = data.faltan || [];
+			if (faltan.length > 0 && data.estado !== 'verificada' && data.estado !== 'pendiente') {
+				estado.className = 'alert';
+				estado.textContent = 'Nos faltan algunos datos tuyos antes de validar tu DNI.';
+				contacto.classList.remove('hidden');
+				marcaQueFalta(faltan);
+				return;
+			}
+
 			if (data.estado === 'verificada') {
 				estado.className = 'alert alert-success';
 				hecho.classList.remove('hidden');
@@ -74,6 +114,54 @@ templ Verificacion(user *CurrentUser) {
 				estado.className = data.estado === 'fallida' ? 'alert alert-error' : 'alert';
 				reintento.classList.remove('hidden');
 			}
+		}
+
+		// Resalta lo que falta, que no siempre es todo: alguien puede tener
+		// correo y que sólo le falte el móvil.
+		function marcaQueFalta(faltan) {
+			var campos = { email: 'ct-email', movil: 'ct-telefono', codigo_postal: 'ct-cp' };
+			Object.keys(campos).forEach(function(k) {
+				var el = document.getElementById(campos[k]);
+				el.style.borderColor = faltan.indexOf(k) >= 0 ? 'var(--danger)' : '';
+			});
+			// Lo que ya tenemos se prerrellena, para no hacérselo teclear otra vez.
+			fetch('/api/perfil')
+				.then(function(r){ return r.json(); })
+				.then(function(u) {
+					if (!u || !u.ok) return;
+					if (u.email) document.getElementById('ct-email').value = u.email;
+					if (u.telefono) document.getElementById('ct-telefono').value = u.telefono;
+					if (u.codigo_postal) document.getElementById('ct-cp').value = u.codigo_postal;
+				})
+				.catch(function(){});
+		}
+
+		function guardaContacto() {
+			var aviso = document.getElementById('ct-aviso');
+			aviso.innerHTML = '';
+			fetch('/api/auth/contacto', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({
+						email: document.getElementById('ct-email').value.trim(),
+						telefono: document.getElementById('ct-telefono').value.trim(),
+						codigo_postal: document.getElementById('ct-cp').value.trim()
+					})
+				})
+				.then(function(r){ return r.json(); })
+				.then(function(d) {
+					if (!d.ok) {
+						aviso.innerHTML = '<div class="alert alert-error" style="margin-top:12px;">' +
+							(d.msg || 'No se pudo guardar') + '</div>';
+						return;
+					}
+					// Con los datos ya puestos, se arranca la validación sin que
+					// haya que pulsar otra vez.
+					reintentar();
+				})
+				.catch(function(){
+					aviso.innerHTML = '<div class="alert alert-error" style="margin-top:12px;">Error de conexión</div>';
+				});
 		}
 
 		function comprobar() {

@@ -255,3 +255,46 @@ func (s *Store) fijarEstadoVerificacion(userID string, estado EstadoVerificacion
 		string(estado), *en, userID)
 	return err
 }
+
+// Contacto son los datos que hacen falta para validar la identidad y para poder
+// emitir después: correo y móvil, por donde el portal lleva al usuario a leer
+// su DNI, y código postal, que el chip no trae.
+type Contacto struct {
+	Email        string
+	Telefono     string
+	CodigoPostal string
+}
+
+// FaltaEnContacto enumera lo que le falta a un usuario de esos tres datos.
+// Vacío significa que puede validarse y, después, emitir.
+func FaltaEnContacto(u *User) []string {
+	var faltan []string
+	if strings.TrimSpace(u.Email) == "" {
+		faltan = append(faltan, "email")
+	}
+	if strings.TrimSpace(u.Telefono) == "" {
+		faltan = append(faltan, "movil")
+	}
+	if strings.TrimSpace(u.CodigoPostal) == "" {
+		faltan = append(faltan, "codigo_postal")
+	}
+	return faltan
+}
+
+// ActualizarContacto fija sólo esos tres campos.
+//
+// Tiene su propio método, y no pasa por UpdateProfile, porque aquél reemplaza
+// el perfil entero: usarlo para completar el contacto borraría el nombre, el
+// NIF y la dirección de quien ya los tuviera.
+func (s *Store) ActualizarContacto(userID string, c Contacto) error {
+	res, err := s.db.Exec(`UPDATE users SET email = ?, telefono = ?, codigo_postal = ?
+		WHERE id = ?`, strings.TrimSpace(c.Email), strings.TrimSpace(c.Telefono),
+		strings.TrimSpace(c.CodigoPostal), userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}

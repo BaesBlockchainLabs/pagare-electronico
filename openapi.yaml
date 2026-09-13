@@ -176,6 +176,50 @@ paths:
                 $ref: '#/components/schemas/VerificacionResponse'
         4XX:
           $ref: '#/components/responses/Error'
+  /api/auth/contacto:
+    post:
+      tags:
+      - Autenticación
+      summary: Completar el correo, el móvil y el código postal
+      description: >
+        Completa los tres datos que hacen falta para validar la identidad y para poder emitir después.
+        Las cuentas anteriores a la validación no tienen ninguno, así que no pueden ni empezar, y
+        mandarlas al perfil a rellenarlos es un desvío que nadie entiende cuando lo único que quería
+        era entrar: esto permite pedírselos en la propia pantalla de validación.
+
+
+        No reutiliza /api/perfil a propósito: aquél reemplaza el perfil entero, así que mandar sólo el
+        contacto borraría el nombre, el NIF y la dirección.
+      operationId: actualizarContacto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - email
+              - telefono
+              - codigo_postal
+              properties:
+                email:
+                  type: string
+                  format: email
+                telefono:
+                  type: string
+                  example: '+34600000000'
+                codigo_postal:
+                  type: string
+                  pattern: '^[0-9]{5}$'
+      responses:
+        '200':
+          description: Datos guardados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleOkResponse'
+        4XX:
+          $ref: '#/components/responses/Error'
   /api/auth/logout:
     post:
       tags:
@@ -1935,6 +1979,16 @@ components:
         motivo:
           type: string
           description: Por qué no se superó, en palabras del portal.
+        faltan:
+          type: array
+          description: Datos de contacto que le faltan al usuario para poder validarse y, después,
+            emitir. Vacío cuando no falta ninguno. Es de lo que tira la pantalla para pedírselos.
+          items:
+            type: string
+            enum:
+            - email
+            - movil
+            - codigo_postal
     SimpleOkResponse:
       type: object
       properties:
