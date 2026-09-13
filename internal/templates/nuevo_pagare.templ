@@ -216,7 +216,6 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			</fieldset>
 
 			<div id="form-error" class="alert alert-error hidden"></div>
-			<div id="form-success" class="alert alert-success hidden"></div>
 
 			<div style="text-align: right; margin-top: 8px;">
 				<button type="submit" id="submit-btn" class="btn btn-primary">
@@ -225,6 +224,23 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 				</button>
 			</div>
 		</form>
+
+		<!-- Resultado de la emisión. Va en diálogo y no a pie de página porque
+		     emitir ya no termina al grabar: falta la firma, y el pagaré no está
+		     en manos de nadie hasta que llegue. -->
+		<div id="emitido-modal" class="modal-overlay">
+			<div class="modal" style="max-width:560px;">
+				<div class="modal-head">
+					<h2>Pagaré emitido</h2>
+				</div>
+				<div id="emitido-cuerpo"></div>
+				<div class="mt-6" style="display:flex;gap:8px;flex-wrap:wrap;">
+					<a href="/" class="btn btn-primary">Ir al panel</a>
+					<a id="ver-pagare" href="/" class="btn btn-outline">Ver este pagaré</a>
+					<button type="button" class="btn btn-ghost" onclick="otroPagare()">Emitir otro</button>
+				</div>
+			</div>
+		</div>
 
 		<script>
 		function toggleJuridica() {
@@ -254,10 +270,8 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			e.preventDefault();
 			var f = document.getElementById('pagare-form');
 			var errEl = document.getElementById('form-error');
-			var okEl = document.getElementById('form-success');
 			var btn = document.getElementById('submit-btn');
 			errEl.classList.add('hidden');
-			okEl.classList.add('hidden');
 
 			var payload = {
 				asset: {
@@ -333,28 +347,11 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 				btn.disabled = false;
 				btn.textContent = "Emitir y grabar en blockchain";
 				if (data.ok) {
-					var ent = data.entrega || {};
-					var pendiente = ent.entregado === false;
-					okEl.textContent = (data.msg || "Pagaré emitido") + ". ID: " + data.id + " (coste: " + data.cost + ")";
-					// Un pagaré sin entregar sigue bajo el control del emisor: el
-					// beneficiario todavía no tiene nada, y hay que decirlo.
-					if (pendiente && ent.msg) okEl.textContent += " — " + ent.msg;
-					okEl.classList.toggle('alert-success', !pendiente);
-					okEl.classList.toggle('alert-info', pendiente);
-					okEl.classList.remove('hidden');
-
-					f.reset();
-					f.denominacion.value = "PAGARÉ";
-					f.firmante_pais.value = "ES";
-					document.getElementById('beneficiario-manual').checked = false;
-					toggleManual('beneficiario');
-					document.getElementById('firmante-editar').checked = false;
-					document.getElementById('firmante_juridica').checked = false;
-					toggleJuridica();
-					fetchAndFillEmisor();
-					toggleAval();
-					toggleAvalParcial();
-					window.scrollTo({top: 0, behavior: 'smooth'});
+					// Emitir ya no termina al grabar: con la firma de por medio, el
+					// pagaré está en la cadena pero no en manos de nadie. Eso no cabe
+					// en un aviso a pie de página que además deja el formulario listo
+					// para emitir otro, como si la operación estuviera cerrada.
+					muestraResultado(data);
 				} else {
 					errEl.textContent = data.msg || 'Error desconocido';
 					if (data.errors) {
@@ -371,6 +368,55 @@ templ NuevoPagare(isDev bool, user *CurrentUser) {
 			});
 
 			return false;
+		}
+
+		// ===== Resultado de la emisión =====
+
+		function muestraResultado(data) {
+			var ent = data.entrega || {};
+			var firma = data.firma || {};
+			var cuerpo = document.getElementById('emitido-cuerpo');
+
+			var html = '<p class="desc">Queda registrado en la cadena con este identificador:</p>' +
+				'<p class="emitido-id">' + esc0(data.id || '') + '</p>';
+			if (data.cost != null) {
+				html += '<p class="desc">Coste: ' + esc0(String(data.cost)) + '</p>';
+			}
+
+			if (firma.estado === 'pendiente') {
+				html += '<div class="alert alert-info mt-4">' +
+					'<div><strong>Falta tu firma.</strong> El pagaré existe, pero <strong>todavía no ' +
+					'está en manos del beneficiario</strong>: la entrega espera a que firmes su PDF. ' +
+					'Tienes el enlace en tu correo y en tu móvil. En cuanto firmes, se entrega solo.</div>' +
+				'</div>';
+			} else if (ent.entregado === false && ent.msg) {
+				html += '<div class="alert alert-info mt-4"><div>' + esc0(ent.msg) + '</div></div>';
+			} else {
+				html += '<div class="alert alert-success mt-4"><div>Entregado al beneficiario.</div></div>';
+			}
+
+			cuerpo.innerHTML = html;
+			document.getElementById('ver-pagare').href = '/pagares/historico?id=' + encodeURIComponent(data.id || '');
+			document.getElementById('emitido-modal').classList.add('open');
+		}
+
+		// Vaciar el formulario sólo si se pide otro: quien se va al panel no
+		// necesita que se lo dejemos listo, y quien se queda sí.
+		function otroPagare() {
+			document.getElementById('emitido-modal').classList.remove('open');
+			var f = document.getElementById('pagare-form');
+			f.reset();
+			f.denominacion.value = "PAGARÉ";
+			f.firmante_pais.value = "ES";
+			document.getElementById('beneficiario-manual').checked = false;
+			toggleManual('beneficiario');
+			document.getElementById('firmante-editar').checked = false;
+			document.getElementById('firmante_juridica').checked = false;
+			toggleJuridica();
+			fetchAndFillEmisor();
+			toggleAval();
+			toggleAvalParcial();
+			window.scrollTo({top: 0, behavior: 'smooth'});
 		}
 
 		// Autocompletar el emisor (firmante) con los datos del usuario logueado.

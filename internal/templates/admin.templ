@@ -29,15 +29,6 @@ templ Admin(user *CurrentUser) {
 			.u-search input { margin:0; }
 			.u-count { font-size:0.82rem; color:var(--ink-soft); }
 
-			.modal-overlay { position:fixed; inset:0; background:rgba(27,42,74,0.45); display:none; align-items:flex-start; justify-content:center; padding:5vh 16px; z-index:1000; overflow-y:auto; }
-			.modal-overlay.open { display:flex; }
-			.modal { background:var(--card); border-radius:var(--r); box-shadow:var(--shadow-lg); width:100%; max-width:660px; padding:28px 30px; }
-			.modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; }
-			.modal-head h2 { font-family:var(--serif); font-size:1.4rem; font-weight:600; color:var(--ink); margin:0; }
-			.modal-close { background:none; border:none; font-size:1.6rem; line-height:1; color:var(--ink-soft); cursor:pointer; padding:0 4px; }
-			.modal-close:hover { color:var(--ink); }
-			.modal-section { border-top:1px solid var(--border); margin-top:22px; padding-top:18px; }
-			.modal-section h3 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); font-weight:700; margin:0 0 14px; }
 			.pk-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 			.pk-row .u-mono { flex:1; word-break:break-all; }
 			.pk-del { background:none; border:none; color:var(--danger); cursor:pointer; font-size:1.1rem; line-height:1; padding:0 4px; }
