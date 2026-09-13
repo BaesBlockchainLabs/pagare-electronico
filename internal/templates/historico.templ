@@ -32,16 +32,25 @@ templ Historico(id string, user *CurrentUser) {
 			default: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>'
 		};
 
-		var urlId = new URLSearchParams(window.location.search).get('id') || document.getElementById('pagare-id').value;
-		if (urlId) {
-			document.getElementById('pagare-id').value = urlId;
-			loadHistorico();
-			window.cargaFirma(urlId);
-		}
+		// La carga inicial espera a que el documento esté entero. El script
+		// compartido —donde viven cargaFirma y compañía— va al final del body,
+		// así que ejecutar esto mientras se parsea la página lo encontraba sin
+		// definir y la excepción se llevaba por delante también el histórico.
+		document.addEventListener('DOMContentLoaded', function() {
+			var urlId = new URLSearchParams(window.location.search).get('id') ||
+				document.getElementById('pagare-id').value;
+			if (urlId) {
+				document.getElementById('pagare-id').value = urlId;
+				loadHistorico();
+			}
+		});
 		function loadHistorico() {
 			var id = document.getElementById('pagare-id').value.trim();
 			if (!id) return;
-			window.cargaFirma(id);
+			// Se comprueba antes de llamar: si el bloque compartido no estuviera,
+			// la ficha se queda sin el estado de la firma, pero el histórico —que
+			// es lo que esta pantalla promete— se sigue viendo.
+			if (window.cargaFirma) window.cargaFirma(id);
 			document.getElementById('historico-result').innerHTML = '<p class="text-center text-muted" style="padding:32px 0">Cargando…</p>';
 			fetch('/api/pagares/historico?id=' + encodeURIComponent(id))
 				.then(function(r) { return r.json(); })
